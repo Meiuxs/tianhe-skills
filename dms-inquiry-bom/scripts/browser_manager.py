@@ -40,62 +40,13 @@ USER_DATA_DIR = Path.home() / ".dms_browser_data"
 
 
 def get_credentials() -> tuple[str, str]:
-    """从环境变量读取 DMS 登录凭据，支持多来源自动检测。
+    """从环境变量读取 DMS 登录凭据（见 dms_credentials.resolve_credentials）。"""
+    from dms_credentials import get_credentials as _get_credentials, source_label
 
-    检查顺序：
-    1. 当前环境变量
-    2. ~/.bashrc
-    3. ~/.bash_profile
-    4. ~/.profile
-    5. PowerShell 用户环境变量
+    def _log_source(source: str) -> None:
+        print(f"[环境] 从 {source_label(source)} 加载登录凭据", file=sys.stderr)
 
-    Returns:
-        (username, password)
-
-    Raises:
-        SystemExit: 所有来源均未找到凭据时退出
-    """
-    import subprocess
-
-    # 优先检查当前环境变量
-    username = os.environ.get("DMS_USER")
-    password = os.environ.get("DMS_PASSWORD")
-    if username and password:
-        return username, password
-
-    # 尝试从 bash 配置文件加载
-    for config_file in ['~/.bashrc', '~/.bash_profile', '~/.profile']:
-        try:
-            result = subprocess.run(
-                ['bash', '-c', f'source {config_file} 2>/dev/null && echo "$DMS_USER|||$DMS_PASSWORD"'],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                parts = result.stdout.strip().split('|||')
-                if len(parts) == 2 and parts[0] and parts[1]:
-                    print(f"[环境] 从 {config_file} 加载登录凭据", file=sys.stderr)
-                    return parts[0], parts[1]
-        except Exception:
-            continue
-
-    # 尝试从 PowerShell 用户环境变量读取
-    try:
-        result = subprocess.run(
-            ['powershell', '-Command',
-             '[System.Environment]::GetEnvironmentVariable("DMS_USER", "User") + "|||" + [System.Environment]::GetEnvironmentVariable("DMS_PASSWORD", "User")'],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split('|||')
-            if len(parts) == 2 and parts[0] and parts[1]:
-                print("[环境] 从 PowerShell 环境变量加载登录凭据", file=sys.stderr)
-                return parts[0], parts[1]
-    except Exception:
-        pass
-
-    print("[错误] 未配置 DMS_USER / DMS_PASSWORD 环境变量", file=sys.stderr)
-    print("  请参照 SKILL.md 的「凭据配置」节进行设置", file=sys.stderr)
-    raise SystemExit(1)
+    return _get_credentials(on_source=_log_source)
 
 
 class BrowserManager:

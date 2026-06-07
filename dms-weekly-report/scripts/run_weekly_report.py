@@ -16,7 +16,6 @@ import asyncio
 import logging
 import os
 import re
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -27,10 +26,12 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+from playwright._impl._errors import TargetClosedError
 
 # 修复 Windows 中文乱码
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _compat  # noqa: F401, E402
+from dms_credentials import get_credentials as _get_dms_credentials, source_label  # noqa: E402
 
 # ==================== 日志配置 ====================
 
@@ -161,45 +162,11 @@ def get_week_range(weeks_ago: int = 0) -> tuple[str, str]:
 # ==================== 登录 ====================
 
 def _get_credentials() -> tuple[str, str]:
-    """从环境变量 / bashrc / PowerShell 读取登录凭据。"""
-    username = os.environ.get("DMS_USER")
-    password = os.environ.get("DMS_PASSWORD")
-    if username and password:
-        return username, password
+    """从共享模块读取登录凭据。"""
+    def _log_source(source: str) -> None:
+        logger.info("从 %s 加载登录凭据", source_label(source))
 
-    for config_file in ["~/.bashrc", "~/.bash_profile", "~/.profile"]:
-        try:
-            result = subprocess.run(
-                ["bash", "-c",
-                 f'source {config_file} 2>/dev/null && echo "$DMS_USER|||$DMS_PASSWORD"'],
-                capture_output=True, text=True, timeout=5,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                parts = result.stdout.strip().split("|||")
-                if len(parts) == 2 and parts[0] and parts[1]:
-                    logger.info("从 %s 加载登录凭据", config_file)
-                    return parts[0], parts[1]
-        except Exception:
-            continue
-
-    try:
-        result = subprocess.run(
-            ["powershell", "-Command",
-             '[System.Environment]::GetEnvironmentVariable("DMS_USER", "User")'
-             ' + "|||" + '
-             '[System.Environment]::GetEnvironmentVariable("DMS_PASSWORD", "User")'],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split("|||")
-            if len(parts) == 2 and parts[0] and parts[1]:
-                logger.info("从 PowerShell 环境变量加载登录凭据")
-                return parts[0], parts[1]
-    except Exception:
-        pass
-
-    logger.error("未配置 DMS_USER / DMS_PASSWORD 环境变量")
-    raise SystemExit(1)
+    return _get_dms_credentials(on_source=_log_source)
 
 
 @retry_async(max_retries=3)
