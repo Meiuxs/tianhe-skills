@@ -43,6 +43,10 @@ def _find_latest_inventory_file() -> str:
     匹配模式: 组件、逆变器、并网箱可用库存统计*.xlsx
     按修改时间取最新文件。
 
+    搜索顺序：
+      1. assets/ 子目录（推荐位置）
+      2. skill 根目录（兼容旧位置）
+
     Returns:
         库存文件完整路径
 
@@ -50,16 +54,27 @@ def _find_latest_inventory_file() -> str:
         FileNotFoundError: 未找到匹配的库存文件
     """
     import glob
-    pattern = os.path.join(INVENTORY_DIR, "组件、逆变器、并网箱可用库存统计*.xlsx")
-    files = glob.glob(pattern)
-    if not files:
-        raise FileNotFoundError(
-            f"未找到库存文件（匹配模式: 组件、逆变器、并网箱可用库存统计*.xlsx）\n"
-            f"请将库存文件放在: {INVENTORY_DIR}"
-        )
-    # 按修改时间降序，取最新文件
-    latest = max(files, key=os.path.getmtime)
-    return latest
+
+    # 搜索顺序：assets/ 子目录优先
+    search_dirs = [
+        os.path.join(INVENTORY_DIR, "assets"),
+    ]
+    # 如果 INVENTORY_DIR 不在 search_dirs 中则添加（避免重复）
+    if INVENTORY_DIR not in search_dirs:
+        search_dirs.append(INVENTORY_DIR)
+
+    for directory in search_dirs:
+        pattern = os.path.join(directory, "组件、逆变器、并网箱可用库存统计*.xlsx")
+        files = glob.glob(pattern)
+        if files:
+            latest = max(files, key=os.path.getmtime)
+            return latest
+
+    raise FileNotFoundError(
+        f"未找到库存文件（匹配模式: 组件、逆变器、并网箱可用库存统计*.xlsx）\n"
+        f"已在以下目录搜索: {', '.join(search_dirs)}\n"
+        f"请将库存文件放在 {os.path.join(INVENTORY_DIR, 'assets')} 或 {INVENTORY_DIR} 目录下"
+    )
 
 
 # 默认库存文件路径（启动时自动查找最新文件）
@@ -78,15 +93,19 @@ CACHE_FILE = os.path.join(
 CACHE_TTL = 3600  # 1小时
 
 
-def load_inventory(file_path: str = None, force_refresh: bool = False) -> dict:
+def load_inventory(file_path: str = None, force_refresh: bool = False,
+                   sheet_name: str = None) -> dict:
     """加载库存数据，支持缓存。
 
     Args:
         file_path: Excel文件路径
         force_refresh: 强制刷新缓存
+        sheet_name: 指定读取的工作表名称（如'组件'、'逆变器'、'并网箱'），
+                    为 None 时读取全部标准 sheet
 
     Returns:
         {"组件": DataFrame, "逆变器": DataFrame, "并网箱": DataFrame}
+        或指定 sheet 时的 {"<sheet_name>": DataFrame}
     """
     import time
     from datetime import datetime
@@ -94,7 +113,13 @@ def load_inventory(file_path: str = None, force_refresh: bool = False) -> dict:
     if file_path is None:
         file_path = _find_latest_inventory_file()
 
-    # 检查缓存
+    # 如果指定了单一 sheet，不缓存
+    if sheet_name:
+        print(f"[读取] 正在读取工作表: {sheet_name}", file=sys.stderr)
+        df = pd.read_excel(file_path, sheet_name=sheet_name, engine='calamine')
+        return {sheet_name: df}
+
+    # 检查缓存（仅在不指定 sheet 时使用）
     if not force_refresh and os.path.exists(CACHE_FILE):
         try:
             cache_mtime = os.path.getmtime(CACHE_FILE)
@@ -120,6 +145,13 @@ def load_inventory(file_path: str = None, force_refresh: bool = False) -> dict:
     df_box = pd.read_excel(file_path, sheet_name='并网箱', engine='calamine', skiprows=1)
 
     # 预处理：前向填充合并单元格
+    for col in ['物料编号', '物料编码', '功率', '物料名称']:
+        if col in df_comp.columns:
+            df_comp[col] = df_comp[col].ffill()
+        if col in df_inv.columns:
+            df_inv[col] = df_inv[col].ffill()
+        if col in df_box.columns:
+            df_box[col] = df_box[col].ffill()
     df_inv['厂家'] = df_inv['厂家'].ffill()
     df_box['并网箱类型'] = df_box['并网箱类型'].ffill()
 
@@ -240,7 +272,7 @@ def format_inverter_by_brand(df: pd.DataFrame) -> str:
                 code = row.get('物料编号', '')
                 name = row.get('物料名称', '')
                 # 提取简短名称（去掉前缀）
-                short_name = name.split('_')[-1] if '_' in name else name
+                short_name = name.split('_')[-1] if pd.notna(name) and '_' in name else (name if pd.notna(name) else '未知')
                 price_rank = row.get('价格排序', '')
                 price_str = f" (价格排序:{int(price_rank)})" if pd.notna(price_rank) else ""
                 lines.append(f"  {power} | {code} | 库存:{stock_str}{price_str}")
@@ -250,6 +282,59 @@ def format_inverter_by_brand(df: pd.DataFrame) -> str:
 
     lines.append(f"\n共 {len(df)} 条记录")
     return "\n".join(lines)
+
+
+def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
+                    name_col: str = '物料名称', qty_col: str = '可用库存',
+                    warehouse_col: str = '仓库名称') -> pd.DataFrame:
+    """按物料编码聚合所有仓库的库存总量。
+
+    Args:
+        df: 库存 DataFrame
+        material_col: 物料编码列名
+        name_col: 物料名称列名
+        qty_col: 可用库存列名
+        warehouse_col: 仓库名称列名
+
+    Returns:
+        聚合后的 DataFrame，含 物料编号、物料名称、库存总量、仓库分布
+    """
+    if df.empty:
+        return df
+
+    result = df.copy()
+    # 前向填充物料编码（处理 Excel merged cell 问题）
+    result[material_col] = result[material_col].ffill()
+    # 将 NaN 库存视为 0
+    result[qty_col] = pd.to_numeric(result[qty_col], errors='coerce').fillna(0)
+
+    agg_dict = {
+        '库存总量': (qty_col, 'sum'),
+        '物料名称': (name_col, 'first'),
+    }
+    # 如果有仓库名称列，添加仓库分布聚合
+    if warehouse_col and warehouse_col in result.columns:
+        agg_dict['仓库分布'] = (warehouse_col, lambda x: ', '.join(
+            f"{w}({int(c)}台)" for w, c in
+            result[result[material_col] == x.iloc[0]].groupby(warehouse_col)[qty_col].sum().items()
+            if c > 0
+        ))
+
+    # 按物料编码分组聚合
+    agg = result.groupby(material_col, as_index=False, dropna=False).agg(**agg_dict)
+
+    # 如果有多列，保留额外信息（如品牌、功率等）
+    extra_cols = [c for c in df.columns if c not in [material_col, name_col, qty_col, warehouse_col]]
+    for col in extra_cols:
+        if col in result.columns and col not in agg.columns:
+            agg[col] = result.groupby(material_col, as_index=False, dropna=False)[col].first()[col].values
+
+    # 排序：库存量降序
+    agg = agg.sort_values('库存总量', ascending=False).reset_index(drop=True)
+    # 只保留库存 > 0 的
+    agg = agg[agg['库存总量'] > 0]
+
+    return agg
 
 
 def main():
@@ -262,12 +347,15 @@ def main():
     parser.add_argument("--all", action="store_true", help="显示全部（包括无库存）")
     parser.add_argument("--json", action="store_true", help="输出JSON格式")
     parser.add_argument("--group-by-brand", action="store_true", help="按品牌分组显示（仅逆变器）")
+    parser.add_argument("--aggregate", action="store_true",
+                        help="按物料编码聚合所有仓库的库存总量（显示每个物料的合计库存和仓库分布）")
     parser.add_argument("--refresh", action="store_true", help="强制刷新缓存")
     parser.add_argument("--file", help="库存文件路径")
+    parser.add_argument("--sheet", help="指定读取的工作表名称（默认自动读取对应类型的标准sheet）")
     args = parser.parse_args()
 
     # 加载数据
-    data = load_inventory(args.file, args.refresh)
+    data = load_inventory(args.file, args.refresh, sheet_name=args.sheet)
 
     if args.refresh and not args.type:
         print("[完成] 缓存已刷新", file=sys.stderr)
@@ -288,6 +376,19 @@ def main():
         result = query_boxes(data["并网箱"], args.power, args.box_type, has_stock)
 
     # 输出
+    if args.aggregate:
+        result = aggregate_stock(result)
+        if args.json:
+            print(result.to_json(orient='records', force_ascii=False))
+        else:
+            if result.empty:
+                print(f"[结果] 未找到匹配的{args.type}库存（或库存均为0）")
+            else:
+                print(f"\n=== {args.type}库存聚合结果（按物料编码汇总）===")
+                print(result.to_string(index=False))
+                print(f"\n共 {len(result)} 条记录（已聚合所有仓库）")
+        return
+
     if args.json:
         print(result.to_json(orient='records', force_ascii=False))
     elif args.type == "逆变器" and args.group_by_brand:
