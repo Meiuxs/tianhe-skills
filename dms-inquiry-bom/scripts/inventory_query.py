@@ -13,6 +13,9 @@
 
   # 输出JSON格式
   python inventory_query.py --type 逆变器 --brand 天合 --json
+
+  # 输出到文件（避免管道中文乱码）
+  python inventory_query.py --type 组件 --power 730 --json --aggregate --output-file result.json
 """
 
 import argparse
@@ -332,7 +335,14 @@ def main():
                         help="按物料编码聚合所有仓库的库存总量（显示每个物料的合计库存和仓库分布）")
     parser.add_argument("--file", help="库存文件路径")
     parser.add_argument("--sheet", help="指定读取的工作表名称（默认自动读取对应类型的标准sheet）")
+    parser.add_argument("--output-file", help="输出到文件（默认输出到标准输出），解决管道传输中文乱码问题")
     args = parser.parse_args()
+
+    # --output-file 重定向 stdout
+    if args.output_file:
+        out_path = os.path.abspath(args.output_file)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        sys.stdout = open(out_path, 'w', encoding='utf-8')
 
     # 加载数据
     data = load_inventory(args.file, sheet_name=args.sheet)

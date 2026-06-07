@@ -117,8 +117,24 @@ SOURCE=bashrc
 - 如果 Chromium 显示 ❌，**使用 `AskUserQuestion` 询问用户是否要安装**，提供安装命令
 - 如果返回 `NOT_FOUND`，**使用 `AskUserQuestion` 向用户展示凭据配置说明**并等待回复
 
-**终端中文乱码修复（Windows Bash）：** 如果 JSON 中文显示为乱码，用此命令读取（将 `$JSON_FILE` 替换为你的 JSON 路径）：
+**终端中文乱码修复（Windows Git Bash）：** Windows 环境下 JSON 管道传输中文字符容易出现乱码或 `FileNotFoundError`，推荐三种方案：
 
+**方案一（推荐）：使用 `--output-file` 保存到文件**（脚本支持该参数时优先使用）
+```bash
+# 查询结果直接写入文件，避免管道编码问题
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 组件 --power 730 --json --aggregate --output-file "$PWD/query_result.json"
+# 再用 Python 读取（确保 UTF-8 编码）
+python -c "import json; print(json.dumps(json.load(open(r'$PWD/query_result.json','r',encoding='utf-8')),ensure_ascii=False,indent=2))"
+```
+
+**方案二：Python subprocess 调用（无文件残留）**
+```python
+import subprocess, json
+result = subprocess.run(['python', script_path, '--file', inv_file, '--type', '组件', '--json', '--aggregate'], capture_output=True)
+data = json.loads(result.stdout.decode('utf-8'))
+```
+
+**方案三（旧方案）：管道 + io 重编码（不推荐，仍可能乱码）**
 ```bash
 JSON_FILE="$PWD/inquiry_data.json"
 python -c "import json,sys,io;sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8');print(json.dumps(json.load(open('$JSON_FILE','r',encoding='utf-8')),ensure_ascii=False,indent=2))"
@@ -193,11 +209,35 @@ INVENTORY_FILE=$(ls "$SKILL_DIR"/assets/组件、逆变器、并网箱可用库�
 | `原厂机` / `原厂机，有现货时交期最快X天...` | 原厂生产，交期长 | **非项目强制要求，尽量不用原厂机**；如使用需确认交期 |
 | `常规备货，请关注库存量...` | 常规备货 | 可用，但库存量不足时需询采购交期 |
 
+**⚠️ 非标品类处理规则（新增 — 需求品类不在库存中时）：**
+
+当用户需求中包含 **库存中不存在的品类**（如储能、储能电池、逆变器配件等组件/逆变器/并网箱之外的品类）：
+
+1. **如实告知用户**：说明该品类不在当前库存数据范围内，库存只有组件、逆变器、并网箱三类
+2. **提出处理选项**：使用 `AskUserQuestion` 提供以下选项让用户选择：
+   - **用户自行采购** — 本次 BOM 不包含该品类，用户另行解决
+   - **用户提供型号后尝试查找** — 用户给出具体物料编码/型号，检查是否在库存中
+   - **后续再处理** — 先确定已有品类方案
+3. **BOM 中标注说明**：在生成 BOM 时可在项目备注中注明缺失品类需另行采购
+4. **不强制流程终止**：某一品类不在库存中不等于整个流程终止，继续完成其他可匹配部分
+
+> **原则：** 库存数据范围有限（仅组件/逆变器/并网箱），超出范围的需求应正常告知用户，但不阻塞流程继续。
+
 **重要操作规则：**
 
 1. **聚合所有仓库**：同一物料编码可能分布在多个仓库（贵阳仓、武汉仓等），数量必须加总。不能只看单条记录。
 2. **必查备注**：`备注` 字段包含 "江苏华电项目专用"、"未上架"、"原厂机" 等关键限制条件，**筛选后必须逐条检查**，不满足条件的物料必须排除。
-3. **LLM 调用一律使用 `--json` 格式**（结构化数据便于 LLM 精确解析），不要在命令中省略 `--json`。
+3. **必查非标品类**：用户需求中可能包含储能、配件等库存中不存在的品类，按上方"非标品类处理规则"执行。
+4. **LLM 调用一律使用 `--json` 格式**（结构化数据便于 LLM 精确解析），不要在命令中省略 `--json`。
+
+**`--output-file` 参数说明：** `inventory_query.py` 支持 `--output-file` 参数将 JSON 结果直接写入文件，**避免 Windows 管道传输中文乱码问题**。在 Linux/Mac 下管道传输无此问题，但仍推荐用 `--output-file` 保证数据完整性。
+
+```bash
+# 推荐：直接保存到文件，再用 Python 读取
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 组件 --power 730 --json --aggregate --output-file "$PWD/query_result.json"
+# 然后读取
+python -c "import json; data=json.load(open(r'$PWD/query_result.json','r',encoding='utf-8')); print(json.dumps(data,ensure_ascii=False,indent=2))"
+```
 
 **查询命令示例（LLM 调用 — 统一使用 --json）：**
 
@@ -225,12 +265,28 @@ python "$SKILL_DIR/scripts/inverter_config.py" \
   --brand 天合
 ```
 
+**⚠️ 用户指定物料库存不足时的处理规则（关键）：**
+
+当用户在备注/需求中**指定了具体功率或型号的物料**（如"730W 组件"、"50kW 逆变器"），但库存中该规格物料数量不足时，**严禁擅自决定改用其他功率的物料替代**。必须按以下顺序处理：
+
+1. **如实告知用户当前库存情况**：展示用户指定规格的库存实际可用数量，说明缺口
+2. **使用 `AskUserQuestion` 询问用户如何处理**，让用户自由选择，常见选项参考：
+   - **用其他功率替代** — 用户同意后，查询相近功率的库存并展示给用户确认
+   - **用户自己去申请/解决库存** — 用户自行协调，流程可以继续（如先填 BOM、继续后续步骤）
+   - **部分替代 + 部分自筹** — 比如库存有的先用，不足部分用户另想办法
+   - **其他用户自定的方案**
+3. **仅在用户明确选择替代方案后**，才去查询和推荐替代物料，且替代方案仍需走正常展示→确认流程
+4. **用户选择自行解决时，流程不强制终止**，可根据实际情况继续后续步骤（如先生成已有物料的 BOM）
+
+> **原则：** 用户备注中明确指定的规格是需求约束，agent 没有权限擅自放宽约束。只有用户本人能决定如何变通。用户选择自筹物料不等于流程终止，应灵活配合继续推进。
+
 **匹配优先级规则（按顺序）：**
-1. **有库存 > 无库存**：无库存的物料会导致流程卡住
-2. **备注检查 > 其他**：有禁用备注（项目专用/未上架等）的物料直接排除，不参与后续比较
-3. **同品牌优先**：所选物料尽量统一品牌，减少多品牌混用带来的安装调试和售后复杂度。用户有提及已有设备时优先匹配其品牌；未提及时 agent 自动优先选择同品牌方案，并在展示方案时向用户说明品牌选择逻辑。
-4. **非原厂机 > 原厂机**（除非项目强制）：非原厂机现货充足
-5. **同品牌内选价格排序最低的**
+1. **用户指定规格优先**：用户备注/需求中明确指定的功率/型号，必须优先查询和匹配。库存不满足时按上述"处理规则"执行，不得擅自替换。
+2. **有库存 > 无库存**：无库存的物料会导致流程卡住
+3. **备注检查 > 其他**：有禁用备注（项目专用/未上架等）的物料直接排除，不参与后续比较
+4. **同品牌优先**：所选物料尽量统一品牌，减少多品牌混用带来的安装调试和售后复杂度。用户有提及已有设备时优先匹配其品牌；未提及时 agent 自动优先选择同品牌方案，并在展示方案时向用户说明品牌选择逻辑。
+5. **非原厂机 > 原厂机**（除非项目强制）：非原厂机现货充足
+6. **同品牌内选价格排序最低的**
 
 **展示匹配方案给用户确认时，必须包含：**
 - ✅ 每个物料的**多仓库库存汇总**
@@ -254,17 +310,6 @@ python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
 | 格式 | 示例 |
 |------|------|
 | 简洁格式（推荐） | `6B001492:30,AA001653:1` |
-
-**验证物料是否存在：** 生成 BOM 前可用 `--validate` 参数检查物料编号是否在库存文件中存在：
-
-```bash
-python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
-  --items '6B001492:30,AA001653:1' \
-  --validate \
-  --inventory-file "$INVENTORY_FILE"
-```
-
-输出 JSON 结果，包含 valid（存在）和 invalid（不存在）列表。
 
 **使用 `AskUserQuestion` 展示生成的 BOM 文件给用户确认，确认无误后再进行下一步。**
 
@@ -308,6 +353,16 @@ python "$SKILL_DIR/scripts/fill_product_info.py" \
 2. 当前 SKILL.md 的说明是否能覆盖这些场景？
 3. 脚本是否有 bug 或功能缺失？
 4. 用户操作过程中有哪些可以优化的交互点？
+
+**流程结束前必须执行 — 清理临时文件：**
+
+执行过程中 agent 可能在工作目录下生成了临时 JSON 文件（如 `inquiry_data.json`、`inv.json` 等查询缓存），**在流程结束后必须主动清理**：
+
+1. 列出本次生成的所有非交付物文件（JSON 缓存、中间数据等）
+2. 使用 `rm -f` 删除，确认删除成功
+3. **BOM 文件（`.xlsx`）属于交付物，不删除**，除非用户明确要求
+
+> **原则：** 临时 JSON 文件是查询中间产物，BOM Excel 是最终交付物。只清理 JSON 缓存，保留 BOM。
 
 **将反思结果提炼为具体优化建议，使用 `AskUserQuestion` 主动向用户提出：**
 
@@ -440,3 +495,4 @@ AA001653 | 1
 - 查看脚本详细 API 参考 → `scripts/` 下各脚本的 docstring 和 `--help`
 - **待办为 0 时 `--output-file` 不会生成文件**，脚本需处理 `FileNotFoundError` 并友好提示
 - **无待办时仍需执行回顾环节**，向用户说明结果并询问是否继续或退出
+- **流程结束前清理临时文件**：执行中生成的 JSON 中间文件（如 `inquiry_data.json`、`inv.json`）需在回顾环节主动删除，避免工作目录堆积。BOM 文件（`.xlsx`）属于交付物保留不删。
