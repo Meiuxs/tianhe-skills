@@ -23,34 +23,11 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 # 导入共享浏览器管理器
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _compat  # noqa: F401, E402
-from browser_manager import BrowserManager, get_credentials
+from browser_manager import BrowserManager, is_on_login_page, do_login
 
 # ==================== 配置 ====================
 
-DMS_URL = "https://dms-admin.trinapower.com"
-
-
-# ==================== 登录 ====================
-
-def is_on_login_page(page):
-    return "iauth.trinapower.com" in page.url
-
-
-async def do_login(page):
-    username, password = get_credentials()
-    print("[登录] 正在登录...", file=sys.stderr)
-    await page.wait_for_selector("#form_item_account", state="visible", timeout=15000)
-    await page.locator("#form_item_account").fill(username)
-    await page.locator("#form_item_password").fill(password)
-    await page.get_by_role("button", name="登 录").click()
-    try:
-        await page.wait_for_url(f"{DMS_URL}/**", timeout=15000)
-        await page.wait_for_load_state("networkidle", timeout=10000)
-        masked_user = username[:3] + "***" + username[username.index("@"):] if "@" in username else "***"
-        print(f"[登录] 成功 ({masked_user})", file=sys.stderr)
-    except PlaywrightTimeout:
-        if is_on_login_page(page):
-            raise RuntimeError("登录失败，请检查账号密码")
+from dms_credentials import DMS_URL
 
 
 # ==================== Element UI 表单操作工具 ====================
@@ -104,10 +81,10 @@ async def el_select_by_label(page, label_text: str, option_text: str, timeout: i
     if current_value:
         await select_input.click()
         await select_input.fill("")
-        await page.wait_for_timeout(300)
+        # 等待 Element UI 的 watch 触发
+        await page.evaluate("() => new Promise(r => setTimeout(r, 100))")
 
     await select_input.click()
-    await page.wait_for_timeout(500)
 
     # 等待下拉框出现
     # Element UI 的下拉框是挂载在 body 下的 .el-select-dropdown
@@ -118,25 +95,29 @@ async def el_select_by_label(page, label_text: str, option_text: str, timeout: i
     except PlaywrightTimeout:
         # 可能需要重新点击
         await select_input.click()
-        await page.wait_for_timeout(800)
+        try:
+            await page.locator('.el-select-dropdown:visible .el-select-dropdown__item').first.wait_for(
+                state="visible", timeout=3000
+            )
+        except PlaywrightTimeout:
+            pass
 
     # 使用精确匹配查找选项（避免 "无" 匹配到 "前拉后拽(无平台)"）
-    # 先用 JS 找到精确匹配的选项元素
-    option_found = await page.evaluate(f"""() => {{
+    # 先用 JS 找到精确匹配的选项元素（传递参数，避免模板注入风险）
+    option_found = await page.evaluate("""(optionText) => {
         const dropdowns = document.querySelectorAll('.el-select-dropdown');
-        for (const dd of dropdowns) {{
+        for (const dd of dropdowns) {
             if (dd.style.display === 'none') continue;
             const items = dd.querySelectorAll('.el-select-dropdown__item');
-            for (const item of items) {{
+            for (const item of items) {
                 const text = item.querySelector('span') ? item.querySelector('span').textContent.trim() : item.textContent.trim();
-                if (text === '{option_text}') {{
-                    // 返回选项的索引用于定位
+                if (text === optionText) {
                     return true;
-                }}
-            }}
-        }}
+                }
+            }
+        }
         return false;
-    }}""")
+    }""", option_text)
 
     try:
         if option_found:
@@ -146,19 +127,29 @@ async def el_select_by_label(page, label_text: str, option_text: str, timeout: i
             ).first
             if await option.is_visible(timeout=2000):
                 await option.click()
-                await page.wait_for_timeout(300)
                 print(f"  [完成] {label_text}: 已选择 '{option_text}'", file=sys.stderr)
                 return True
 
         # 回退：尝试输入搜索
         await select_input.fill(option_text)
-        await page.wait_for_timeout(500)
+        # 用条件等待替代固定 500ms（预转义单引号防止 JS 语法错误）
+        safe_text = option_text.replace("'", "\\'")
+        try:
+            await page.wait_for_function(
+                f"""() => {{
+                    const dd = document.querySelector('.el-select-dropdown:not([style*="display: none"])');
+                    if (!dd) return false;
+                    return Array.from(dd.querySelectorAll('.el-select-dropdown__item')).some(
+                        item => (item.querySelector('span')?.textContent.trim() || item.textContent.trim()) === '{safe_text}'
+                    );
+                }}""", timeout=3000)
+        except PlaywrightTimeout:
+            pass
         option = page.locator(
             f'.el-select-dropdown:visible .el-select-dropdown__item span:text-is("{option_text}")'
         ).first
         if await option.is_visible(timeout=2000):
             await option.click()
-            await page.wait_for_timeout(300)
             print(f"  [完成] {label_text}: 已搜索选择 '{option_text}'", file=sys.stderr)
             return True
         else:
@@ -196,9 +187,9 @@ async def el_input_by_label(page, label_text: str, value: str, timeout: int = 50
 
     await input_el.click()
     await input_el.fill(value)
-    await page.wait_for_timeout(300)
 
-    # 验证填写结果
+    # 验证填写结果（使用 evaluate 触发 Vue 响应式更新）
+    await page.evaluate("() => new Promise(r => setTimeout(r, 50))")
     actual = await input_el.input_value()
     if str(actual) == str(value):
         print(f"  [完成] {label_text}: 已填写 '{value}'", file=sys.stderr)
@@ -228,7 +219,10 @@ async def get_select_options(page, label_text: str):
         return []
 
     await select_input.click()
-    await page.wait_for_timeout(800)
+    try:
+        await page.locator('.el-select-dropdown:visible').first.wait_for(state="visible", timeout=3000)
+    except PlaywrightTimeout:
+        pass
 
     options = await page.locator(
         '.el-select-dropdown:visible .el-select-dropdown__item'
@@ -244,8 +238,43 @@ async def get_select_options(page, label_text: str):
             pass
 
     await page.keyboard.press("Escape")
-    await page.wait_for_timeout(300)
     return result
+
+
+# ==================== 品牌字段状态检查 ====================
+
+
+async def _check_brand_status(page) -> dict:
+    """检查品牌 el-select 字段的禁用状态和当前值。
+
+    Element UI 的 el-select 有 3 种禁用检测方式：
+      - el-select 本身的 is-disabled class
+      - 内部 el-input 的 is-disabled class
+      - input 元素的 disabled 属性
+
+    Returns:
+        {"disabled": bool, "value": str}
+    """
+    return await page.evaluate("""() => {
+        const items = document.querySelectorAll('.el-form-item');
+        for (const item of items) {
+            const label = item.querySelector('label');
+            if (label && label.textContent.includes('品牌')) {
+                const select = item.querySelector('.el-select');
+                const input = select ? select.querySelector('.el-input__inner') : null;
+                const disabled = select ? (
+                    select.classList.contains('is-disabled') ||
+                    (select.querySelector('.el-input') && select.querySelector('.el-input').classList.contains('is-disabled')) ||
+                    (input && input.disabled)
+                ) : false;
+                return {
+                    disabled: disabled,
+                    value: input ? input.value : ''
+                };
+            }
+        }
+        return {disabled: false, value: ''};
+    }""")
 
 
 # ==================== 填写产品信息 ====================
@@ -273,17 +302,17 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
     print(f"[导航] 进入流程详情页: {flow_id}", file=sys.stderr)
     await page.goto(url, timeout=20000)
     await page.wait_for_load_state("networkidle", timeout=15000)
-    await page.wait_for_timeout(3000)
 
     if is_on_login_page(page):
         await do_login(page)
         await page.goto(url, timeout=20000)
         await page.wait_for_load_state("networkidle", timeout=15000)
-        await page.wait_for_timeout(3000)
 
-    # 确认页面加载完成
+    # 等待产品信息区域加载（替代固定 3s 等待）
     product_title = page.locator('.row-title:has-text("产品信息")')
-    if not await product_title.is_visible(timeout=5000):
+    try:
+        await product_title.wait_for(state="visible", timeout=15000)
+    except PlaywrightTimeout:
         print("[错误] 未找到产品信息区域，页面可能未正确加载", file=sys.stderr)
         return False
 
@@ -298,37 +327,18 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
     success_count = 0
     total_fields = 10
 
-    # 1. 产品类型 - 必填，el-select
+    # 1. 产品类型 - 必填，el-select（可能影响后续联动的可用性）
     print("\n[填写] 产品类型...", file=sys.stderr)
     if await el_select_by_label(page, "产品类型", "非原装系统"):
         success_count += 1
+    # 产品类型是联动前置字段，选择后 Vue 需要 nextTick 更新其他字段状态
     await page.wait_for_timeout(500)
 
     # 2. 品牌 - 必填，el-select（可能依赖产品类型选择后才可编辑）
     print("[填写] 品牌...", file=sys.stderr)
 
     # 检查品牌字段状态（禁用状态 + 当前值）
-    brand_info = await page.evaluate("""() => {
-        const items = document.querySelectorAll('.el-form-item');
-        for (const item of items) {
-            const label = item.querySelector('label');
-            if (label && label.textContent.includes('品牌')) {
-                const select = item.querySelector('.el-select');
-                const input = select ? select.querySelector('.el-input__inner') : null;
-                // 检查多种禁用状态
-                const disabled = select ? (
-                    select.classList.contains('is-disabled') ||
-                    (select.querySelector('.el-input') && select.querySelector('.el-input').classList.contains('is-disabled')) ||
-                    (input && input.disabled)
-                ) : false;
-                return {
-                    disabled: disabled,
-                    value: input ? input.value : ''
-                };
-            }
-        }
-        return {disabled: false, value: ''};
-    }""")
+    brand_info = await _check_brand_status(page)
 
     if brand_info["disabled"]:
         # 品牌字段已禁用，检查是否已有正确值
@@ -336,30 +346,29 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
             print(f"  [跳过] 品牌字段已禁用，当前值已为 '{brand_info['value']}'", file=sys.stderr)
             success_count += 1
         else:
-            # 等待一下看是否会解锁
+            # 等待联动解锁（产品类型变更后 Element UI 需要时间更新级联字段）
             print(f"  [信息] 品牌字段禁用中，当前值='{brand_info['value']}'，等待联动...", file=sys.stderr)
-            await page.wait_for_timeout(2000)
+            try:
+                await page.wait_for_function(
+                    """() => {
+                        const items = document.querySelectorAll('.el-form-item');
+                        for (const item of items) {
+                            const label = item.querySelector('label');
+                            if (label && label.textContent.includes('品牌')) {
+                                const select = item.querySelector('.el-select');
+                                return !select || !(
+                                    select.classList.contains('is-disabled') ||
+                                    (select.querySelector('.el-input')?.classList.contains('is-disabled')) ||
+                                    (select.querySelector('input')?.disabled)
+                                );
+                            }
+                        }
+                        return false;
+                    }""", timeout=5000)
+            except PlaywrightTimeout:
+                pass  # 超时后仍按禁用处理
 
-            brand_info = await page.evaluate("""() => {
-                const items = document.querySelectorAll('.el-form-item');
-                for (const item of items) {
-                    const label = item.querySelector('label');
-                    if (label && label.textContent.includes('品牌')) {
-                        const select = item.querySelector('.el-select');
-                        const input = select ? select.querySelector('.el-input__inner') : null;
-                        const disabled = select ? (
-                            select.classList.contains('is-disabled') ||
-                            (select.querySelector('.el-input') && select.querySelector('.el-input').classList.contains('is-disabled')) ||
-                            (input && input.disabled)
-                        ) : false;
-                        return {
-                            disabled: disabled,
-                            value: input ? input.value : ''
-                        };
-                    }
-                }
-                return {disabled: false, value: ''};
-            }""")
+            brand_info = await _check_brand_status(page)
 
             if brand_info["disabled"]:
                 if brand_info["value"]:
@@ -373,19 +382,16 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
     else:
         if await el_select_by_label(page, "品牌", "小型工商业"):
             success_count += 1
-    await page.wait_for_timeout(500)
 
     # 3. 数智平台类型 - 必填，el-select
     print("[填写] 数智平台类型...", file=sys.stderr)
     if await el_select_by_label(page, "数智平台类型", "标准"):
         success_count += 1
-    await page.wait_for_timeout(500)
 
     # 4. 规格 - 必填，el-select
     print("[填写] 规格...", file=sys.stderr)
     if await el_select_by_label(page, "规格", "无"):
         success_count += 1
-    await page.wait_for_timeout(500)
 
     # 5. 单片功率 - 必填，el-select（不是input！）
     print(f"[填写] 单片功率: {component_power}W...", file=sys.stderr)
@@ -402,31 +408,26 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
         # 尝试不带W的格式
         if await el_select_by_label(page, "单片功率", str(component_power)):
             success_count += 1
-    await page.wait_for_timeout(500)
 
     # 6. 组件片数 - 必填，el-input（唯一的手动输入框）
     print(f"[填写] 组件片数: {component_count}...", file=sys.stderr)
     if await el_input_by_label(page, "组件片数", str(component_count)):
         success_count += 1
-    await page.wait_for_timeout(500)
 
     # 7. 屋顶类型 - 必填，el-select
     print("[填写] 屋顶类型...", file=sys.stderr)
     if await el_select_by_label(page, "屋顶类型", "无"):
         success_count += 1
-    await page.wait_for_timeout(500)
 
     # 8. 安装方式 - 必填，el-select
     print("[填写] 安装方式...", file=sys.stderr)
     if await el_select_by_label(page, "安装方式", "无"):
         success_count += 1
-    await page.wait_for_timeout(500)
 
     # 9. 排数 - 必填，el-select
     print("[填写] 排数...", file=sys.stderr)
     if await el_select_by_label(page, "排数", "无"):
         success_count += 1
-    await page.wait_for_timeout(500)
 
     # 10. 备注 - el-textarea（产品信息区域内的备注，不是项目信息区域的）
     remark_text = "非标准BOM，安装产生风险渠道伙伴自行承担"
@@ -439,14 +440,14 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
             await remark_input.click()
             await remark_input.fill("")
             await remark_input.type(remark_text, delay=30)
-            await page.wait_for_timeout(300)
-            # 触发事件
+            # 触发 Vue 响应式事件
             await remark_input.evaluate("""el => {
                 el.dispatchEvent(new Event('input', { bubbles: true }));
                 el.dispatchEvent(new Event('change', { bubbles: true }));
                 el.dispatchEvent(new Event('blur', { bubbles: true }));
             }""")
-            await page.wait_for_timeout(300)
+            # 等待 Vue nextTick 处理事件
+            await page.evaluate("() => new Promise(r => setTimeout(r, 50))")
             actual = await remark_input.input_value()
             if actual == remark_text:
                 print(f"  [完成] 备注: 已填写 '{remark_text}'", file=sys.stderr)
@@ -461,11 +462,11 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
     # 11. 逆变器信息（可选）
     if inverter_power and inverter_count:
         print(f"\n[填写] 逆变器信息: {inverter_power}kW × {inverter_count}台...", file=sys.stderr)
-        await page.wait_for_timeout(500)
 
         # 选择产品类型为逆变器（如果可编辑）
         if await el_select_by_label(page, "产品类型", "逆变器"):
             success_count += 1
+            # 产品类型切换后等待级联更新
             await page.wait_for_timeout(500)
 
         # 填写逆变器功率
@@ -474,13 +475,11 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
             success_count += 1
         elif await el_select_by_label(page, "规格", str(inverter_power)):
             success_count += 1
-        await page.wait_for_timeout(500)
 
         # 填写逆变器数量
         if await el_input_by_label(page, "组件片数", str(inverter_count)):
             # 注意: DMS 表单中逆变器数量可能复用"组件片数"字段，也可能不同
             success_count += 1
-        await page.wait_for_timeout(500)
 
         print(f"  [信息] 逆变器信息填写完成（{inverter_power}kW × {inverter_count}台）", file=sys.stderr)
     else:
@@ -489,11 +488,11 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
     # 12. 并网箱信息（可选）
     if box_power and box_count:
         print(f"\n[填写] 并网箱信息: {box_power}kW × {box_count}台...", file=sys.stderr)
-        await page.wait_for_timeout(500)
 
         # 选择产品类型为并网箱
         if await el_select_by_label(page, "产品类型", "并网箱"):
             success_count += 1
+            # 产品类型切换后等待级联更新
             await page.wait_for_timeout(500)
 
         # 填写并网箱规格（功率）
@@ -502,20 +501,18 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
             success_count += 1
         elif await el_select_by_label(page, "规格", str(box_power)):
             success_count += 1
-        await page.wait_for_timeout(500)
 
         # 填写并网箱数量
         if await el_input_by_label(page, "组件片数", str(box_count)):
             success_count += 1
-        await page.wait_for_timeout(500)
 
         print(f"  [信息] 并网箱信息填写完成（{box_power}kW × {box_count}台）", file=sys.stderr)
 
-    # 恢复组件字段显示（如产品类型选择了"非原装系统"）
+    # 恢复组件字段显示（如之前切换到了逆变器/并网箱）
     if inverter_power or box_power:
         print('\n[恢复] 回复产品类型为"非原装系统"...', file=sys.stderr)
         if await el_select_by_label(page, "产品类型", "非原装系统"):
-            await page.wait_for_timeout(500)
+            pass  # 无需额外等待，后续的信息打印已足够
 
     # 结果汇总
     print(f"\n[完成] 产品信息填写完成: {success_count}/{total_fields} 个字段成功", file=sys.stderr)
