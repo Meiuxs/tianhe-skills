@@ -21,5 +21,5 @@ if sys.platform == 'win32':
                 setattr(sys, name, io.TextIOWrapper(
                     stream.buffer,
                     encoding='utf-8',
-                    errors='replace'
+                    errors='backslashreplace'
                 ))

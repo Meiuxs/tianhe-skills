@@ -18,6 +18,11 @@ from typing import Callable
 # 修复 Windows 中文乱码（仅 CLI 模式需要）
 import _compat  # noqa: F401
 
+# ==================== 全局配置 ====================
+
+DMS_URL = "https://dms-admin.trinapower.com"
+"""DMS 系统基础 URL，所有脚本共享此配置。"""
+
 _BASH_AVAILABLE: bool | None = None
 
 SOURCE_LABELS = {

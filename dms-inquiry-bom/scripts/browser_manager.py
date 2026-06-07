@@ -22,7 +22,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from playwright.async_api import async_playwright, Browser, BrowserContext, Page, TimeoutError as PlaywrightTimeout
 
 # 修复 Windows 中文乱码
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -30,7 +30,7 @@ import _compat  # noqa: F401, E402
 
 # ==================== 配置 ====================
 
-DMS_URL = "https://dms-admin.trinapower.com"
+from dms_credentials import DMS_URL
 
 # 持久化数据目录（保存登录状态）
 USER_DATA_DIR = Path.home() / ".dms_browser_data"
@@ -47,6 +47,36 @@ def get_credentials() -> tuple[str, str]:
         print(f"[环境] 从 {source_label(source)} 加载登录凭据", file=sys.stderr)
 
     return _get_credentials(on_source=_log_source)
+
+
+def is_on_login_page(page: Page) -> bool:
+    """判断当前页面是否为 DMS 登录页。"""
+    return "iauth.trinapower.com" in page.url
+
+
+async def do_login(page: Page) -> None:
+    """在登录页执行 DMS 登录表单填写与提交。
+
+    Args:
+        page: 必须已处于 DMS 登录页（iauth.trinapower.com）
+
+    Raises:
+        RuntimeError: 登录失败（账号密码错误）
+    """
+    username, password = get_credentials()
+    print("[登录] 正在登录...", file=sys.stderr)
+    await page.wait_for_selector("#form_item_account", state="visible", timeout=15000)
+    await page.locator("#form_item_account").fill(username)
+    await page.locator("#form_item_password").fill(password)
+    await page.get_by_role("button", name="登 录").click()
+    try:
+        await page.wait_for_url(f"{DMS_URL}/**", timeout=15000)
+        await page.wait_for_load_state("networkidle", timeout=10000)
+        masked_user = username[:3] + "***" + username[username.index("@"):] if "@" in username else "***"
+        print(f"[登录] 成功 ({masked_user})", file=sys.stderr)
+    except PlaywrightTimeout:
+        if is_on_login_page(page):
+            raise RuntimeError("登录失败，请检查账号密码")
 
 
 class BrowserManager:
@@ -138,30 +168,22 @@ class BrowserManager:
         await page.goto(DMS_URL)
         await page.wait_for_load_state("networkidle", timeout=15000)
 
-        if "iauth.trinapower.com" in page.url:
+        if is_on_login_page(page):
             # 需要登录
-            print("[登录] 正在登录...", file=sys.stderr)
-            username, password = self._get_credentials()
-
-            await page.wait_for_selector("#form_item_account", state="visible", timeout=15000)
-            await page.locator("#form_item_account").fill(username)
-            await page.locator("#form_item_password").fill(password)
-            await page.get_by_role("button", name="登 录").click()
-
             try:
-                await page.wait_for_url(f"{DMS_URL}/**", timeout=15000)
-                await page.wait_for_load_state("networkidle", timeout=10000)
-                masked_user = username[:3] + "***" + username[username.index("@"):] if "@" in username else "***"
-                print(f"[登录] 成功 ({masked_user})", file=sys.stderr)
+                await do_login(page)
                 self._is_logged_in = True
                 return True
-            except Exception as e:
-                if "iauth.trinapower.com" in page.url:
-                    print("[登录] 失败，请检查账号密码", file=sys.stderr)
-                    return False
-                # 可能是其他原因导致的超时，但已经跳转到 DMS 了
-                self._is_logged_in = True
-                return True
+            except RuntimeError:
+                print("[登录] 失败，请检查账号密码", file=sys.stderr)
+                return False
+            except PlaywrightTimeout:
+                # 超时但可能已经跳转到 DMS（网络慢的情况）
+                if not is_on_login_page(page):
+                    self._is_logged_in = True
+                    return True
+                print("[登录] 失败，请检查账号密码", file=sys.stderr)
+                return False
         else:
             # 已经登录
             print("[登录] 会话有效（已复用）", file=sys.stderr)
