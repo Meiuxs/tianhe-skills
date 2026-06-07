@@ -1,6 +1,6 @@
 ---
 name: dms-inquiry-bom
-version: 1.1.0
+version: 1.2.0
 description: >
   Use when the user mentions DMS pending tasks, workflow approval, BOM generation,
   non-standard inquiry, or asks about "待办流程", "询价需求", "做BOM", "BOM清单",
@@ -13,9 +13,7 @@ description: >
 ## 概述
 
 DMS 非标询价工作流：自动提取 DMS 待办流程 → 逐步骤用户确认 → 库存匹配 → 生成 BOM → 填写产品信息。
-**核心约束：每一步必须使用 `AskUserQuestion` 确认后才能继续，不允许跳过任何确认环节。**
-
-**关键规则：所有需要用户确认的地方，必须使用 `AskUserQuestion` 工具，不能仅打印到终端等待。每步均需用户确认，不跳过任何确认环节。**
+**核心约束：每一步必须使用 `AskUserQuestion` 确认后才能继续，不允许跳过任何确认环节，不得仅打印到终端等待。**
 
 ## 前置依赖
 
@@ -26,28 +24,11 @@ playwright install chromium
 
 首次安装即可，无需重复。
 
-> **关于浏览器模式：**
-> - **默认：弹出浏览器窗口**（完整 Chromium，可见操作过程，便于观察和调试）
-> - **可选 `--headless`：** 无头模式（静默后台运行，不显示窗口），需要额外安装 `chromium_headless_shell`。如 headless 启动失败，脚本会自动回退到弹出窗口模式。
-> - 检测 headless shell 是否已安装：
-> ```bash
-> python ~/.claude/skills/dms-inquiry-bom/scripts/dms_credentials.py --check-browser
-> ```
-> - 未安装 headless shell 时运行 `playwright install chromium` 即可。
-
-**检测 Chromium 是否已安装（推荐使用 dms_credentials.py 的更全面检测）：**
+**检测 Chromium 是否已安装：**
 
 ```bash
 python ~/.claude/skills/dms-inquiry-bom/scripts/dms_credentials.py --check-browser
 ```
-
-此命令会同时检测完整 Chromium 和 headless shell，并给出安装建议。
-
-```bash
-python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print('✅', p.chromium.executable_path); p.stop()"
-```
-
-如果报错，说明 Chromium 未安装，运行 `playwright install chromium` 即可。
 
 ## 核心模式（三步确认法）
 
@@ -99,12 +80,12 @@ digraph when_to_use {
 
 | 步骤 | 脚本 | 用户确认点 |
 |------|------|-----------|
-| 1. 检查登录凭据 | `dms_credentials.py` | — |
-| 2. 提取待办流程 | `run_inquiry_extract.py` | 展示待办列表，确认需求 |
-| 3. 库存匹配 | `inventory_query.py` + `inverter_config.py` | 确认匹配方案 |
-| 4. 生成 BOM | `run_inquiry_bom.py` | 确认 BOM 无误 |
-| 5. 填写产品信息 | `fill_product_info.py` | —（填写后浏览器保持打开，供用户手动审批）|
-| 6. 回顾与反馈 | `AskUserQuestion` | 主动询问是否有问题、是否需要优化 skill |
+| 0. 检查登录凭据 | `dms_credentials.py` | — |
+| 1. 提取待办流程 | `run_inquiry_extract.py` | 展示待办列表，确认需求 |
+| 2. 库存匹配 | `inventory_query.py` + `inverter_config.py` | 确认匹配方案 |
+| 3. 生成 BOM | `run_inquiry_bom.py` | 确认 BOM 无误 |
+| 4. 填写产品信息 | `fill_product_info.py` | —（填写后浏览器保持打开，供用户手动审批）|
+| 5. 回顾与反馈 | `AskUserQuestion` | 主动询问是否有问题、是否需要优化 skill |
 
 ## 执行步骤
 
@@ -117,34 +98,16 @@ SKILL_DIR="$HOME/.claude/skills/dms-inquiry-bom"
 python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
-> ⚠️ 注意：不要使用 `find` 命令动态查找 SKILL_DIR，skill 文件在临时目录中可能被复制到 `/tmp/tianhe-skills-check/`，应直接使用 `~/.claude/skills/dms-inquiry-bom` 路径。skill 已加载时路径一定存在，无需额外检查。如需确认，用 `test -d` 比 `ls` 快得多（避免 Windows 下读取文件元数据）：`test -d ~/.claude/skills/dms-inquiry-bom/scripts/ && echo OK`
+> ⚠️ 注意：不要使用 `find` 命令动态查找 SKILL_DIR，应直接使用 `~/.claude/skills/dms-inquiry-bom` 路径。skill 已加载时路径一定存在，无需额外检查。
 
-输出示例（Chromium 已安装 / headless shell 未安装）：
-
-```
-========================================
-  浏览器环境检查
-========================================
-  [Chromium] ✅ 已安装
-  [Headless Shell] ✅ 已安装
-  ✅ 浏览器环境就绪
-  ✅ 无头模式可用
-
-DMS_USER=xxx@trinapower.com
-DMS_PASSWORD=xxx
-SOURCE=bashrc
-```
+输出示例（Chromium 已安装）：
 
 ```
 ========================================
   浏览器环境检查
 ========================================
   [Chromium] ✅ 已安装
-  [Headless Shell] ❌ 未安装（使用 --headless 时需要）
   ✅ 浏览器环境就绪
-  ⚠️ headless shell 未安装，--headless 模式不可用
-     如需无头模式请运行:
-     playwright install chromium
 
 DMS_USER=xxx@trinapower.com
 DMS_PASSWORD=xxx
@@ -154,10 +117,11 @@ SOURCE=bashrc
 - 如果 Chromium 显示 ❌，**使用 `AskUserQuestion` 询问用户是否要安装**，提供安装命令
 - 如果返回 `NOT_FOUND`，**使用 `AskUserQuestion` 向用户展示凭据配置说明**并等待回复
 
-**终端中文乱码修复（Windows Bash）：** 如果 JSON 中文显示为乱码，用此命令读取：
+**终端中文乱码修复（Windows Bash）：** 如果 JSON 中文显示为乱码，用此命令读取（将 `$JSON_FILE` 替换为你的 JSON 路径）：
 
 ```bash
-python -c "import json,sys,io;sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8');print(json.dumps(json.load(open('inquiry_data.json','r',encoding='utf-8')),ensure_ascii=False,indent=2))"
+JSON_FILE="$PWD/inquiry_data.json"
+python -c "import json,sys,io;sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8');print(json.dumps(json.load(open('$JSON_FILE','r',encoding='utf-8')),ensure_ascii=False,indent=2))"
 ```
 
 ### 步骤 1：提取待办流程
@@ -170,7 +134,6 @@ python "$SKILL_DIR/scripts/run_inquiry_extract.py" --output-file "$PWD/inquiry_d
 
 | 参数 | 说明 | 默认 |
 |------|------|------|
-| `--headless` | 启用无头模式（不弹出浏览器窗口，静默运行）。**不传此参数时默认弹出浏览器窗口**。⚠️ 需要额外安装 `chromium_headless_shell` | 关闭（默认弹出浏览器窗口） |
 | `--workers N` | 并行并发数 | 3 |
 | `--output-file PATH` | 输出 JSON 路径 | stdout |
 
@@ -202,51 +165,54 @@ python "$SKILL_DIR/scripts/run_inquiry_extract.py" --output-file "$PWD/inquiry_d
 
 **⚠️ 关键说明 — 库存文件 Excel 结构：**
 
-库存文件有 4 个 sheet，**数据质量不同**：
+库存文件包含 3 个标准 sheet，**数据质量不同**：
 
 | Sheet | 用途 | 数据质量 |
 |-------|------|---------|
-| `组件/逆变器/并网箱` | 汇总视图，含备注（如"停止排产"） | 库存数量可能为 NaN，物料编码有 merged cell 问题 |
+| `组件` | 组件库存，含功率、品牌、备注 | 库存数量可能为 NaN，物料编码有 merged cell 问题 |
+| `逆变器` | 逆变器库存，含功率、厂家、备注 | 同上 |
+| `并网箱` | 并网箱库存，含类型、功率、备注 | 同上 |
 
 **库存文件位置：** 脚本自动搜索 `assets/` 目录或 skill 根目录，无需手动指定路径。如需指定特定文件，使用 `--file` 参数：
 
 ```bash
 # 不传 --file 时自动搜索 assets/ 下的库存文件
-python "$SKILL_DIR/scripts/inventory_query.py" --type 组件 --power 715
-
-# 手动指定文件路径（当需要特定文件时）
-INVENTORY_FILE="$HOME/.claude/skills/dms-inquiry-bom/assets/组件、逆变器、并网箱可用库存统计*.xlsx"
-INVENTORY_FILE=$(ls $HOME/.claude/skills/dms-inquiry-bom/assets/组件、逆变器、并网箱可用库存统计*.xlsx 2>/dev/null | head -1)
+INVENTORY_FILE=$(ls "$SKILL_DIR"/assets/组件、逆变器、并网箱可用库存统计*.xlsx 2>/dev/null | head -1)
 ```
+
+**⚠️ 备注字段检查规则（新增 — 必须执行）：**
+
+查询结果中的 **`备注` 字段** 包含影响物料可用性的关键信息，**必须逐条检查**：
+
+| 备注内容 | 含义 | 处理方式 |
+|----------|------|---------|
+| `江苏华电项目专用` / `河南华电项目专用` | 指定项目专用组件 | **不可用于其他项目**，必须排除 |
+| `特价组件` | 特价促销组件 | 可正常使用，但需告知用户 |
+| `小包装组件，仅限阳台光伏使用` | 限用途 | **不可用于常规电站** |
+| `未上架` | 未上架不可售 | **不可使用** |
+| `原厂机` / `原厂机，有现货时交期最快X天...` | 原厂生产，交期长 | **非项目强制要求，尽量不用原厂机**；如使用需确认交期 |
+| `常规备货，请关注库存量...` | 常规备货 | 可用，但库存量不足时需询采购交期 |
 
 **重要操作规则：**
 
 1. **聚合所有仓库**：同一物料编码可能分布在多个仓库（贵阳仓、武汉仓等），数量必须加总。不能只看单条记录。
-2. **读取库存备注**：组件 sheet 中有"停止排产"、"库存不足的需要询问周文娟备货情况"等关键预警，必须在展示时一并呈现给用户。
+2. **必查备注**：`备注` 字段包含 "江苏华电项目专用"、"未上架"、"原厂机" 等关键限制条件，**筛选后必须逐条检查**，不满足条件的物料必须排除。
+3. **LLM 调用一律使用 `--json` 格式**（结构化数据便于 LLM 精确解析），不要在命令中省略 `--json`。
 
-**查询命令示例：**
+**查询命令示例（LLM 调用 — 统一使用 --json）：**
 
 ```bash
-# 查询 715W 组件（使用 --file）
-python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 组件 --power 715
+# 查询 715W 组件（聚合所有仓库 + JSON）
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 组件 --power 715 --json --aggregate
 
-# 查询 50kW 逆变器
-python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 逆变器 --power 50 --brand 天合
+# 查询 50kW 逆变器（天合原装）
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 逆变器 --power 50 --brand 天合 --json --aggregate
 
 # 查并网箱
-python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 并网箱 --power 50
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 并网箱 --power 50 --json --aggregate
 
-# 按物料编码聚合所有仓库的库存总量（推荐）
-python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 逆变器 --brand 天合 --aggregate
-
-# 指定读取详细库存工作表
-python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --sheet "组件" --type 组件 --power 715
-
-# 输出 JSON
-python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 逆变器 --brand 天合 --json
-
-# 刷新缓存
-python "$SKILL_DIR/scripts/inventory_query.py" --refresh
+# 不聚合（查看各仓库分布明细 + 备注）
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 组件 --power 715 --json
 ```
 
 **如需配置逆变器（组件总功率 ÷ 逆变器总功率 ≤ 1.2，建议 1.1~1.2）：**
@@ -261,16 +227,16 @@ python "$SKILL_DIR/scripts/inverter_config.py" \
 
 **匹配优先级规则（按顺序）：**
 1. **有库存 > 无库存**：无库存的物料会导致流程卡住
-2. **非原厂机 > 原厂机**（除非项目强制）：非原厂机现货充足
-3. **同品牌优先**：减少安装调试复杂度
-4. **同品牌内选价格排序最低的**
+2. **备注检查 > 其他**：有禁用备注（项目专用/未上架等）的物料直接排除，不参与后续比较
+3. **同品牌优先**：所选物料尽量统一品牌，减少多品牌混用带来的安装调试和售后复杂度。用户有提及已有设备时优先匹配其品牌；未提及时 agent 自动优先选择同品牌方案，并在展示方案时向用户说明品牌选择逻辑。
+4. **非原厂机 > 原厂机**（除非项目强制）：非原厂机现货充足
+5. **同品牌内选价格排序最低的**
 
 **展示匹配方案给用户确认时，必须包含：**
 - ✅ 每个物料的**多仓库库存汇总**
-- ✅ 库存备注/预警信息（停止排产、需询价等）
+- ✅ **备注/预警信息**（如"未上架"、"原厂机交期30天"等），让用户知晓限制条件
 - ✅ 逆变器 DC/AC 比值
-
-**使用 `AskUserQuestion` 展示库存匹配结果给用户确认方案。**
+- ✅ 如排除了备注受限物料，说明排除原因
 
 ### 步骤 3：生成 BOM
 
@@ -402,9 +368,24 @@ PowerShell:
 | 导航页面 | 提交表单 |
 | 筛选查询 | 删除记录 |
 | 读取页面内容 | 修改数据 |
-| 填写产品信息 | 执行下单 |
+| 填写产品信息（仅填写字段，不点击审批/提交按钮） | 执行下单 |
 
 如页面出现审批、提交、删除等操作按钮，**一律不点击**。如意外跳转到审批/修改页面，立即返回并在终端提示用户。
+
+## 异常处理
+
+执行过程中遇到脚本报错时，按以下策略处理：
+
+| 场景 | 处理方式 |
+|------|---------|
+| `--check-browser` 报 Chromium 未安装 | **安装后重试**：使用 `AskUserQuestion` 询问用户是否运行 `playwright install chromium` |
+| 凭据返回 `NOT_FOUND` | **展示配置说明**：使用 `AskUserQuestion` 向用户展示凭据配置步骤 |
+| 提取/库存/BOM 脚本报错 | **重试 1 次**：检查参数是否正确，修复后重试。再次失败则**使用 `AskUserQuestion` 告知用户错误信息，询问是否跳过该步骤继续** |
+| 填写产品信息脚本报错 | **不重试**：直接使用 `AskUserQuestion` 告知用户，说明可手动在 DMS 页面操作 |
+| 待办流程提取数为 0 | **不报错**：正常展示结果，执行回顾环节，询问是否继续或退出 |
+| 用户中途要求中断流程 | **停止当前步骤**：清理浏览器资源，执行回顾环节 |
+
+> **原则：** 脚本报错时优先展示原始错误信息给用户，不要自行修改用户配置或凭据。
 
 ## 常见错误
 
@@ -416,7 +397,6 @@ PowerShell:
 | 自动关闭浏览器 | 填写完成后浏览器保持打开，让用户手动检查审批 |
 | 忽略库存预警 | 库存不足、停止排产等预警必须展示给用户，让用户决定是否继续 |
 | 混品牌方案未提示用户 | 同品牌不满足时，告知用户并列出混合品牌方案供选择 |
-| `--headless` 报错 `Executable doesn't exist` | **默认直接使用弹出窗口模式**，不传 `--headless`。仅当用户明确要求无头模式时才传该参数。如果 headless 报错，运行 `playwright install chromium` 安装。 |
 
 ## 脚本参考
 
@@ -428,7 +408,7 @@ PowerShell:
 | `inverter_config.py` | `scripts/inverter_config.py` | 自动计算逆变器配置方案 |
 | `run_inquiry_bom.py` | `scripts/run_inquiry_bom.py` | 生成 BOM 清单 Excel |
 | `fill_product_info.py` | `scripts/fill_product_info.py` | 填写 DMS 产品信息（Element UI） |
-| `browser_manager.py` | `scripts/browser_manager.py` | 共享浏览器管理器（单例模式） |
+| `browser_manager.py` | `scripts/browser_manager.py` | 共享浏览器管理器（单例模式，供其他脚本内部调用） |
 
 ## 示例
 
@@ -454,7 +434,7 @@ AA001653 | 1
 
 ## 注意事项
 
-- 脚本运行时打开浏览器窗口（除非 `--headless`），**请勿手动操作**
+- 脚本运行时打开浏览器窗口，**请勿手动操作**
 - DMS 页面结构变化可能导致选择器失效，需更新脚本
 - 库存数据日期可能过时，告知用户数据截止日期
 - 查看脚本详细 API 参考 → `scripts/` 下各脚本的 docstring 和 `--help`
