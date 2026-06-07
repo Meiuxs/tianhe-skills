@@ -1,6 +1,6 @@
 ---
 name: dms-inquiry-bom
-version: 1.0.1
+version: 1.1.0
 description: >
   Use when the user mentions DMS pending tasks, workflow approval, BOM generation,
   non-standard inquiry, or asks about "待办流程", "询价需求", "做BOM", "BOM清单",
@@ -10,9 +10,12 @@ description: >
 
 # DMS 非标询价 — 交互式工作流
 
-逐步骤提取 DMS 待办询价流程 → 展示需求请用户确认 → 库存匹配 → 生成 BOM → 填写产品信息。
+## 概述
 
-**关键规则：所有需要用户确认的地方，必须使用 `AskUserQuestion` 工具，不能仅打印到终端等待。****每步均需用户确认，不跳过任何确认环节。**
+DMS 非标询价工作流：自动提取 DMS 待办流程 → 逐步骤用户确认 → 库存匹配 → 生成 BOM → 填写产品信息。
+**核心约束：每一步必须使用 `AskUserQuestion` 确认后才能继续，不允许跳过任何确认环节。**
+
+**关键规则：所有需要用户确认的地方，必须使用 `AskUserQuestion` 工具，不能仅打印到终端等待。每步均需用户确认，不跳过任何确认环节。**
 
 ## 前置依赖
 
@@ -23,7 +26,22 @@ playwright install chromium
 
 首次安装即可，无需重复。
 
-**检测 Chromium 是否已安装：**
+> **关于浏览器模式：**
+> - **默认：弹出浏览器窗口**（完整 Chromium，可见操作过程，便于观察和调试）
+> - **可选 `--headless`：** 无头模式（静默后台运行，不显示窗口），需要额外安装 `chromium_headless_shell`。如 headless 启动失败，脚本会自动回退到弹出窗口模式。
+> - 检测 headless shell 是否已安装：
+> ```bash
+> python ~/.claude/skills/dms-inquiry-bom/scripts/dms_credentials.py --check-browser
+> ```
+> - 未安装 headless shell 时运行 `playwright install chromium` 即可。
+
+**检测 Chromium 是否已安装（推荐使用 dms_credentials.py 的更全面检测）：**
+
+```bash
+python ~/.claude/skills/dms-inquiry-bom/scripts/dms_credentials.py --check-browser
+```
+
+此命令会同时检测完整 Chromium 和 headless shell，并给出安装建议。
 
 ```bash
 python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print('✅', p.chromium.executable_path); p.stop()"
@@ -81,7 +99,7 @@ digraph when_to_use {
 
 | 步骤 | 脚本 | 用户确认点 |
 |------|------|-----------|
-| 1. 检查登录凭据 | `check_env.py` | — |
+| 1. 检查登录凭据 | `dms_credentials.py` | — |
 | 2. 提取待办流程 | `run_inquiry_extract.py` | 展示待办列表，确认需求 |
 | 3. 库存匹配 | `inventory_query.py` + `inverter_config.py` | 确认匹配方案 |
 | 4. 生成 BOM | `run_inquiry_bom.py` | 确认 BOM 无误 |
@@ -96,19 +114,37 @@ digraph when_to_use {
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-inquiry-bom"
-python "$SKILL_DIR/scripts/check_env.py" --check-browser
+python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
-> ⚠️ 注意：不要使用 `find` 命令动态查找 SKILL_DIR，skill 文件在临时目录中可能被复制到 `/tmp/tianhe-skills-check/`，应直接使用 `~/.claude/skills/dms-inquiry-bom` 路径。先用 `ls ~/.claude/skills/dms-inquiry-bom/scripts/` 确认路径是否存在。
+> ⚠️ 注意：不要使用 `find` 命令动态查找 SKILL_DIR，skill 文件在临时目录中可能被复制到 `/tmp/tianhe-skills-check/`，应直接使用 `~/.claude/skills/dms-inquiry-bom` 路径。skill 已加载时路径一定存在，无需额外检查。如需确认，用 `test -d` 比 `ls` 快得多（避免 Windows 下读取文件元数据）：`test -d ~/.claude/skills/dms-inquiry-bom/scripts/ && echo OK`
 
-输出示例：
+输出示例（Chromium 已安装 / headless shell 未安装）：
 
 ```
 ========================================
   浏览器环境检查
 ========================================
-  [Chromium] ✅ Chromium 可执行文件: C:\Users\xxx\AppData\Local\ms-playwright\chromium-xxx\chrome.exe
+  [Chromium] ✅ 已安装
+  [Headless Shell] ✅ 已安装
   ✅ 浏览器环境就绪
+  ✅ 无头模式可用
+
+DMS_USER=xxx@trinapower.com
+DMS_PASSWORD=xxx
+SOURCE=bashrc
+```
+
+```
+========================================
+  浏览器环境检查
+========================================
+  [Chromium] ✅ 已安装
+  [Headless Shell] ❌ 未安装（使用 --headless 时需要）
+  ✅ 浏览器环境就绪
+  ⚠️ headless shell 未安装，--headless 模式不可用
+     如需无头模式请运行:
+     playwright install chromium
 
 DMS_USER=xxx@trinapower.com
 DMS_PASSWORD=xxx
@@ -118,18 +154,10 @@ SOURCE=bashrc
 - 如果 Chromium 显示 ❌，**使用 `AskUserQuestion` 询问用户是否要安装**，提供安装命令
 - 如果返回 `NOT_FOUND`，**使用 `AskUserQuestion` 向用户展示凭据配置说明**并等待回复
 
-**终端中文乱码修复（Windows Bash）：**
-
-如果打印 JSON 内容时中文显示为乱码（如 `待办`），使用以下方式读取：
+**终端中文乱码修复（Windows Bash）：** 如果 JSON 中文显示为乱码，用此命令读取：
 
 ```bash
-python -c "
-import json, sys, io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-with open('inquiry_data.json', 'r', encoding='utf-8') as f:
-    data = json.load(f)
-print(json.dumps(data, ensure_ascii=False, indent=2))
-"
+python -c "import json,sys,io;sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8');print(json.dumps(json.load(open('inquiry_data.json','r',encoding='utf-8')),ensure_ascii=False,indent=2))"
 ```
 
 ### 步骤 1：提取待办流程
@@ -142,7 +170,7 @@ python "$SKILL_DIR/scripts/run_inquiry_extract.py" --output-file "$PWD/inquiry_d
 
 | 参数 | 说明 | 默认 |
 |------|------|------|
-| `--headless` | 无头模式 | 显示浏览器 |
+| `--headless` | 启用无头模式（不弹出浏览器窗口，静默运行）。**不传此参数时默认弹出浏览器窗口**。⚠️ 需要额外安装 `chromium_headless_shell` | 关闭（默认弹出浏览器窗口） |
 | `--workers N` | 并行并发数 | 3 |
 | `--output-file PATH` | 输出 JSON 路径 | stdout |
 
@@ -179,34 +207,22 @@ python "$SKILL_DIR/scripts/run_inquiry_extract.py" --output-file "$PWD/inquiry_d
 | Sheet | 用途 | 数据质量 |
 |-------|------|---------|
 | `组件/逆变器/并网箱` | 汇总视图，含备注（如"停止排产"） | 库存数量可能为 NaN，物料编码有 merged cell 问题 |
-| `工作表1` | 详细明细，含全部仓库 | 数量准确，物料编码可靠，推荐使用 |
 
-**必须使用 `--file` 参数指定库存文件路径，因为脚本不会自动查找 `assets/` 目录：**
+**库存文件位置：** 脚本自动搜索 `assets/` 目录或 skill 根目录，无需手动指定路径。如需指定特定文件，使用 `--file` 参数：
 
 ```bash
+# 不传 --file 时自动搜索 assets/ 下的库存文件
+python "$SKILL_DIR/scripts/inventory_query.py" --type 组件 --power 715
+
+# 手动指定文件路径（当需要特定文件时）
 INVENTORY_FILE="$HOME/.claude/skills/dms-inquiry-bom/assets/组件、逆变器、并网箱可用库存统计*.xlsx"
-# 用实际路径替换通配符
 INVENTORY_FILE=$(ls $HOME/.claude/skills/dms-inquiry-bom/assets/组件、逆变器、并网箱可用库存统计*.xlsx 2>/dev/null | head -1)
 ```
 
 **重要操作规则：**
 
-1. **聚合所有仓库**：同一物料编码可能分布在多个仓库（代理商虚拟仓、贵阳仓、武汉仓等），数量必须加总。不能只看单条记录。
-
-   ```python
-   # 伪代码 — 必须汇总
-   df = pandas.read_excel(file, sheet_name='工作表1')
-   total = df[df['物料编号'] == code]['可用库存'].sum()
-   ```
-
-2. **区分虚拟仓与实体仓**：
-   - **代理商虚拟仓**（JXSXNC）：库存为虚拟分配量，可能不代表实际物理库存
-   - **天合富家-XX仓**：实体仓库，实际物理库存
-   - 展示给用户时，**分别列出**虚拟仓和实体仓的数量
-
-3. **读取库存备注**：组件 sheet 中有"停止排产"、"库存不足的需要询问周文娟备货情况"等关键预警，必须在展示时一并呈现给用户。
-
-4. **物料编码跨 sheet 不一致**：因汇总 sheet 存在 merged cell，物料编码可能与 `工作表1` 不一致（如 AA001161 实际为 AB001161）。**以 `工作表1` 为准。**
+1. **聚合所有仓库**：同一物料编码可能分布在多个仓库（贵阳仓、武汉仓等），数量必须加总。不能只看单条记录。
+2. **读取库存备注**：组件 sheet 中有"停止排产"、"库存不足的需要询问周文娟备货情况"等关键预警，必须在展示时一并呈现给用户。
 
 **查询命令示例：**
 
@@ -220,7 +236,12 @@ python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type �
 # 查并网箱
 python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 并网箱 --power 50
 
-# ⚠️ --group-by-brand 已知问题: 当逆变器名称字段为 NaN 时会崩溃，慎用
+# 按物料编码聚合所有仓库的库存总量（推荐）
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 逆变器 --brand 天合 --aggregate
+
+# 指定读取详细库存工作表
+python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --sheet "组件" --type 组件 --power 715
+
 # 输出 JSON
 python "$SKILL_DIR/scripts/inventory_query.py" --file "$INVENTORY_FILE" --type 逆变器 --brand 天合 --json
 
@@ -245,7 +266,7 @@ python "$SKILL_DIR/scripts/inverter_config.py" \
 4. **同品牌内选价格排序最低的**
 
 **展示匹配方案给用户确认时，必须包含：**
-- ✅ 每个物料的**多仓库库存汇总**（虚拟仓 + 实体仓分别列明）
+- ✅ 每个物料的**多仓库库存汇总**
 - ✅ 库存备注/预警信息（停止排产、需询价等）
 - ✅ 逆变器 DC/AC 比值
 
@@ -267,9 +288,17 @@ python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
 | 格式 | 示例 |
 |------|------|
 | 简洁格式（推荐） | `6B001492:30,AA001653:1` |
-| JSON 格式 | `[["6B001492",30],["AA001653",1]]` |
 
-**注意：** BOM 脚本不验证物料是否存在或库存是否充足，生成前需人工确认。
+**验证物料是否存在：** 生成 BOM 前可用 `--validate` 参数检查物料编号是否在库存文件中存在：
+
+```bash
+python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
+  --items '6B001492:30,AA001653:1' \
+  --validate \
+  --inventory-file "$INVENTORY_FILE"
+```
+
+输出 JSON 结果，包含 valid（存在）和 invalid（不存在）列表。
 
 **使用 `AskUserQuestion` 展示生成的 BOM 文件给用户确认，确认无误后再进行下一步。**
 
@@ -280,9 +309,25 @@ python "$SKILL_DIR/scripts/fill_product_info.py" \
   --flow-id 2026060519454266 \
   --component-power 715 \
   --component-count 120
-```
 
-**⚠️ 已知限制：** `fill_product_info.py` **只填写组件相关字段**（产品类型/品牌/单片功率/组件片数等），不会填写逆变器和并网箱的产品信息。组件以外的物料信息需用户手动补充。
+# 同时填写逆变器信息
+python "$SKILL_DIR/scripts/fill_product_info.py" \
+  --flow-id 2026060519454266 \
+  --component-power 715 \
+  --component-count 120 \
+  --inverter-power 50 \
+  --inverter-count 1
+
+# 同时填写逆变器和并网箱
+python "$SKILL_DIR/scripts/fill_product_info.py" \
+  --flow-id 2026060519454266 \
+  --component-power 715 \
+  --component-count 120 \
+  --inverter-power 50 \
+  --inverter-count 1 \
+  --box-power 50 \
+  --box-count 1
+```
 
 **⚠️ 此步骤必须在 BOM 确认后执行，不能提前。**
 
@@ -315,30 +360,6 @@ AskUserQuestion:
 
 > **原则：** 先自行反思提炼，再给用户确认补充，而不是空泛地问"有没有要改进的"。
 
-## 库存数据深度分析（补充查询）
-
-当 `inventory_query.py` 的输出不够详细时，直接用 pandas 读取 `工作表1` sheet 进行深度分析：
-
-```python
-import pandas, os
-inventory_dir = os.path.expanduser(r"~\.claude\skills\dms-inquiry-bom\assets")
-files = [f for f in os.listdir(inventory_dir) if '库存统计' in f]
-file_path = os.path.join(inventory_dir, files[0])
-
-xls = pandas.ExcelFile(file_path, engine='calamine')
-df = pandas.read_excel(xls, sheet_name='工作表1', dtype=str)
-
-# 查询某物料编号的全部仓库
-code = 'AA002415'
-matches = df[df['物料编号'].astype(str).str.contains(code, na=False)]
-total = 0
-for _, row in matches.iterrows():
-    qty = int(float(row['可用库存'])) if row['可用库存'] and row['可用库存'] != 'nan' else 0
-    print(f"  {row['仓库名称']}: {qty}")
-    total += qty
-print(f"  合计: {total}")
-```
-
 ## 多流程处理策略
 
 当提取到多条待办流程时：
@@ -350,9 +371,11 @@ print(f"  合计: {total}")
 
 ## 凭据配置
 
-DMS 登录凭据通过环境变量读取，**不硬编码密码**。
+DMS 登录凭据通过环境变量读取，**不硬编码密码**。检测逻辑集中在 `scripts/dms_credentials.py`，各业务脚本共用（也可直接 CLI 运行 `dms_credentials.py --check-browser` 检查环境）。
 
-如果 `check_env.py` 返回 `NOT_FOUND`，告诉用户：
+检测顺序：当前环境变量 → shell profile（先直读 `export`，再 bash 兜底）→ PowerShell 用户变量。
+
+如果 `dms_credentials.py` 返回 `NOT_FOUND`，告诉用户：
 
 ```
 请先配置 DMS 登录环境变量：
@@ -380,7 +403,6 @@ PowerShell:
 | 筛选查询 | 删除记录 |
 | 读取页面内容 | 修改数据 |
 | 填写产品信息 | 执行下单 |
-| | 发送邮件 |
 
 如页面出现审批、提交、删除等操作按钮，**一律不点击**。如意外跳转到审批/修改页面，立即返回并在终端提示用户。
 
@@ -394,40 +416,19 @@ PowerShell:
 | 自动关闭浏览器 | 填写完成后浏览器保持打开，让用户手动检查审批 |
 | 忽略库存预警 | 库存不足、停止排产等预警必须展示给用户，让用户决定是否继续 |
 | 混品牌方案未提示用户 | 同品牌不满足时，告知用户并列出混合品牌方案供选择 |
-| 只看一个仓库的库存 | 同一物料可能分布在多个仓库，必须聚合所有仓库后汇总展示 |
-| 没区分虚拟仓和实体仓 | 代理商虚拟仓的库存可能不是实际物理库存，必须分开标注 |
-| 直接信任汇总 sheet 的物料编码 | 汇总 sheet 有 merged cell 问题，物料编码以 `工作表1` 为准 |
-| 用 find 命令定位 SKILL_DIR | 脚本在临时目录运行时 find 会失败，应直接使用 `~/.claude/skills/dms-inquiry-bom` |
-
-## 版本历史
-
-| 版本 | 日期 | 变更内容 |
-|------|------|---------|
-| 1.0.1 | 2026-06-06 | 小版本修订：修正版本号规范（末位递增）；新增"回顾与反馈"步骤（步骤6），流程完成后主动询问用户优化建议 |
-| 1.0.0 | — | 初始版本 |
+| `--headless` 报错 `Executable doesn't exist` | **默认直接使用弹出窗口模式**，不传 `--headless`。仅当用户明确要求无头模式时才传该参数。如果 headless 报错，运行 `playwright install chromium` 安装。 |
 
 ## 脚本参考
 
-| 脚本 | 路径 | 用途 | 已知问题 |
-|------|------|------|---------|
-| `check_env.py` | `scripts/check_env.py` | 并行检查 DMS 环境变量 | — |
-| `run_inquiry_extract.py` | `scripts/run_inquiry_extract.py` | 提取待办流程详情到 JSON | — |
-| `inventory_query.py` | `scripts/inventory_query.py` | 查询组件/逆变器/并网箱库存 | `--group-by-brand` 遇 NaN 会崩溃；不自动搜 `assets/` 目录；不跨仓库聚合 |
-| `inverter_config.py` | `scripts/inverter_config.py` | 自动计算逆变器配置方案 | — |
-| `run_inquiry_bom.py` | `scripts/run_inquiry_bom.py` | 生成 BOM 清单 Excel | 不验证物料是否存在 |
-| `fill_product_info.py` | `scripts/fill_product_info.py` | 填写 DMS 产品信息（Element UI） | 只填组件字段，不填逆变器/并网箱 |
-| `browser_manager.py` | `scripts/browser_manager.py` | 共享浏览器管理器（单例模式） | — |
-
-## 脚本待修复清单
-
-以下脚本问题需开发者修复：
-
-- [ ] **`inventory_query.py`**: `--group-by-brand` 在 inverter 名称为 NaN 时崩溃，需加 `if pd.notna(name)` 判断
-- [ ] **`inventory_query.py`**: 应自动搜索 `assets/` 目录下的库存文件（当前只搜脚本所在目录）
-- [ ] **`inventory_query.py`**: 新增 `--aggregate` 参数，按物料编码聚合所有仓库的库存总量
-- [ ] **`inventory_query.py`**: 新增 `--sheet 工作表1` 参数，支持指定读取详细库存 sheet
-- [ ] **`run_inquiry_bom.py`**: 新增 `--validate` 参数，生成 BOM 前验证物料是否存在
-- [ ] **`fill_product_info.py`**: 扩展支持填写逆变器、并网箱的产品信息
+| 脚本 | 路径 | 用途 |
+|------|------|------|
+| `dms_credentials.py` | `scripts/dms_credentials.py` | 凭据/Chromium 检测 + CLI 环境检查 |
+| `run_inquiry_extract.py` | `scripts/run_inquiry_extract.py` | 提取待办流程详情到 JSON |
+| `inventory_query.py` | `scripts/inventory_query.py` | 查询组件/逆变器/并网箱库存 |
+| `inverter_config.py` | `scripts/inverter_config.py` | 自动计算逆变器配置方案 |
+| `run_inquiry_bom.py` | `scripts/run_inquiry_bom.py` | 生成 BOM 清单 Excel |
+| `fill_product_info.py` | `scripts/fill_product_info.py` | 填写 DMS 产品信息（Element UI） |
+| `browser_manager.py` | `scripts/browser_manager.py` | 共享浏览器管理器（单例模式） |
 
 ## 示例
 
@@ -457,3 +458,5 @@ AA001653 | 1
 - DMS 页面结构变化可能导致选择器失效，需更新脚本
 - 库存数据日期可能过时，告知用户数据截止日期
 - 查看脚本详细 API 参考 → `scripts/` 下各脚本的 docstring 和 `--help`
+- **待办为 0 时 `--output-file` 不会生成文件**，脚本需处理 `FileNotFoundError` 并友好提示
+- **无待办时仍需执行回顾环节**，向用户说明结果并询问是否继续或退出

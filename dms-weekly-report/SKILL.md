@@ -7,8 +7,8 @@ description: >
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.0.0
-  updated: 2026-06-06
+  version: 1.1.0
+  updated: 2026-06-07
 ---
 
 # DMS 非标询价周报生成器
@@ -90,13 +90,26 @@ digraph date_flow {
 }
 ```
 
-### 步骤 2：运行脚本
+### 步骤 2：检查运行环境
+
+确认日期范围后，先检查 DMS 登录凭据和浏览器环境：
+
+```bash
+SKILL_DIR="C:/Users/Administrator/.claude/skills/dms-weekly-report"
+python "$SKILL_DIR/scripts/check_env.py" --check-browser
+```
+
+- 检测来源：当前环境变量、`~/.bashrc`、`~/.bash_profile`、`~/.profile`、PowerShell 用户变量
+- 同时验证 Playwright Chromium 是否已安装
+- 凭据未找到时提示用户配置（回复"已配置"后继续）
+
+### 步骤 3：运行脚本
 
 本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作：
 
 ```bash
-SKILL_DIR="$(dirname "$(find ~/.claude/skills -name "run_weekly_report.py" 2>/dev/null | head -1)")"
-SCRIPT="$SKILL_DIR/run_weekly_report.py"
+SKILL_DIR="C:/Users/Administrator/.claude/skills/dms-weekly-report"
+SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
 # 用户确认默认范围
 python "$SCRIPT" --output-dir "$PWD"
@@ -113,7 +126,7 @@ python "$SCRIPT" --output-dir "$PWD" --headless
 
 > **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录，方便查找。
 
-### 步骤 3：呈现结果
+### 步骤 4：呈现结果
 
 脚本执行后会在终端打印摘要并生成 Excel，直接向用户报告：
 
@@ -124,6 +137,34 @@ python "$SCRIPT" --output-dir "$PWD" --headless
 🟢 已下单 5 条 | 🔴 未下单 7 条
 📎 Excel文件已保存到：D:\询价汇总.xlsx
 ```
+
+### 步骤 5：回顾与反思（流程完成后）
+
+周报生成完成后（或过程中出现问题导致卡住时），**agent 主动自我反思本次执行过程**：
+
+**反思清单：**
+1. 本次执行中遇到了哪些问题（脚本报错、数据异常、登录失败、下单检查超时等）？
+2. 数据是否完整合理（提取条数是否符合预期、日期范围是否正确）？
+3. 当前 SKILL.md 的说明是否能覆盖这些场景？
+4. 脚本是否有 bug 或功能缺失（选择器失效、超时过短、并发控制等）？
+5. 用户操作过程中有哪些可以优化的交互点？
+
+**将反思结果提炼为具体优化建议，使用 `AskUserQuestion` 主动向用户提出：**
+
+```markdown
+AskUserQuestion:
+  "本次周报执行中发现了以下问题，建议优化：
+   1. [问题1] → 建议 [优化方案]
+   2. [问题2] → 建议 [优化方案]
+   您是否有补充？确认后我将更新 SKILL.md。"
+```
+
+**根据用户确认/补充后：**
+- ✅ 更新 SKILL.md 中的说明、注意事项、常见错误
+- ✅ 记录到 memory 供下次会话参考
+- ✅ 如涉及脚本 bug，更新脚本待修复清单
+
+> **原则：** 先自行反思提炼，再给用户确认补充，而不是空泛地问"有没有要改进的"。
 
 ## Quick Reference
 
@@ -170,7 +211,11 @@ playwright install chromium
 
 ## 登录配置
 
-DMS 登录凭据通过环境变量读取，**不硬编码密码**。
+DMS 登录凭据通过环境变量读取，**不硬编码密码**。检测逻辑位于本 skill 目录的 `scripts/dms_credentials.py`，`check_env.py` 与 `run_weekly_report.py` 共用。
+
+```bash
+python "$SKILL_DIR/scripts/check_env.py" --check-browser
+```
 
 **配置方式（二选一）：**
 
@@ -185,10 +230,10 @@ echo 'export DMS_PASSWORD="your_password"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-脚本自动按以下顺序检测凭据：
+脚本自动按以下顺序检测凭据（实现见本 skill 目录的 `scripts/dms_credentials.py`）：
 1. 当前进程环境变量
-2. `~/.bashrc` → `~/.bash_profile` → `~/.profile`
-3. PowerShell 用户环境变量
+2. `~/.bashrc` → `~/.bash_profile` → `~/.profile`（先直读 `export` 行，再 bash 合并 source 兜底）
+3. PowerShell 用户环境变量（`-NoProfile`）
 
 全部未找到时暂停执行，向用户说明如何配置。配置完成后让用户回复"已配置"，然后继续。
 
