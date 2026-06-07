@@ -79,8 +79,8 @@ DATA_ALIGN = Alignment(wrap_text=True, vertical="center", horizontal="center")
 COLUMN_WIDTHS: list[int] = [18, 40, 14, 28, 18, 10, 16, 18, 18, 14, 14, 24, 30, 10]
 
 # Playwright 超时配置（毫秒）
-NAV_TIMEOUT = 20_000
-LOAD_TIMEOUT = 15_000
+NAV_TIMEOUT = 30_000
+LOAD_TIMEOUT = 30_000
 WAIT_SHORT = 1000
 WAIT_MEDIUM = 2000
 
@@ -119,6 +119,16 @@ class FlowRecord:
     ordered: str = "否"
 
 
+@dataclass
+class TableProcessResult:
+    """表格翻页处理结果。"""
+    flow_ids: list[str] = field(default_factory=list)
+    seen_ids: set[str] = field(default_factory=set)
+    skipped_invalid: int = 0
+    skipped_dup: int = 0
+    valid_rows: int = 0
+
+
 # ==================== 重试装饰器 ====================
 
 def retry_async(max_retries: int = MAX_RETRIES, base_delay: float = RETRY_BASE_DELAY):
@@ -149,6 +159,14 @@ def retry_async(max_retries: int = MAX_RETRIES, base_delay: float = RETRY_BASE_D
 def is_on_login_page(url: str) -> bool:
     """判断当前 URL 是否为登录页面。"""
     return LOGIN_CHECK_DOMAIN in url
+
+
+async def ensure_logged_in(page: Any, target_url: str) -> None:
+    """如果当前在登录页面则自动登录，然后导航到目标 URL。"""
+    if is_on_login_page(page.url):
+        await do_login(page)
+        await page.goto(target_url, timeout=NAV_TIMEOUT)
+        await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
 
 
 def get_week_range(weeks_ago: int = 0) -> tuple[str, str]:
@@ -196,20 +214,13 @@ async def _navigate_to_process_center(page: Any) -> None:
     await page.goto(f"{DMS_URL}/#/process/process_center", timeout=NAV_TIMEOUT)
     await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
     await page.wait_for_timeout(WAIT_SHORT)
-    if is_on_login_page(page.url):
-        await do_login(page)
-        await page.goto(f"{DMS_URL}/#/process/process_center", timeout=NAV_TIMEOUT)
-        await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
+    await ensure_logged_in(page, f"{DMS_URL}/#/process/process_center")
 
 
 async def _process_table_rows(
     page: Any,
-    flow_ids: list[str],
-    seen_ids: set[str],
-    skipped_invalid: int,
-    skipped_dup: int,
-    valid_rows: int,
-) -> tuple[list[str], set[str], int, int, int]:
+    result: TableProcessResult,
+) -> TableProcessResult:
     """处理当前页面的表格行，提取有效流程编号。"""
     rows = await page.locator("table.el-table__body tbody tr").all()
     logger.debug("找到 %d 行", len(rows))
@@ -223,7 +234,7 @@ async def _process_table_rows(
 
         if not re.match(r"^\d{15,}$", flow_text):
             continue
-        valid_rows += 1
+        result.valid_rows += 1
 
         status_text = ""
         for t in cell_texts[-3:]:
@@ -232,18 +243,18 @@ async def _process_table_rows(
                 break
 
         if "作废" in status_text:
-            skipped_invalid += 1
+            result.skipped_invalid += 1
             logger.debug("跳过作废流程: %s", flow_text)
             continue
-        if flow_text in seen_ids:
-            skipped_dup += 1
+        if flow_text in result.seen_ids:
+            result.skipped_dup += 1
             logger.debug("跳过重复流程: %s", flow_text)
             continue
 
-        seen_ids.add(flow_text)
-        flow_ids.append(flow_text)
+        result.seen_ids.add(flow_text)
+        result.flow_ids.append(flow_text)
 
-    return flow_ids, seen_ids, skipped_invalid, skipped_dup, valid_rows
+    return result
 
 
 async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> list[str]:
@@ -275,17 +286,10 @@ async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> 
     total_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
     logger.info("分页: %d 条/页，共 %d 页", PAGE_SIZE, total_pages)
 
-    flow_ids: list[str] = []
-    seen_ids: set[str] = set()
-    skipped_invalid = 0
-    skipped_dup = 0
-    valid_rows = 0
+    result = TableProcessResult()
 
     # 处理第 1 页
-    flow_ids, seen_ids, skipped_invalid, skipped_dup, valid_rows = (
-        await _process_table_rows(page, flow_ids, seen_ids,
-                                  skipped_invalid, skipped_dup, valid_rows)
-    )
+    result = await _process_table_rows(page, result)
 
     # 翻页处理后续页面
     for page_num in range(2, total_pages + 1):
@@ -297,17 +301,14 @@ async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> 
             logger.warning("翻到第 %d 页失败，终止翻页", page_num)
             break
 
-        flow_ids, seen_ids, skipped_invalid, skipped_dup, valid_rows = (
-            await _process_table_rows(page, flow_ids, seen_ids,
-                                      skipped_invalid, skipped_dup, valid_rows)
-        )
+        result = await _process_table_rows(page, result)
 
-    logger.info("有效记录: %d 条, 提取流程: %d 个", valid_rows, len(flow_ids))
-    if skipped_invalid:
-        logger.info("跳过作废流程: %d 条", skipped_invalid)
-    if skipped_dup:
-        logger.info("跳过重复流程: %d 条", skipped_dup)
-    return flow_ids
+    logger.info("有效记录: %d 条, 提取流程: %d 个", result.valid_rows, len(result.flow_ids))
+    if result.skipped_invalid:
+        logger.info("跳过作废流程: %d 条", result.skipped_invalid)
+    if result.skipped_dup:
+        logger.info("跳过重复流程: %d 条", result.skipped_dup)
+    return result.flow_ids
 
 
 # ==================== HTML 提取工具 ====================
@@ -410,11 +411,13 @@ async def _extract_bom(page: Any) -> list[BOMItem]:
     items: list[BOMItem] = []
     try:
         tables = await page.locator("table").all()
-        for i, table in enumerate(tables):
+        for table in tables:
             thead = table.locator("thead")
             if await thead.count() > 0 and "物料编号" in ((await thead.text_content()) or ""):
-                if i + 1 < len(tables):
-                    for row in await tables[i + 1].locator("tbody tr").all():
+                # 用 XPath 同级关系找到紧随其后的表体 table，比 `i + 1` 索引更健壮
+                body_table = table.locator("xpath=./following-sibling::table[1]")
+                if await body_table.count() > 0:
+                    for row in await body_table.locator("tbody tr").all():
                         cells = await row.locator("td").all()
                         if len(cells) >= 4:
                             code = ((await cells[0].text_content()) or "").strip().strip('"')
@@ -449,11 +452,13 @@ async def _extract_submit_time(page: Any) -> str:
     """从审批节点表中提取流程发起人提交审核时间。"""
     try:
         tables = await page.locator("table").all()
-        for i, table in enumerate(tables):
+        for table in tables:
             thead = table.locator("thead")
             if await thead.count() > 0 and "审批节点" in ((await thead.text_content()) or ""):
-                if i + 1 < len(tables):
-                    for row in await tables[i + 1].locator("tbody tr").all():
+                # 用 XPath 同级关系找到紧随其后的表体 table
+                body_table = table.locator("xpath=./following-sibling::table[1]")
+                if await body_table.count() > 0:
+                    for row in await body_table.locator("tbody tr").all():
                         text = await row.text_content() or ""
                         if "流程发起人" in text and "提交审核" in text:
                             for cell in await row.locator("td").all():
@@ -478,10 +483,7 @@ async def extract_detail_by_url(
             await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
             await page.wait_for_timeout(WAIT_SHORT)
 
-            if is_on_login_page(page.url):
-                await do_login(page)
-                await page.goto(url, timeout=NAV_TIMEOUT)
-                await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
+            await ensure_logged_in(page, url)
 
             html = await page.content()
             rec = FlowRecord(flow_id=flow_id)
@@ -536,22 +538,15 @@ async def extract_all_parallel(
 
 # ==================== 下单检查 ====================
 
-async def check_single_order(
-    context: Any, flow_id: str, sem: asyncio.Semaphore,
-) -> str:
-    """在订单页面搜索流程编号是否已下单。"""
+@retry_async(max_retries=MAX_RETRIES)
+async def _search_order_for_flow(context: Any, flow_id: str, sem: asyncio.Semaphore) -> str:
+    """在订单页面搜索流程编号是否已下单。成功时返回 '是'/'否'，失败时抛出异常由重试机制处理。"""
     async with sem:
         page = await context.new_page()
         try:
             await page.goto(f"{DMS_URL}/#/orderManage/orderHistory", timeout=NAV_TIMEOUT)
             await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
-
-            # 处理可能的登录重定向
-            if is_on_login_page(page.url):
-                await do_login(page)
-                await page.goto(f"{DMS_URL}/#/orderManage/orderHistory", timeout=NAV_TIMEOUT)
-                await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
-
+            await ensure_logged_in(page, f"{DMS_URL}/#/orderManage/orderHistory")
             await page.wait_for_timeout(WAIT_MEDIUM)
 
             flow_label = page.get_by_text("流程编号", exact=True)
@@ -570,11 +565,17 @@ async def check_single_order(
                     pass
                 return "否"
             return "是"
-        except Exception as e:
-            logger.warning("%s: 下单检查异常 %s", flow_id, e)
-            return "否"
         finally:
             await page.close()
+
+
+async def check_single_order(context: Any, flow_id: str, sem: asyncio.Semaphore) -> str:
+    """在订单页面搜索流程编号是否已下单（带重试），重试耗尽时返回 '检查失败'。"""
+    try:
+        return await _search_order_for_flow(context, flow_id, sem)
+    except (PlaywrightTimeout, OSError, RuntimeError) as e:
+        logger.error("%s: 下单检查重试 %d 次后仍失败: %s", flow_id, MAX_RETRIES, e)
+        return "检查失败"
 
 
 async def check_orders_parallel(
@@ -587,8 +588,9 @@ async def check_orders_parallel(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, (record, result) in enumerate(zip(records, results)):
-        record.ordered = result if isinstance(result, str) else "否"
-        status = "已下单" if record.ordered == "是" else "未下单"
+        record.ordered = result if isinstance(result, str) else "检查失败"
+        status_map = {"是": "已下单", "否": "未下单", "检查失败": "检查失败"}
+        status = status_map.get(record.ordered, "检查失败")
         logger.info("[%d/%d] %s: %s", i + 1, len(records), record.flow_id, status)
     return records
 
@@ -666,7 +668,8 @@ def print_summary(
     """打印格式化执行摘要到终端。"""
     elapsed = (datetime.now() - start_time).total_seconds()
     ordered = sum(1 for r in (records or []) if r.ordered == "是")
-    not_ordered = len(records or []) - ordered
+    not_ordered = sum(1 for r in (records or []) if r.ordered == "否")
+    check_failed = sum(1 for r in (records or []) if r.ordered == "检查失败")
 
     print("\n========================================")
     print("  执行摘要")
@@ -677,6 +680,8 @@ def print_summary(
     if records:
         print(f"  已下单      {ordered} 条")
         print(f"  未下单      {not_ordered} 条")
+        if check_failed:
+            print(f"  检查失败    {check_failed} 条")
     if excel_path:
         print(f"  Excel文件   {excel_path}")
     if error:
@@ -757,7 +762,10 @@ async def run(args: argparse.Namespace) -> None:
             import traceback
             traceback.print_exc()
         finally:
-            await context.close()
+            try:
+                await context.close()
+            except TargetClosedError:
+                logger.debug("浏览器上下文已提前关闭，忽略")
 
     print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg)
 
