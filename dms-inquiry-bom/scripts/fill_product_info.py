@@ -250,7 +250,9 @@ async def get_select_options(page, label_text: str):
 
 # ==================== 填写产品信息 ====================
 
-async def fill_product_info(page, flow_id: str, component_power: int, component_count: int):
+async def fill_product_info(page, flow_id: str, component_power: int, component_count: int,
+                             inverter_power: int = None, inverter_count: int = None,
+                             box_power: int = None, box_count: int = None):
     """在流程详情页的产品信息区域填写数据。
 
     Args:
@@ -258,6 +260,10 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
         flow_id: 流程编号
         component_power: 单片功率（如715）
         component_count: 组件片数（如800）
+        inverter_power: 逆变器功率kW（如50），为 None 时不填写
+        inverter_count: 逆变器数量，为 None 时不填写
+        box_power: 并网箱功率kW（如50），为 None 时不填写
+        box_count: 并网箱数量，为 None 时不填写
 
     Returns:
         bool: 是否全部填写成功
@@ -452,6 +458,65 @@ async def fill_product_info(page, flow_id: str, component_power: int, component_
     except Exception as e:
         print(f"  [异常] 备注: {e}", file=sys.stderr)
 
+    # 11. 逆变器信息（可选）
+    if inverter_power and inverter_count:
+        print(f"\n[填写] 逆变器信息: {inverter_power}kW × {inverter_count}台...", file=sys.stderr)
+        await page.wait_for_timeout(500)
+
+        # 选择产品类型为逆变器（如果可编辑）
+        if await el_select_by_label(page, "产品类型", "逆变器"):
+            success_count += 1
+            await page.wait_for_timeout(500)
+
+        # 填写逆变器功率
+        inv_power_value = f"{inverter_power}kW"
+        if await el_select_by_label(page, "规格", inv_power_value):
+            success_count += 1
+        elif await el_select_by_label(page, "规格", str(inverter_power)):
+            success_count += 1
+        await page.wait_for_timeout(500)
+
+        # 填写逆变器数量
+        if await el_input_by_label(page, "组件片数", str(inverter_count)):
+            # 注意: DMS 表单中逆变器数量可能复用"组件片数"字段，也可能不同
+            success_count += 1
+        await page.wait_for_timeout(500)
+
+        print(f"  [信息] 逆变器信息填写完成（{inverter_power}kW × {inverter_count}台）", file=sys.stderr)
+    else:
+        total_fields = 10  # 不增加额外计数
+
+    # 12. 并网箱信息（可选）
+    if box_power and box_count:
+        print(f"\n[填写] 并网箱信息: {box_power}kW × {box_count}台...", file=sys.stderr)
+        await page.wait_for_timeout(500)
+
+        # 选择产品类型为并网箱
+        if await el_select_by_label(page, "产品类型", "并网箱"):
+            success_count += 1
+            await page.wait_for_timeout(500)
+
+        # 填写并网箱规格（功率）
+        box_power_value = f"{box_power}kW"
+        if await el_select_by_label(page, "规格", box_power_value):
+            success_count += 1
+        elif await el_select_by_label(page, "规格", str(box_power)):
+            success_count += 1
+        await page.wait_for_timeout(500)
+
+        # 填写并网箱数量
+        if await el_input_by_label(page, "组件片数", str(box_count)):
+            success_count += 1
+        await page.wait_for_timeout(500)
+
+        print(f"  [信息] 并网箱信息填写完成（{box_power}kW × {box_count}台）", file=sys.stderr)
+
+    # 恢复组件字段显示（如产品类型选择了"非原装系统"）
+    if inverter_power or box_power:
+        print('\n[恢复] 回复产品类型为"非原装系统"...', file=sys.stderr)
+        if await el_select_by_label(page, "产品类型", "非原装系统"):
+            await page.wait_for_timeout(500)
+
     # 结果汇总
     print(f"\n[完成] 产品信息填写完成: {success_count}/{total_fields} 个字段成功", file=sys.stderr)
 
@@ -483,12 +548,16 @@ async def run(args, browser_manager=None):
         await manager.ensure_logged_in(page)
 
         try:
-            # 1. 填写产品信息
+            # 1. 填写产品信息（组件 + 可选逆变器/并网箱）
             await fill_product_info(
                 page,
                 args.flow_id,
                 args.component_power,
-                args.component_count
+                args.component_count,
+                inverter_power=getattr(args, 'inverter_power', None),
+                inverter_count=getattr(args, 'inverter_count', None),
+                box_power=getattr(args, 'box_power', None),
+                box_count=getattr(args, 'box_count', None),
             )
 
             # 2. 被工作流调用时，不等待、不关闭浏览器，直接返回
@@ -499,9 +568,17 @@ async def run(args, browser_manager=None):
             import traceback
             traceback.print_exc(file=sys.stderr)
     else:
-        # 独立启动浏览器（原有逻辑）
+        # 独立启动浏览器
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=args.headless, args=["--start-maximized"])
+            try:
+                browser = await p.chromium.launch(headless=args.headless, args=["--start-maximized"])
+            except Exception as e:
+                if args.headless:
+                    print(f"[警告] 无头模式启动失败: {e}", file=sys.stderr)
+                    print("[警告] 自动回退到弹出浏览器窗口模式（默认）", file=sys.stderr)
+                    browser = await p.chromium.launch(headless=False, args=["--start-maximized"])
+                else:
+                    raise
             context = await browser.new_context(
                 no_viewport=True, locale="zh-CN"
             )
@@ -516,12 +593,16 @@ async def run(args, browser_manager=None):
                 else:
                     print("[登录] 会话有效", file=sys.stderr)
 
-                # 2. 填写产品信息
+                # 2. 填写产品信息（组件 + 可选逆变器/并网箱）
                 await fill_product_info(
                     page,
                     args.flow_id,
                     args.component_power,
-                    args.component_count
+                    args.component_count,
+                    inverter_power=args.inverter_power,
+                    inverter_count=args.inverter_count,
+                    box_power=args.box_power,
+                    box_count=args.box_count,
                 )
 
                 # 3. 等待用户确认
@@ -563,6 +644,10 @@ def main():
     parser.add_argument("--flow-id", required=True, help="流程编号")
     parser.add_argument("--component-power", type=int, required=True, help="单片功率（如715）")
     parser.add_argument("--component-count", type=int, required=True, help="组件片数（如800）")
+    parser.add_argument("--inverter-power", type=int, default=None, help="逆变器功率kW（如50），可选")
+    parser.add_argument("--inverter-count", type=int, default=None, help="逆变器数量，可选")
+    parser.add_argument("--box-power", type=int, default=None, help="并网箱功率kW（如50），可选")
+    parser.add_argument("--box-count", type=int, default=None, help="并网箱数量，可选")
     parser.add_argument("--headless", action="store_true", help="无头模式")
     args = parser.parse_args()
 

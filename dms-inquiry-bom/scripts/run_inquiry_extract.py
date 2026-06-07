@@ -344,9 +344,17 @@ async def run(args, browser_manager=None):
             import traceback
             traceback.print_exc(file=sys.stderr)
     else:
-        # 独立启动浏览器（原有逻辑）
+        # 独立启动浏览器
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=args.headless, args=["--start-maximized"])
+            try:
+                browser = await p.chromium.launch(headless=args.headless, args=["--start-maximized"])
+            except Exception as e:
+                if args.headless:
+                    print(f"[警告] 无头模式启动失败: {e}", file=sys.stderr)
+                    print("[警告] 自动回退到弹出浏览器窗口模式（默认）", file=sys.stderr)
+                    browser = await p.chromium.launch(headless=False, args=["--start-maximized"])
+                else:
+                    raise
             context = await browser.new_context(
                 no_viewport=True, locale="zh-CN"
             )
