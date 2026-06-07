@@ -1,20 +1,10 @@
-# Python
+# 生成数据文件
+*.xlsx
+*.xls
+
+# 浏览器用户数据
+.dms_browser_data/
+
+# Python 缓存
 __pycache__/
-*.py[cod]
-*.pkl
-*.egg-info/
-dist/
-build/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Locked Office files
-~$*.xlsx
+*.pyc
