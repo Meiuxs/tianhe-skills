@@ -20,34 +20,11 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 # 导入共享浏览器管理器
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _compat  # noqa: F401, E402
-from browser_manager import BrowserManager, get_browser_manager, get_credentials
+from browser_manager import BrowserManager, get_browser_manager, is_on_login_page, do_login
 
 # ==================== 配置 ====================
 
-DMS_URL = "https://dms-admin.trinapower.com"
-
-
-# ==================== 登录 ====================
-
-def is_on_login_page(page):
-    return "iauth.trinapower.com" in page.url
-
-
-async def do_login(page):
-    username, password = get_credentials()
-    print("[登录] 正在登录...", file=sys.stderr)
-    await page.wait_for_selector("#form_item_account", state="visible", timeout=15000)
-    await page.locator("#form_item_account").fill(username)
-    await page.locator("#form_item_password").fill(password)
-    await page.get_by_role("button", name="登 录").click()
-    try:
-        await page.wait_for_url(f"{DMS_URL}/**", timeout=15000)
-        await page.wait_for_load_state("networkidle", timeout=10000)
-        masked_user = username[:3] + "***" + username[username.index("@"):] if "@" in username else "***"
-        print(f"[登录] 成功 ({masked_user})", file=sys.stderr)
-    except PlaywrightTimeout:
-        if is_on_login_page(page):
-            raise RuntimeError("登录失败，请检查账号密码")
+from dms_credentials import DMS_URL
 
 
 # ==================== 导航到待办流程 ====================
@@ -57,18 +34,22 @@ async def get_pending_flow_ids(page):
     print("[导航] 进入流程中心...", file=sys.stderr)
     await page.goto(f"{DMS_URL}/#/process/process_center")
     await page.wait_for_load_state("networkidle", timeout=15000)
-    await page.wait_for_timeout(2000)
 
     if is_on_login_page(page):
         await do_login(page)
         await page.goto(f"{DMS_URL}/#/process/process_center")
         await page.wait_for_load_state("networkidle", timeout=15000)
-        await page.wait_for_timeout(2000)
+
+    # 等待待办流程区域加载（替代固定 2s 等待）
+    try:
+        await page.wait_for_selector("table.el-table__body", state="attached", timeout=15000)
+    except PlaywrightTimeout:
+        print("[导航] 表格未及时加载，继续尝试...", file=sys.stderr)
 
     # 点击待办流程标签（可能是默认标签，但显式点击更稳健）
     try:
         await page.get_by_role("menuitem", name="待办流程").click()
-        await page.wait_for_timeout(2000)
+        await page.wait_for_load_state("networkidle", timeout=10000)
     except Exception:
         # 可能已经是待办流程页面
         pass
@@ -100,13 +81,17 @@ async def get_pending_flow_ids(page):
                     seen.add(text)
                     flow_ids.append(text)
 
-        # 检查是否有下一页
-        next_btn = page.locator("button.btn-next, li.number.active + li.number")
-        # 更稳健的方式：查找"下一页"按钮
+        # 查找"下一页"按钮
         next_page_btn = page.get_by_role("button", name="下一页")
         if await next_page_btn.count() > 0 and await next_page_btn.first.is_enabled():
             await next_page_btn.first.click()
-            await page.wait_for_timeout(2000)
+            # 等待新页面行加载完成（替代固定 2s 等待）
+            try:
+                await page.wait_for_function(
+                    "() => document.querySelectorAll('table.el-table__body tbody tr').length > 0",
+                    timeout=10000)
+            except PlaywrightTimeout:
+                pass
             page_num += 1
         else:
             break
@@ -125,12 +110,19 @@ async def extract_detail_by_url(context, flow_id, sem):
         try:
             await page.goto(url, timeout=20000)
             await page.wait_for_load_state("networkidle", timeout=15000)
-            await page.wait_for_timeout(1000)
 
             if is_on_login_page(page):
                 await do_login(page)
                 await page.goto(url, timeout=20000)
                 await page.wait_for_load_state("networkidle", timeout=15000)
+
+            # 等待页面内容渲染完成（替代固定 1s 等待）
+            try:
+                await page.wait_for_selector(
+                    ".row-title, .process-detail, .el-form",
+                    state="attached", timeout=10000)
+            except PlaywrightTimeout:
+                pass
 
             html = await page.content()
             data = {"flow_id": flow_id}
