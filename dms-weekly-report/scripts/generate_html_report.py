@@ -443,7 +443,6 @@ def generate_html_report(
     # 计算所有统计数据
     kpis = compute_kpis(rows_data)
     period_data = compute_period_data(rows_data)
-    wangjian = compute_wangjian_stats(rows_data)
     province_ranking = compute_province_ranking(rows_data)
     approval_days = compute_approval_days(rows_data)
     daily_data = compute_daily_data(rows_data)
@@ -451,7 +450,7 @@ def generate_html_report(
     approval_by_salesperson = compute_approval_by_dimension(rows_data, 5)
     approver_list = compute_approver_list(rows_data)
     rows_detail = compute_rows_detail(rows_data)
-    default_approver = "王剑"
+    default_approver = approver_list[0] if approver_list else "全部"
     default_approver_stats = compute_approver_stats(rows_data, default_approver)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -468,9 +467,9 @@ def generate_html_report(
         "KPI_BATTERY_CAPACITY": str(kpis["battery_capacity"]),
         "KPI_RATIO": str(kpis["ratio"]),
         "DATA_SCOPE_TEXT": f"数据范围：{query_range} | 统计截止：{datetime.now().strftime('%Y-%m-%d')}",
-        "WANGJIAN_APPROVED": str(wangjian["approved"]),
-        "WANGJIAN_TOTAL": str(wangjian["total"]),
-        "WANGJIAN_RATE": wangjian["rate"],
+        "WANGJIAN_APPROVED": str(default_approver_stats["approved"]),
+        "WANGJIAN_TOTAL": str(default_approver_stats["total"]),
+        "WANGJIAN_RATE": default_approver_stats["rate"],
         "DAYS_AVG": str(approval_days["avg"]),
         "DAYS_MIN": str(approval_days["min"]),
         "DAYS_MAX": str(approval_days["max"]),
@@ -495,8 +494,6 @@ def generate_html_report(
         "modulePower": float(kpis["module_power"].replace(",", "")) if isinstance(kpis["module_power"], str) and kpis["module_power"] != "0" else 0,
         "inverterPower": float(kpis["inverter_power"].replace(",", "")) if isinstance(kpis["inverter_power"], str) and kpis["inverter_power"] != "0" else 0,
         "batteryCapacity": float(kpis["battery_capacity"].replace(",", "")) if isinstance(kpis["battery_capacity"], str) and kpis["battery_capacity"] != "0" else 0,
-        "wangjianApproved": wangjian["approved"],  # 保留旧 key 兼容
-        "wangjianTotal": wangjian["total"],
         "approverApproved": default_approver_stats["approved"],
         "approverTotal": default_approver_stats["total"],
         "approverRate": default_approver_stats["rate"],

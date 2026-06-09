@@ -1402,12 +1402,18 @@ function onApproverChange() {
 function populateApproverSelect() {
   var sel = document.getElementById('approver-select');
   if (!sel) return;
+  var currentVal = sel.value;
   sel.innerHTML = '<option value="全部">全部审批人</option>';
+  var defaultApprover = KPI_DATA.approverName || (APPROVER_LIST.length > 0 ? APPROVER_LIST[0] : '');
   APPROVER_LIST.forEach(function(name) {
     var opt = document.createElement('option');
     opt.value = name;
     opt.textContent = name;
-    if (name.indexOf('王剑') >= 0) opt.selected = true;
+    // 优先保留用户已选值，否则使用默认审批人
+    if (name === currentVal && APPROVER_LIST.indexOf(currentVal) >= 0) opt.selected = true;
+    else if (!currentVal || currentVal === '全部') {
+      if (name === defaultApprover) opt.selected = true;
+    }
     sel.appendChild(opt);
   });
 }
@@ -1694,13 +1700,13 @@ function switchTab(name) {
   document.querySelector('[data-tab="' + name + '"]').classList.add('active');
 
   setTimeout(function() {
-    initTabCharts(name);
     if (name === 'approval') {
-      populateApproverSelect();
+      populateApproverSelect();  // 先填充审批人列表（会触发 onApproverChange → initApprovalCharts）
     }
     if (name === 'detail') {
       renderDetailTable(currentGlobalPeriod);
     }
+    initTabCharts(name);
   }, 80);
 }
 
