@@ -1246,12 +1246,13 @@ function initOverviewCharts() {
     showNoData('chart-power-bar', '暂无功率数据', '⚡');
   }
 
-  // ── 4. 省公司排名横向条形图 ──
+  // ── 4. 省公司排名横向条形图（按当前时间段动态聚合）──
+  var provRanking = getProvinceRankingForPeriod(currentGlobalPeriod);
   var provLabels = [];
   var provCounts = [];
   var provModules = [];
   var provColors = [];
-  PROVINCE_DATA.forEach(function(item, i) {
+  provRanking.forEach(function(item, i) {
     provLabels.push(item.province);
     provCounts.push(item.count);
     provModules.push(item.module);
@@ -1581,6 +1582,27 @@ function filterDetailByPeriod(rows, periodName) {
   });
 }
 
+/* ===================================================================
+   PROVINCE RANKING — 从 ROWS_DETAIL 按时间段动态聚合省公司排名
+   =================================================================== */
+function getProvinceRankingForPeriod(periodName) {
+  var rows = filterDetailByPeriod(ROWS_DETAIL, periodName);
+  var stats = {};
+  rows.forEach(function(row) {
+    var pv = row.province;
+    if (!pv || pv === '--' || pv === '无' || pv === '') return;
+    if (!stats[pv]) stats[pv] = { province: pv, count: 0, module: 0 };
+    stats[pv].count += 1;
+    stats[pv].module += row.modulePower || 0;
+  });
+  var ranking = Object.values(stats).sort(function(a, b) { return b.count - a.count; });
+  ranking.forEach(function(item, i) {
+    item.rank = i + 1;
+    item.module = Math.round(item.module * 100) / 100;
+  });
+  return ranking;
+}
+
 function renderDetailTable(periodName) {
   var tbody = document.getElementById('detail-table-body');
   if (!tbody) return;
@@ -1657,6 +1679,9 @@ function onGlobalPeriodChange() {
       renderDetailTable(currentGlobalPeriod);
     }
   }
+
+  // 刷新省公司排名表（跟随当前时间段）
+  renderProvinceTable();
 }
 
 /* ===================================================================
@@ -1687,7 +1712,8 @@ function renderProvinceTable() {
   if (!tbody) return;
   tbody.innerHTML = '';
   var medals = ['🥇', '🥈', '🥉'];
-  PROVINCE_DATA.forEach(function(item, i) {
+  var ranking = getProvinceRankingForPeriod(currentGlobalPeriod);
+  ranking.forEach(function(item, i) {
     var tr = document.createElement('tr');
     var medal = medals[i] || '';
     tr.innerHTML = '<td>' + medal + '<span class="rank-medal">' + escHtml(item.rank) + '</span></td>' +
