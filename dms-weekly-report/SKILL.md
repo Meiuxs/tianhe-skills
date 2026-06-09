@@ -38,60 +38,39 @@ metadata:
 
 ## 使用流程
 
-### 步骤 1：确认日期范围
+### 步骤 1：解析日期范围
 
-agent 自动计算默认范围（本周一到今天），然后向用户确认。**下面的 Python 代码仅为逻辑说明，agent 会自动执行无需手动运行：**
+**不再需要三选一确认。** 直接根据用户话语中的时段词调用日期解析脚本：
 
-```python
-# 逻辑说明（无需手动执行）
-from datetime import datetime, timedelta
-today = datetime.now()
-monday = today - timedelta(days=today.weekday())
-# 默认: monday.strftime("%Y-%m-%d") ~ today.strftime("%Y-%m-%d")
+```bash
+SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
+RANGE=$(python "$SKILL_DIR/scripts/resolve_date_range.py" "本周" --json)
+START=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['start'])")
+END=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['end'])")
+RANGE_STR=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['range_str'])")
 ```
 
-> ⚠️ Windows 环境注意：本 skill 所有命令使用 `python`（而非 `python3`），因为 Windows 上 `python3` 不可用。如果手动测试命令请用 `python`。
+**匹配规则（从用户话语中提取时段词）：**
 
-使用 **AskUserQuestion** 工具向用户展示三个选项：
+| 用户说... | 传给脚本的标签 | 行为 |
+|-----------|---------------|------|
+| "帮我把本周的询价做一下周报" | `"本周"` | 本周一到今天 |
+| "做上周的周报" / "做上一周的" | `"上周"` | 上周一到上周日 |
+| "查一下这个月的情况" / "做本月统计" | `"本月"` | 本月一号到今天 |
+| "上个月的询价汇总一下" | `"上月"` | 上个月整月 |
+| "做本季度的报表" | `"本季度"` | 本季度第一天到今天 |
+| "看看去年全年的数据" | `"去年"` | 去年1月1日到12月31日 |
+| "查 6月1号到6月7号的数据" | `"6月1号到6月7号"` | 自动解析中文日期格式 |
+| 用户没说任何时段（只说"做周报"） | `"本周"` | 默认本周 |
 
-> .concept 以下日期仅为参考示例，实际执行时以 Python 实时计算为准（本周一 = `datetime.now() - timedelta(days=today.weekday())`）。
+**提取方法：** 从用户话语中按优先级匹配关键词
+1. 先检查 "去年"/"上季度"/"本季度"/"上月"/"本月"/"上周"/"本周"
+2. 再检查中文日期范围 `\d{1,2}月\d{1,2}号?\s*(到|~)\s*...`
+3. 最后检查 `YYYY-MM-DD ~ YYYY-MM-DD`
+4. 都无匹配 → 默认 `"本周"`，**然后向用户说一句**：
+   > "没检测到时段时间，默认按本周（本周一~今天）统计。如果需要其他时段请告诉我。"
 
-```
-AskUserQuestion:
-  question: "请选择周报的日期范围"
-  header: "日期范围"
-  options:
-    - label: "本周（默认）"  →  description: "2026-06-01 ~ 2026-06-06（本周一到今天）"
-    - label: "上周"          →  description: "2026-05-25 ~ 2026-05-31（上周一到上周日）"
-    - label: "自定义"         →  description: "自行输入起止日期"
-```
-
-根据用户选择：
-- **本周（默认）** → 不带 `--start-date` 运行脚本（使用脚本默认的本周逻辑）
-- **上周** → 用 `--weeks 1` 运行脚本
-- **自定义** → 让用户输入起止日期，用 `--start-date X --end-date Y` 运行脚本
-
-```dot
-digraph date_flow {
-    "计算默认范围\n(本周一~今天)" [shape=box];
-    "向用户展示并确认" [shape=diamond];
-    "用户确认" [shape=box];
-    "用户指定自定义范围" [shape=box];
-    "用户说'上周'" [shape=box];
-    "运行脚本\n(不需要 --start-date)" [shape=box];
-    "运行脚本\n(--start-date X --end-date Y)" [shape=box];
-    "计算上周范围\n并再次确认" [shape=box];
-
-    "计算默认范围\n(本周一~今天)" -> "向用户展示并确认";
-    "向用户展示并确认" -> "用户确认" [label="确认/继续"];
-    "向用户展示并确认" -> "用户指定自定义范围" [label="提供起止日期"];
-    "向用户展示并确认" -> "用户说'上周'" [label="上周/上一周"];
-    "用户确认" -> "运行脚本\n(不需要 --start-date)";
-    "用户指定自定义范围" -> "运行脚本\n(--start-date X --end-date Y)";
-    "用户说'上周'" -> "计算上周范围\n并再次确认";
-    "计算上周范围\n并再次确认" -> "向用户展示并确认";
-}
-```
+> 不再使用 `AskUserQuestion` 方式让用户三选一确认，直接用脚本解析。只有在解析失败时（`resolve_date_range.py` 退出码非 0）才回退询问用户。
 
 ### 步骤 2：检查运行环境
 

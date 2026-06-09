@@ -4,39 +4,68 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>询价周报报表</title>
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
-/* ========== CSS Custom Properties ========== */
+/* ===================================================================
+   DESIGN TOKENS — 报表风格配色系统
+   =================================================================== */
 :root {
-  --primary: #0057AD;
-  --primary-dark: #003F80;
-  --primary-light: #3388CC;
-  --primary-lighter: #E0EFFA;
-  --primary-subtle: #F2F7FC;
-  --nav: #358CFA;
-  --accent-blue: #32BEFF;
-  --green: #70B347;
-  --orange: #FF851A;
-  --red: #FA252D;
-  --purple: #8740FF;
-  --text-primary: #222222;
-  --text-secondary: #555555;
-  --text-tertiary: #999999;
-  --bg-white: #FFFFFF;
-  --bg-page: #F5F6F8;
-  --bg-card: #FAFBFC;
-  --border-color: #CCCCCC;
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
-  --radius: 8px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md: 0 6px 16px rgba(0,0,0,0.08);
+  /* ── 主色：藏蓝系，适合打印和屏幕阅读 ── */
+  --primary:       #1B4F8B;
+  --primary-dark:  #0D3B6E;
+  --primary-light: #4A7FB5;
+  --primary-l10:   #D6E4F0;  /* 10% lightness tint */
+  --primary-l5:    #EBF2FA;   /* 5% lightness tint */
+
+  /* ── 功能色 ── */
+  --color-green:  #28A745;
+  --color-orange: #E67E22;
+  --color-red:    #DC3545;
+  --color-purple: #6F42C1;
+  --color-teal:   #17A2B8;
+
+  /* ── 图表调色板（报表风格，低饱和度） ── */
+  --chart-1: #2E86C1;
+  --chart-2: #28B463;
+  --chart-3: #E67E22;
+  --chart-4: #8E44AD;
+  --chart-5: #DC3545;
+  --chart-6: #17A2B8;
+
+  /* ── 中性色 ── */
+  --text-primary:    #2C3E50;
+  --text-secondary:  #5D6D7E;
+  --text-tertiary:   #95A5A6;
+  --bg-page:         #F0F2F5;
+  --bg-white:        #FFFFFF;
+  --bg-card:         #F8F9FA;
+  --border-color:    #DEE2E6;
+  --border-light:    #E9ECEF;
+
+  /* ── 排版 ── */
+  --font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+                 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* ── 尺寸 ── */
+  --radius:     6px;
+  --radius-sm:  4px;
+  --radius-lg:  10px;
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md:  0 2px 8px rgba(0,0,0,0.07);
+  --shadow-lg:  0 4px 16px rgba(0,0,0,0.09);
+  --shadow-scroll: 0 2px 12px rgba(0,0,0,0.12);
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
   --spacing-xl: 32px;
+  --spacing-2xl: 48px;
 }
 
-/* ========== Reset & Base ========== */
+/* ===================================================================
+   RESET & BASE
+   =================================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: var(--font-family);
@@ -44,47 +73,78 @@ body {
   background: var(--bg-page);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ========== Header ========== */
+/* ===================================================================
+   HEADER — 报表页眉
+   =================================================================== */
 .header {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 60%, var(--primary-light) 100%);
   color: white;
   padding: var(--spacing-lg) var(--spacing-xl);
+}
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
 }
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+.header-brand-icon {
+  width: 36px;
+  height: 36px;
+  background: rgba(255,255,255,0.15);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
 .header h1 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+}
+.header .subtitle {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 2px;
 }
 .header .meta {
-  font-size: 13px;
+  font-size: 12px;
   opacity: 0.85;
   text-align: right;
+  line-height: 1.8;
 }
 .header .meta span {
   display: inline-block;
   margin-left: var(--spacing-md);
 }
 
-/* ========== Tab Navigation ========== */
+/* ===================================================================
+   TAB NAVIGATION
+   =================================================================== */
 .tab-nav {
   background: var(--bg-white);
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   padding: 0 var(--spacing-xl);
   position: sticky;
   top: 0;
   z-index: 100;
   box-shadow: var(--shadow-sm);
+  overflow-x: auto;
 }
 .tab-btn {
-  padding: 14px 28px;
+  padding: 14px 24px;
   border: none;
   background: none;
   font-size: 14px;
@@ -92,54 +152,85 @@ body {
   color: var(--text-tertiary);
   cursor: pointer;
   position: relative;
-  transition: color 0.2s, background 0.15s;
+  transition: color .2s, background .15s;
   font-family: var(--font-family);
+  white-space: nowrap;
+  user-select: none;
 }
-.tab-btn:hover { color: var(--nav); }
-.tab-btn:active { background: var(--primary-subtle); transition-duration: 0.05s; }
+.tab-btn:hover { color: var(--primary); }
+.tab-btn:active { background: var(--primary-l5); transition-duration: 0.05s; }
 .tab-btn.active {
-  color: var(--nav);
+  color: var(--primary);
   font-weight: 600;
 }
 .tab-btn.active::after {
   content: '';
   position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
   height: 3px;
-  background: var(--nav);
+  background: var(--primary);
   border-radius: 3px 3px 0 0;
 }
 .tab-btn .badge {
   display: inline-block;
-  background: var(--primary-lighter);
-  color: var(--nav);
+  background: var(--primary-l5);
+  color: var(--primary);
   font-size: 11px;
   font-weight: 600;
   padding: 1px 8px;
   border-radius: 10px;
   margin-left: 6px;
 }
+.tab-btn.active .badge {
+  background: var(--primary-l10);
+  color: var(--primary-dark);
+}
 
-/* ========== Tab Content ========== */
-.tab-content { display: none; padding: var(--spacing-xl); max-width: 1200px; margin: 0 auto; }
+/* ===================================================================
+   TAB CONTENT LAYOUT
+   =================================================================== */
+.tab-content { display: none; }
 .tab-content.active { display: block; }
+.tab-body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+}
 
-/* ========== Section Title ========== */
+/* ===================================================================
+   SECTION TITLE
+   =================================================================== */
 .section-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--primary);
   margin-bottom: var(--spacing-md);
   padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid #D6D6D6;
+  border-bottom: 2px solid var(--primary-l10);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+.section-title .title-icon {
+  width: 20px;
+  height: 20px;
+  background: var(--primary);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
 }
 
-/* ========== KPI Cards Grid ========== */
+/* ===================================================================
+   KPI CARDS
+   =================================================================== */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-xl);
 }
@@ -147,25 +238,23 @@ body {
   background: var(--bg-white);
   border-radius: var(--radius);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color);
   text-align: center;
-  transition: box-shadow 0.2s, transform 0.2s, border-color 0.15s, background 0.15s;
+  transition: box-shadow .25s, transform .25s, border-color .2s;
   cursor: default;
+  position: relative;
 }
 .kpi-card:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
-  border-color: var(--nav);
+  border-color: var(--primary-light);
 }
 .kpi-card:active {
-  background: #F0F6FC;
-  border-color: var(--nav);
   transform: translateY(0);
   transition-duration: 0.05s;
 }
 .kpi-card .label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-tertiary);
   margin-bottom: var(--spacing-xs);
@@ -173,40 +262,80 @@ body {
   letter-spacing: 0.5px;
 }
 .kpi-card .value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--primary);
   line-height: 1.2;
   letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
 }
 .kpi-card .unit {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-tertiary);
   margin-top: 2px;
 }
 .kpi-card.highlight {
-  background: var(--bg-white);
-  border-color: var(--primary-lighter);
-  position: relative;
-  overflow: hidden;
-}
-.kpi-card.highlight::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 4px;
-  background: var(--primary);
-  border-radius: var(--radius) var(--radius) 0 0;
-  transition: background 0.15s;
-}
-.kpi-card.highlight:active::before {
-  background: var(--nav);
+  border-left: 4px solid var(--primary);
 }
 .kpi-card.highlight .label { color: var(--primary); font-weight: 600; }
-.kpi-card.highlight .value { color: var(--primary); font-weight: 700; }
-.kpi-card.highlight .unit { color: #666666; }
+.kpi-card.highlight .value { color: var(--primary-dark); }
 
-/* ========== Table ========== */
+/* ── Color-coded KPI variants ── */
+.kpi-card.green  .value { color: var(--color-green); }
+.kpi-card.green  { border-left-color: var(--color-green); }
+.kpi-card.orange .value { color: var(--color-orange); }
+.kpi-card.orange { border-left-color: var(--color-orange); }
+.kpi-card.red    .value { color: var(--color-red); }
+.kpi-card.red    { border-left-color: var(--color-red); }
+
+/* ===================================================================
+   CHART CONTAINERS
+   =================================================================== */
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+.chart-row.single {
+  grid-template-columns: 1fr;
+}
+.chart-card {
+  background: var(--bg-white);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .2s;
+}
+.chart-card:hover {
+  box-shadow: var(--shadow-md);
+}
+.chart-card.full {
+  grid-column: 1 / -1;
+}
+.chart-card .chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+.chart-card .chart-wrap {
+  position: relative;
+  width: 100%;
+}
+.chart-card .chart-caption {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin-top: var(--spacing-sm);
+}
+
+/* ===================================================================
+   TABLE
+   =================================================================== */
 .table-container {
   background: var(--bg-white);
   border-radius: var(--radius);
@@ -218,75 +347,81 @@ body {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13px;
 }
 thead th {
   background: var(--primary);
   color: white;
-  padding: 12px 16px;
+  padding: 11px 14px;
   text-align: center;
   font-weight: 500;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.3px;
 }
 tbody td {
-  padding: 10px 16px;
+  padding: 9px 14px;
   text-align: center;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
   color: var(--text-primary);
   font-size: 13px;
-  transition: background 0.15s;
+  transition: background .15s;
 }
 tbody tr:nth-child(even) { background: #F7F8FA; }
-tbody tr:hover { background: var(--primary-lighter); }
-tbody tr:active td { background: #D6E8F5; transition-duration: 0.05s; }
+tbody tr:hover td { background: var(--primary-l5); }
 tbody tr:last-child td { border-bottom: none; }
 .number-format { font-variant-numeric: tabular-nums; }
 
-/* ========== Filter Bar ========== */
+/* ===================================================================
+   FILTER BAR
+   =================================================================== */
 .filter-bar {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
   background: var(--bg-white);
   padding: var(--spacing-md) var(--spacing-lg);
   border-radius: var(--radius);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
 }
 .filter-bar label {
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
 }
 .filter-bar select {
-  padding: 8px 14px;
+  padding: 7px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
   font-family: var(--font-family);
   background: white;
   color: var(--text-primary);
   cursor: pointer;
-  min-width: 120px;
+  min-width: 110px;
+  transition: border-color .2s;
 }
 .filter-bar select:focus {
-  outline: 2px solid var(--nav);
+  outline: 2px solid var(--primary);
   outline-offset: 1px;
+  border-color: var(--primary);
 }
 .filter-result {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-tertiary);
   margin-left: auto;
 }
 
-/* ========== Stats Row ========== */
+/* ===================================================================
+   STATS ROW
+   =================================================================== */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
 }
@@ -296,335 +431,1027 @@ tbody tr:last-child td { border-bottom: none; }
   background: var(--bg-card);
   border-radius: var(--radius);
   border: 1px solid var(--border-color);
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color .2s;
   cursor: default;
 }
-.stats-item:hover { border-color: var(--nav); }
-.stats-item:active {
-  background: #F0F6FC;
-  border-color: var(--nav);
-  transition-duration: 0.05s;
-}
+.stats-item:hover { border-color: var(--primary-light); }
 .stats-item .label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-tertiary);
   margin-bottom: 4px;
+  text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 .stats-item .value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--primary);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ========== Ranking Table Specific ========== */
-.rank-medal { display: inline-block; font-size: 16px; margin-right: 4px; }
+/* ===================================================================
+   RANKING
+   =================================================================== */
+.rank-medal { display: inline-block; font-size: 15px; margin-right: 3px; }
+td:first-child { text-align: center; width: 60px; }
 
-/* ========== Footer ========== */
+/* ===================================================================
+   FOOTER
+   =================================================================== */
 .footer {
   text-align: center;
   padding: var(--spacing-lg);
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: 11px;
   border-top: 1px solid var(--border-color);
-  margin-top: var(--spacing-xl);
   background: var(--bg-white);
+  margin-top: var(--spacing-2xl);
+}
+.footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-/* ========== Responsive ========== */
+/* ===================================================================
+   RESPONSIVE
+   =================================================================== */
+@media (max-width: 1024px) {
+  .chart-row { grid-template-columns: 1fr; }
+}
 @media (max-width: 768px) {
-  .header { padding: var(--spacing-md); flex-direction: column; text-align: center; }
+  .header-inner { flex-direction: column; text-align: center; }
   .header .meta { text-align: center; }
   .header .meta span { margin: 0 var(--spacing-sm); }
-  .tab-nav { padding: 0 var(--spacing-sm); overflow-x: auto; }
-  .tab-btn { padding: 12px 16px; font-size: 13px; white-space: nowrap; }
-  .tab-content { padding: var(--spacing-md); }
-  .kpi-card .value { font-size: 26px; }
-  .filter-bar { flex-wrap: wrap; }
-  .filter-result { margin-left: 0; width: 100%; text-align: left; }
+  .tab-nav { padding: 0 var(--spacing-sm); }
+  .tab-btn { padding: 12px 14px; font-size: 13px; }
+  .tab-body { padding: var(--spacing-md); }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpi-card .value { font-size: 22px; }
+  .chart-card { padding: var(--spacing-md); }
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .filter-result { margin-left: 0; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
+  .stats-item .value { font-size: 18px; }
 }
 
+/* ===================================================================
+   PRINT OPTIMIZATION
+   =================================================================== */
 @media print {
-  body { background: white; }
-  .tab-nav { display: none; }
-  .tab-content { display: block !important; padding: 0; }
-  .footer { position: fixed; bottom: 0; width: 100%; }
-  .kpi-card { break-inside: avoid; box-shadow: none; }
+  body { background: white; font-size: 11px; }
+  .tab-nav { display: none !important; }
+  .tab-content { display: block !important; }
+  .tab-body { max-width: none; padding: 0; }
+  .header { background: var(--primary) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .kpi-card { break-inside: avoid; box-shadow: none; border-color: #ccc; }
+  .kpi-card:hover { transform: none; box-shadow: none; }
+  .chart-card { break-inside: avoid; box-shadow: none; border-color: #ccc; }
+  .chart-card:hover { box-shadow: none; }
+  .table-container { box-shadow: none; }
+  thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .section-title { border-bottom-color: #ccc; }
+  .footer { margin-top: var(--spacing-lg); }
+  .kpi-card.highlight { border-left-width: 3px; }
 }
 </style>
 </head>
 <body>
 
-<!-- ==================== Header ==================== -->
+<!-- ===================================================================
+     HEADER
+     =================================================================== -->
 <header class="header">
-  <h1>询价周报报表</h1>
-  <div class="meta">
-    <span>{{REPORT_DATE_RANGE}}</span>
-    <span>{{REPORT_GENERATED_AT}}</span>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-brand-icon">📊</div>
+      <div>
+        <h1>询价周报报表</h1>
+        <div class="subtitle">DMS 采购询价数据统计</div>
+      </div>
+    </div>
+    <div class="meta">
+      <span>📅 {{REPORT_DATE_RANGE}}</span><br>
+      <span>⏱ {{REPORT_GENERATED_AT}}</span>
+    </div>
   </div>
 </header>
 
-<!-- ==================== Tab Navigation ==================== -->
+<!-- ===================================================================
+     TAB NAVIGATION
+     =================================================================== -->
 <nav class="tab-nav" role="tablist">
   <button class="tab-btn active" role="tab" data-tab="summary" onclick="switchTab('summary')">
-    询价统计 <span class="badge">KPI</span>
+    📈 询价统计 <span class="badge">KPI</span>
   </button>
   <button class="tab-btn" role="tab" data-tab="query" onclick="switchTab('query')">
-    日期查询 <span class="badge">交互</span>
+    🔍 日期查询 <span class="badge">交互</span>
   </button>
   <button class="tab-btn" role="tab" data-tab="dashboard" onclick="switchTab('dashboard')">
-    数据看板 <span class="badge">管理</span>
+    📋 数据看板 <span class="badge">管理</span>
   </button>
 </nav>
 
-<!-- ==================== Tab 1: 询价统计 ==================== -->
+<!-- ===================================================================
+     TAB 1: 询价统计
+     =================================================================== -->
 <section class="tab-content active" id="tab-summary" role="tabpanel">
-  <h2 class="section-title">询价概览</h2>
-  <div class="kpi-grid">
-    <div class="kpi-card highlight">
-      <div class="label">询价项目总数</div>
-      <div class="value">{{KPI_TOTAL_PROJECTS}}</div>
-      <div class="unit">个</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">涉及业务员</div>
-      <div class="value">{{KPI_TOTAL_SALESPERSONS}}</div>
-      <div class="unit">人</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">已下单</div>
-      <div class="value">{{KPI_ORDERED_COUNT}}</div>
-      <div class="unit">个</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">未下单</div>
-      <div class="value">{{KPI_NOT_ORDERED_COUNT}}</div>
-      <div class="unit">个</div>
-    </div>
-  </div>
+  <div class="tab-body">
 
-  <h2 class="section-title">功率容量统计</h2>
-  <div class="kpi-grid">
-    <div class="kpi-card highlight">
-      <div class="label">组件总功率</div>
-      <div class="value">{{KPI_MODULE_POWER}}</div>
-      <div class="unit">kW</div>
+    <!-- ──────────── 询价概览 ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      询价概览
+    </h2>
+    <div class="kpi-grid">
+      <div class="kpi-card highlight">
+        <div class="label">询价项目总数</div>
+        <div class="value">{{KPI_TOTAL_PROJECTS}}</div>
+        <div class="unit">个</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">涉及业务员</div>
+        <div class="value">{{KPI_TOTAL_SALESPERSONS}}</div>
+        <div class="unit">人</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="label">已下单</div>
+        <div class="value">{{KPI_ORDERED_COUNT}}</div>
+        <div class="unit">个</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="label">未下单</div>
+        <div class="value">{{KPI_NOT_ORDERED_COUNT}}</div>
+        <div class="unit">个</div>
+      </div>
     </div>
-    <div class="kpi-card">
-      <div class="label">逆变器总功率</div>
-      <div class="value">{{KPI_INVERTER_POWER}}</div>
-      <div class="unit">kW</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">电池总容量</div>
-      <div class="value">{{KPI_BATTERY_CAPACITY}}</div>
-      <div class="unit">kWh</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">容配比</div>
-      <div class="value">{{KPI_RATIO}}</div>
-      <div class="unit">组件/逆变器</div>
-    </div>
-  </div>
 
-  <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-md);">
-    {{DATA_SCOPE_TEXT}}
-  </p>
+    <!-- ──────────── 图表行一：订单状态饼图 + 功率对比柱状图 ──────────── -->
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">📊 订单状态分布</div>
+        <div class="chart-wrap">
+          <canvas id="chart-order-donut"></canvas>
+        </div>
+        <div class="chart-caption">已下单 vs 未下单 项目占比</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📊 功率容量对比</div>
+        <div class="chart-wrap">
+          <canvas id="chart-power-bar"></canvas>
+        </div>
+        <div class="chart-caption">组件 / 逆变器 / 电池 总容量</div>
+      </div>
+    </div>
+
+    <!-- ──────────── 功率容量 KPI ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      功率容量统计
+    </h2>
+    <div class="kpi-grid">
+      <div class="kpi-card highlight">
+        <div class="label">组件总功率</div>
+        <div class="value">{{KPI_MODULE_POWER}}</div>
+        <div class="unit">kW</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">逆变器总功率</div>
+        <div class="value">{{KPI_INVERTER_POWER}}</div>
+        <div class="unit">kW</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">电池总容量</div>
+        <div class="value">{{KPI_BATTERY_CAPACITY}}</div>
+        <div class="unit">kWh</div>
+      </div>
+      <div class="kpi-card highlight">
+        <div class="label">容配比</div>
+        <div class="value">{{KPI_RATIO}}</div>
+        <div class="unit">组件/逆变器</div>
+      </div>
+    </div>
+
+    <!-- ──────────── 图表行二：周期趋势柱状图 ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      周期趋势
+    </h2>
+    <div class="chart-row single">
+      <div class="chart-card full">
+        <div class="chart-title">📊 各周期询价项目数</div>
+        <div class="chart-wrap">
+          <canvas id="chart-trend-bar"></canvas>
+        </div>
+        <div class="chart-caption">按时间段统计询价项目数量趋势</div>
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-md);">
+      {{DATA_SCOPE_TEXT}}
+    </p>
+
+  </div>
 </section>
 
-<!-- ==================== Tab 2: 日期查询 ==================== -->
+<!-- ===================================================================
+     TAB 2: 日期查询
+     =================================================================== -->
 <section class="tab-content" id="tab-query" role="tabpanel">
-  <h2 class="section-title">日期查询统计</h2>
+  <div class="tab-body">
 
-  <div class="filter-bar">
-    <label for="period-select">时间段筛选：</label>
-    <select id="period-select" onchange="filterByPeriod()">
-      <option value="全部">全部</option>
-      <option value="本周">本周</option>
-      <option value="本月" selected>本月</option>
-      <option value="上月">上月</option>
-      <option value="本季度">本季度</option>
-    </select>
-    <span class="filter-result" id="filter-result"></span>
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      日期查询统计
+    </h2>
+
+    <div class="filter-bar">
+      <label for="period-select">📅 时间段筛选：</label>
+      <select id="period-select" onchange="filterByPeriod()">
+        <option value="全部">全部</option>
+        <option value="本周">本周</option>
+        <option value="本月" selected>本月</option>
+        <option value="上月">上月</option>
+        <option value="本季度">本季度</option>
+      </select>
+      <span class="filter-result" id="filter-result"></span>
+    </div>
+
+    <!-- ──────────── 交互式趋势柱状图 ──────────── -->
+    <div class="chart-row single">
+      <div class="chart-card full">
+        <div class="chart-title">📊 各周期功率容量趋势</div>
+        <div class="chart-wrap">
+          <canvas id="chart-query-bar"></canvas>
+        </div>
+        <div class="chart-caption">组件功率 / 逆变器功率 / 电池容量 按时间段对比</div>
+      </div>
+    </div>
+
+    <!-- ──────────── 明细表格 ──────────── -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>时间段</th>
+            <th>项目数</th>
+            <th>组件功率(kW)</th>
+            <th>逆变器功率(kW)</th>
+            <th>电池容量(kWh)</th>
+            <th>容配比</th>
+          </tr>
+        </thead>
+        <tbody id="period-table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- ──────────── 当前选择结果 ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      当前选择结果
+    </h2>
+    <div class="stats-row">
+      <div class="stats-item">
+        <div class="label">项目数</div>
+        <div class="value" id="result-count"></div>
+      </div>
+      <div class="stats-item">
+        <div class="label">组件功率 (kW)</div>
+        <div class="value" id="result-module"></div>
+      </div>
+      <div class="stats-item">
+        <div class="label">逆变器功率 (kW)</div>
+        <div class="value" id="result-inverter"></div>
+      </div>
+      <div class="stats-item">
+        <div class="label">电池容量 (kWh)</div>
+        <div class="value" id="result-battery"></div>
+      </div>
+      <div class="stats-item">
+        <div class="label">容配比</div>
+        <div class="value" id="result-ratio"></div>
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
+      💡 点击上方下拉菜单切换时间段，图表与数据自动刷新
+    </p>
+
   </div>
-
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th>时间段</th>
-          <th>项目数</th>
-          <th>组件功率(kW)</th>
-          <th>逆变器功率(kW)</th>
-          <th>电池容量(kWh)</th>
-          <th>容配比</th>
-        </tr>
-      </thead>
-      <tbody id="period-table-body"></tbody>
-    </table>
-  </div>
-
-  <h2 class="section-title">当前选择结果</h2>
-  <div class="stats-row">
-    <div class="stats-item">
-      <div class="label">项目数</div>
-      <div class="value" id="result-count"></div>
-    </div>
-    <div class="stats-item">
-      <div class="label">组件功率 (kW)</div>
-      <div class="value" id="result-module"></div>
-    </div>
-    <div class="stats-item">
-      <div class="label">逆变器功率 (kW)</div>
-      <div class="value" id="result-inverter"></div>
-    </div>
-    <div class="stats-item">
-      <div class="label">电池容量 (kWh)</div>
-      <div class="value" id="result-battery"></div>
-    </div>
-    <div class="stats-item">
-      <div class="label">容配比</div>
-      <div class="value" id="result-ratio"></div>
-    </div>
-  </div>
-
-  <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-    💡 点击上方下拉菜单切换时间段，数据自动刷新
-  </p>
 </section>
 
-<!-- ==================== Tab 3: 数据看板 ==================== -->
+<!-- ===================================================================
+     TAB 3: 数据看板
+     =================================================================== -->
 <section class="tab-content" id="tab-dashboard" role="tabpanel">
-  <h2 class="section-title">王剑采购审批统计</h2>
-  <div class="kpi-grid">
-    <div class="kpi-card highlight">
-      <div class="label">审批通过</div>
-      <div class="value">{{WANGJIAN_APPROVED}}</div>
-      <div class="unit">次</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">经手总次数</div>
-      <div class="value">{{WANGJIAN_TOTAL}}</div>
-      <div class="unit">次</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">通过率</div>
-      <div class="value">{{WANGJIAN_RATE}}</div>
-      <div class="unit"></div>
-    </div>
-  </div>
+  <div class="tab-body">
 
-  <h2 class="section-title">省公司询价排名</h2>
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th>排名</th>
-          <th>省公司</th>
-          <th>询价次数</th>
-          <th>组件总功率(kW)</th>
-        </tr>
-      </thead>
-      <tbody id="province-table-body"></tbody>
-    </table>
-  </div>
+    <!-- ──────────── 王剑采购审批 ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      王剑采购审批统计
+    </h2>
+    <div class="kpi-grid">
+      <div class="kpi-card green">
+        <div class="label">审批通过</div>
+        <div class="value">{{WANGJIAN_APPROVED}}</div>
+        <div class="unit">次</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">经手总次数</div>
+        <div class="value">{{WANGJIAN_TOTAL}}</div>
+        <div class="unit">次</div>
+      </div>
+      <div class="kpi-card highlight">
+        <div class="label">通过率</div>
+        <div class="value">{{WANGJIAN_RATE}}</div>
+        <div class="unit"></div>
+      </div>
+    </div>
 
-  <h2 class="section-title">询价到审批完成天数</h2>
-  <div class="kpi-grid">
-    <div class="kpi-card highlight">
-      <div class="label">平均天数</div>
-      <div class="value">{{DAYS_AVG}}</div>
-      <div class="unit">天</div>
+    <!-- ──────────── 图表行：王剑审批饼图 + 审批天数柱状图 ──────────── -->
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">📊 审批通过率</div>
+        <div class="chart-wrap">
+          <canvas id="chart-wangjian-donut"></canvas>
+        </div>
+        <div class="chart-caption">审批通过 / 未通过 占比</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📊 审批耗时统计</div>
+        <div class="chart-wrap">
+          <canvas id="chart-days-bar"></canvas>
+        </div>
+        <div class="chart-caption">询价到审批完成天数</div>
+      </div>
     </div>
-    <div class="kpi-card">
-      <div class="label">最短天数</div>
-      <div class="value">{{DAYS_MIN}}</div>
-      <div class="unit">天</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">最长天数</div>
-      <div class="value">{{DAYS_MAX}}</div>
-      <div class="unit">天</div>
-    </div>
-    <div class="kpi-card">
-      <div class="label">统计样本</div>
-      <div class="value">{{DAYS_SAMPLE_COUNT}}</div>
-      <div class="unit">条</div>
-    </div>
-  </div>
 
-  <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-    💡 数据基于采购审批节点、省公司统计及审批时间计算
-  </p>
+    <!-- ──────────── 询价到审批完成天数 KPI ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      询价到审批完成天数
+    </h2>
+    <div class="kpi-grid">
+      <div class="kpi-card highlight">
+        <div class="label">平均天数</div>
+        <div class="value">{{DAYS_AVG}}</div>
+        <div class="unit">天</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="label">最短天数</div>
+        <div class="value">{{DAYS_MIN}}</div>
+        <div class="unit">天</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="label">最长天数</div>
+        <div class="value">{{DAYS_MAX}}</div>
+        <div class="unit">天</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">统计样本</div>
+        <div class="value">{{DAYS_SAMPLE_COUNT}}</div>
+        <div class="unit">条</div>
+      </div>
+    </div>
+
+    <!-- ──────────── 省公司询价排名：横向条形图 + 表格 ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      省公司询价排名
+    </h2>
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">📊 省公司询价次数排名</div>
+        <div class="chart-wrap">
+          <canvas id="chart-province-bar"></canvas>
+        </div>
+        <div class="chart-caption">各省公司询价项目数量</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📄 排名明细</div>
+        <div class="table-container" style="border:none;box-shadow:none;margin:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>排名</th>
+                <th>省公司</th>
+                <th>询价次数</th>
+                <th>组件功率(kW)</th>
+              </tr>
+            </thead>
+            <tbody id="province-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
+      💡 数据基于采购审批节点、省公司统计及审批时间计算
+    </p>
+
+  </div>
 </section>
 
-<!-- ==================== Footer ==================== -->
+<!-- ===================================================================
+     FOOTER
+     =================================================================== -->
 <footer class="footer">
-  <p>{{FOOTER_TEXT}}</p>
+  <div class="footer-inner">
+    <p>{{FOOTER_TEXT}}</p>
+  </div>
 </footer>
 
-<!-- ==================== Script ==================== -->
+<!-- ===================================================================
+     JAVASCRIPT
+     =================================================================== -->
 <script>
-/* ========== DATA — 由后端脚本注入 ========== */
-const PERIOD_DATA = {{PERIOD_DATA_JSON}};
-const PROVINCE_DATA = {{PROVINCE_DATA_JSON}};
-const periodNames = Object.keys(PERIOD_DATA);
+/* ===================================================================
+   DATA — 由后端脚本注入
+   =================================================================== */
+const PERIOD_DATA    = typeof PERIOD_DATA_JSON !== 'undefined' ? {{PERIOD_DATA_JSON}} : {};
+const PROVINCE_DATA  = typeof PROVINCE_DATA_JSON !== 'undefined' ? {{PROVINCE_DATA_JSON}} : [];
+const KPI_DATA       = typeof KPI_DATA_JSON !== 'undefined' ? {{KPI_DATA_JSON}} : {};
 
-/* ========== Tab Switching ========== */
-function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+/* Chart.js 加载状态 */
+var CHART_JS_LOADED = typeof Chart !== 'undefined';
+
+/* 加载失败降级：显示提示而非空白 */
+function checkChartJsLoaded() {
+  if (typeof Chart === 'undefined') {
+    document.querySelectorAll('canvas[id^="chart-"]').forEach(function(canvas) {
+      var msg = document.createElement('p');
+      msg.style.cssText = 'text-align:center;padding:40px 16px;color:#95A5A6;font-size:14px;';
+      msg.textContent = '⚠ 图表库加载失败，请检查网络连接后刷新页面';
+      canvas.parentNode.replaceChild(msg, canvas);
+    });
+    return false;
+  }
+  if (!CHART_JS_LOADED) {
+    CHART_JS_LOADED = true;
+    initChartDefaults();
+  }
+  return true;
 }
 
-/* ========== Period Table ========== */
-function renderPeriodTable() {
-  const tbody = document.getElementById('period-table-body');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  for (const name of periodNames) {
-    const d = PERIOD_DATA[name];
-    if (!d) continue;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><strong>${name}</strong></td><td class="number-format">${d.count}</td><td class="number-format">${d.module.toFixed(2)}</td><td class="number-format">${d.inverter.toFixed(2)}</td><td class="number-format">${d.battery.toFixed(2)}</td><td class="number-format">${d.ratio.toFixed(2)}</td>`;
-    tbody.appendChild(tr);
+/* Chart.js 全局默认值（仅初始化一次） */
+function initChartDefaults() {
+  if (!CHART_JS_LOADED) return;
+  Chart.defaults.font.family = '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
+  Chart.defaults.font.size   = 12;
+  Chart.defaults.color       = '#5D6D7E';
+  // 注册中心文字插件
+  Chart.register(donutCenterPlugin);
+}
+
+/* 仅在 Chart.js 可用时执行初始化 */
+function safeChartInit(fn) {
+  if (!checkChartJsLoaded()) return null;
+  return fn();
+}
+
+const periodNames = Object.keys(PERIOD_DATA);
+
+/* 报表风格图表调色板 */
+const CHART_COLORS = {
+  navy:     '#1B4F8B',
+  blue:     '#2E86C1',
+  lightBlue:'#85C1E9',
+  green:    '#28A745',
+  orange:   '#E67E22',
+  red:      '#DC3545',
+  purple:   '#6F42C1',
+  teal:     '#17A2B8',
+  gray:     '#95A5A6',
+  ltGray:   '#D5D8DC',
+  palette: ['#2E86C1','#28A745','#E67E22','#6F42C1','#DC3545','#17A2B8'],
+};
+
+/* 工具：格式化数字 */
+function fmtNum(n) {
+  if (n == null) return '0';
+  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+/* 工具：HTML 转义（防 XSS） */
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return '&#' + c.charCodeAt(0) + ';';
+  });
+}
+
+/* 工具：检查图表数据集是否有有效值 */
+function hasData(arr) {
+  return Array.isArray(arr) && arr.some(function(v) { return parseFloat(v) > 0; });
+}
+
+/* 工具：无数据时在 canvas 父容器显示提示 */
+function showNoData(canvasId, message) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  var wrap = canvas.parentNode;
+  if (!wrap) return;
+  var existing = wrap.querySelector('.no-data-msg');
+  if (existing) return;
+  canvas.style.display = 'none';
+  var msg = document.createElement('p');
+  msg.className = 'no-data-msg';
+  msg.style.cssText = 'text-align:center;padding:48px 16px;color:#95A5A6;font-size:13px;';
+  msg.textContent = message || '暂无数据';
+  wrap.appendChild(msg);
+}
+
+/* ===================================================================
+   CHART INSTANCES & FACTORIES
+   =================================================================== */
+const chartInstances = {};
+const tabCharts = {
+  summary:   ['chart-order-donut', 'chart-power-bar', 'chart-trend-bar'],
+  query:     ['chart-query-bar'],
+  dashboard: ['chart-wangjian-donut', 'chart-days-bar', 'chart-province-bar'],
+};
+const tabInitialized = { summary: false, query: false, dashboard: false };
+
+/* ──────────── 饼图中心文字插件 ──────────── */
+var donutCenterPlugin = {
+  id: 'donutCenterText',
+  afterDraw: function(chart) {
+    var width = chart.width;
+    var height = chart.height;
+    var ctx = chart.ctx;
+    ctx.save();
+    var centerX = width / 2;
+    var centerY = height / 2 - 4;
+    var meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.total) return;
+    var total = meta.total;
+    if (chart.options.cutout === 0) { ctx.restore(); return; }
+    var fontSize = Math.min(width, height) * 0.08;
+    ctx.font = '600 ' + fontSize + 'px ' + Chart.defaults.font.family;
+    ctx.fillStyle = '#2C3E50';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fmtNum(total), centerX, centerY);
+    ctx.restore();
+  },
+};
+
+/* ──────────── 通用配置工具 ──────────── */
+function makeBarOpts(xLabel, yLabel) {
+  return {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 2.2,
+    animation: {
+      duration: 600,
+      easing: 'easeOutQuart',
+    },
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { padding: 16, usePointStyle: true, font: { size: 11 } },
+      },
+      tooltip: {
+        backgroundColor: '#2C3E50',
+        titleFont: { size: 12 },
+        bodyFont: { size: 12 },
+        padding: 10,
+        cornerRadius: 5,
+        callbacks: {
+          label: function(ctx) {
+            return ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y);
+          }
+        }
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { font: { size: 11 } },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+      },
+    },
+  };
+}
+
+function makeDonutOpts() {
+  return {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 1.2,
+    animation: {
+      duration: 600,
+      easing: 'easeOutQuart',
+    },
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { padding: 16, usePointStyle: true, font: { size: 12 } },
+      },
+      tooltip: {
+        backgroundColor: '#2C3E50',
+        titleFont: { size: 12 },
+        bodyFont: { size: 12 },
+        padding: 10,
+        cornerRadius: 5,
+        callbacks: {
+          label: function(ctx) {
+            const total = ctx.dataset.data.reduce((a,b) => a + b, 0);
+            const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
+            return ctx.label + ': ' + fmtNum(ctx.parsed) + ' (' + pct + '%)';
+          }
+        }
+      },
+    },
+    cutout: '55%',
+  };
+}
+
+/* ──────────── 创建/更新图表 ──────────── */
+function createChart(canvasId, config) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  if (chartInstances[canvasId]) {
+    chartInstances[canvasId].destroy();
+  }
+  const ctx = canvas.getContext('2d');
+  chartInstances[canvasId] = new Chart(ctx, config);
+  return chartInstances[canvasId];
+}
+
+function initTabCharts(tabName) {
+  if (!checkChartJsLoaded()) return;
+
+  if (tabInitialized[tabName]) {
+    // 已初始化：切换回显时 chart.resize() 触发重绘
+    tabCharts[tabName].forEach(function(id) {
+      if (chartInstances[id]) {
+        // 延时确保容器已 layout
+        setTimeout(function() { chartInstances[id].resize(); }, 10);
+      }
+    });
+    return;
+  }
+
+  switch (tabName) {
+    case 'summary': initSummaryCharts(); break;
+    case 'query':   initQueryCharts();   break;
+    case 'dashboard': initDashboardCharts(); break;
+  }
+  tabInitialized[tabName] = true;
+}
+
+/* ===================================================================
+   TAB 1: SUMMARY CHARTS
+   =================================================================== */
+function initSummaryCharts() {
+  // ── 1. 订单状态饼图 ──
+  const ordered    = parseFloat(KPI_DATA.orderedCount) || 0;
+  const notOrdered = parseFloat(KPI_DATA.notOrderedCount) || 0;
+  if (hasData([ordered, notOrdered])) {
+    createChart('chart-order-donut', {
+      type: 'doughnut',
+      data: {
+        labels: ['已下单', '未下单'],
+        datasets: [{
+          data: [ordered, notOrdered],
+          backgroundColor: [CHART_COLORS.green, CHART_COLORS.orange],
+          borderWidth: 2,
+          borderColor: '#fff',
+        }],
+      },
+      options: makeDonutOpts(),
+    });
+  } else {
+    showNoData('chart-order-donut', '暂无订单数据');
+  }
+
+  // ── 2. 功率容量对比柱状图 ──
+  const mPower = parseFloat(KPI_DATA.modulePower) || 0;
+  const iPower = parseFloat(KPI_DATA.inverterPower) || 0;
+  const bPower = parseFloat(KPI_DATA.batteryCapacity) || 0;
+  if (hasData([mPower, iPower, bPower])) {
+    createChart('chart-power-bar', {
+      type: 'bar',
+      data: {
+        labels: ['组件', '逆变器', '电池'],
+        datasets: [{
+          label: '容量 (kW/kWh)',
+          data: [mPower, iPower, bPower],
+          backgroundColor: [CHART_COLORS.blue, CHART_COLORS.orange, CHART_COLORS.green],
+          borderRadius: 4,
+          maxBarThickness: 60,
+        }],
+      },
+      options: makeBarOpts('类型', '容量'),
+    });
+  } else {
+    showNoData('chart-power-bar', '暂无功率数据');
+  }
+
+  // ── 3. 周期趋势柱状图 ──
+  const trendLabels = periodNames.length ? periodNames : ['全部'];
+  const trendData = trendLabels.map(function(n) {
+    const d = PERIOD_DATA[n];
+    return d ? d.count : 0;
+  });
+  if (hasData(trendData)) {
+    createChart('chart-trend-bar', {
+      type: 'bar',
+      data: {
+        labels: trendLabels,
+        datasets: [{
+          label: '项目数',
+          data: trendData,
+          backgroundColor: trendData.map(function(_, i) {
+            return i === trendData.length - 1 ? CHART_COLORS.navy : CHART_COLORS.blue;
+          }),
+          borderRadius: 4,
+          maxBarThickness: 50,
+        }],
+      },
+      options: makeBarOpts('时间段', '项目数'),
+    });
+  } else {
+    showNoData('chart-trend-bar', '暂无周期数据');
   }
 }
 
-function filterByPeriod() {
-  const name = document.getElementById('period-select').value;
-  const d = PERIOD_DATA[name];
-  if (!d) return;
-  document.getElementById('filter-result').textContent = `当前：${name} → ${d.count} 个项目`;
-  document.getElementById('result-count').textContent = d.count;
-  document.getElementById('result-module').textContent = d.module.toFixed(2);
-  document.getElementById('result-inverter').textContent = d.inverter.toFixed(2);
-  document.getElementById('result-battery').textContent = d.battery.toFixed(2);
-  document.getElementById('result-ratio').textContent = d.ratio.toFixed(2);
+/* ===================================================================
+   TAB 2: QUERY CHARTS
+   =================================================================== */
+function initQueryCharts() {
+  const labels = periodNames.length ? periodNames : ['全部'];
+  const moduleData   = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.module : 0; });
+  const inverterData = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.inverter : 0; });
+  const batteryData  = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.battery : 0; });
+
+  if (!hasData(moduleData) && !hasData(inverterData) && !hasData(batteryData)) {
+    showNoData('chart-query-bar', '暂无周期功率数据');
+    return;
+  }
+
+  createChart('chart-query-bar', {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '组件功率 (kW)',
+        data: moduleData,
+        backgroundColor: CHART_COLORS.blue,
+        borderRadius: 3,
+        maxBarThickness: 40,
+      }, {
+        label: '逆变器功率 (kW)',
+        data: inverterData,
+        backgroundColor: CHART_COLORS.orange,
+        borderRadius: 3,
+        maxBarThickness: 40,
+      }, {
+        label: '电池容量 (kWh)',
+        data: batteryData,
+        backgroundColor: CHART_COLORS.green,
+        borderRadius: 3,
+        maxBarThickness: 40,
+      }],
+    },
+    options: makeBarOpts('时间段', '容量'),
+  });
 }
 
-/* ========== Province Ranking ========== */
-function renderProvinceTable() {
-  const tbody = document.getElementById('province-table-body');
+/* ===================================================================
+   TAB 3: DASHBOARD CHARTS
+   =================================================================== */
+function initDashboardCharts() {
+  // ── 1. 王剑审批饼图 ──
+  const wApproved = parseFloat(KPI_DATA.wangjianApproved) || 0;
+  const wTotal    = parseFloat(KPI_DATA.wangjianTotal) || 0;
+  const wNot      = Math.max(0, wTotal - wApproved);
+  if (hasData([wApproved, wNot])) {
+    createChart('chart-wangjian-donut', {
+      type: 'doughnut',
+      data: {
+        labels: ['审批通过', '未通过'],
+        datasets: [{
+          data: [wApproved, wNot],
+          backgroundColor: [CHART_COLORS.green, CHART_COLORS.ltGray],
+          borderWidth: 2,
+          borderColor: '#fff',
+        }],
+      },
+      options: makeDonutOpts(),
+    });
+  } else {
+    showNoData('chart-wangjian-donut', '暂无审批数据');
+  }
+
+  // ── 2. 审批天数柱状图 ──
+  const daysAvg = parseFloat(KPI_DATA.daysAvg) || 0;
+  const daysMin = parseFloat(KPI_DATA.daysMin) || 0;
+  const daysMax = parseFloat(KPI_DATA.daysMax) || 0;
+  if (hasData([daysAvg, daysMin, daysMax])) {
+    createChart('chart-days-bar', {
+      type: 'bar',
+      data: {
+        labels: ['平均天数', '最短天数', '最长天数'],
+        datasets: [{
+          label: '天数',
+          data: [daysAvg, daysMin, daysMax],
+          backgroundColor: [CHART_COLORS.navy, CHART_COLORS.green, CHART_COLORS.orange],
+          borderRadius: 4,
+          maxBarThickness: 60,
+        }],
+      },
+      options: makeBarOpts('', '天数'),
+    });
+  } else {
+    showNoData('chart-days-bar', '暂无天数数据');
+  }
+
+  // ── 3. 省公司排名横向条形图 ──
+  var provLabels = [];
+  var provCounts = [];
+  var provModules = [];
+  var provColors = [];
+  PROVINCE_DATA.forEach(function(item, i) {
+    provLabels.push(item.province);
+    provCounts.push(item.count);
+    provModules.push(item.module);
+    provColors.push(CHART_COLORS.palette[i % CHART_COLORS.palette.length]);
+  });
+
+  if (hasData(provCounts)) {
+    createChart('chart-province-bar', {
+    type: 'bar',
+    data: {
+      labels: provLabels,
+      datasets: [{
+        label: '询价次数',
+        data: provCounts,
+        backgroundColor: provColors,
+        borderRadius: 3,
+        maxBarThickness: 40,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.8,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#2C3E50',
+          titleFont: { size: 12 },
+          bodyFont: { size: 12 },
+          padding: 10,
+          cornerRadius: 5,
+          callbacks: {
+            label: function(ctx) {
+              return '询价次数: ' + fmtNum(ctx.parsed.x);
+            },
+            afterLabel: function(ctx) {
+              var i = ctx.dataIndex;
+              if (provModules[i] != null) return '组件功率: ' + fmtNum(provModules[i]) + ' kW';
+              return '';
+            }
+          }
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+        },
+        y: {
+          grid: { display: false },
+          ticks: { font: { size: 11 } },
+        },
+      },
+    });
+  } else {
+    showNoData('chart-province-bar', '暂无省公司排名数据');
+  }
+}
+
+/* ===================================================================
+   TAB SWITCHING
+   =================================================================== */
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+
+  // 延迟初始化该 tab 的图表（确保容器 display:block 后）
+  setTimeout(function() { initTabCharts(name); }, 80);
+}
+
+/* ===================================================================
+   PERIOD TABLE
+   =================================================================== */
+function renderPeriodTable() {
+  var tbody = document.getElementById('period-table-body');
   if (!tbody) return;
   tbody.innerHTML = '';
-  const medals = ['🥇', '🥈', '🥉'];
-  PROVINCE_DATA.forEach(function(item, i) {
-    const tr = document.createElement('tr');
-    const medal = medals[i] || '';
-    tr.innerHTML = `<td>${medal}${item.rank}</td><td>${item.province}</td><td class="number-format">${item.count}</td><td class="number-format">${item.module.toFixed(2)}</td>`;
+  periodNames.forEach(function(name) {
+    var d = PERIOD_DATA[name];
+    if (!d) return;
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><strong>' + escHtml(name) + '</strong></td>' +
+      '<td class="number-format">' + escHtml(d.count) + '</td>' +
+      '<td class="number-format">' + escHtml(d.module.toFixed(2)) + '</td>' +
+      '<td class="number-format">' + escHtml(d.inverter.toFixed(2)) + '</td>' +
+      '<td class="number-format">' + escHtml(d.battery.toFixed(2)) + '</td>' +
+      '<td class="number-format">' + escHtml(d.ratio.toFixed(2)) + '</td>';
     tbody.appendChild(tr);
   });
 }
 
-/* ========== Initialize ========== */
+/* ===================================================================
+   PERIOD FILTER
+   =================================================================== */
+function filterByPeriod() {
+  var name = document.getElementById('period-select').value;
+  var d = PERIOD_DATA[name];
+  if (!d) return;
+  document.getElementById('filter-result').textContent = '当前：' + name + ' → ' + d.count + ' 个项目';
+  document.getElementById('result-count').textContent    = d.count;
+  document.getElementById('result-module').textContent   = d.module.toFixed(2);
+  document.getElementById('result-inverter').textContent = d.inverter.toFixed(2);
+  document.getElementById('result-battery').textContent  = d.battery.toFixed(2);
+  document.getElementById('result-ratio').textContent    = d.ratio.toFixed(2);
+}
+
+/* ===================================================================
+   PROVINCE TABLE
+   =================================================================== */
+function renderProvinceTable() {
+  var tbody = document.getElementById('province-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  var medals = ['🥇', '🥈', '🥉'];
+  PROVINCE_DATA.forEach(function(item, i) {
+    var tr = document.createElement('tr');
+    var medal = medals[i] || '';
+    tr.innerHTML = '<td>' + medal + '<span class="rank-medal">' + escHtml(item.rank) + '</span></td>' +
+      '<td>' + escHtml(item.province) + '</td>' +
+      '<td class="number-format">' + escHtml(item.count) + '</td>' +
+      '<td class="number-format">' + escHtml(item.module.toFixed(2)) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+/* ===================================================================
+   INITIALIZE
+   =================================================================== */
+/* ===================================================================
+   TAB NAV SCROLL SHADOW
+   =================================================================== */
+(function() {
+  var nav = document.querySelector('.tab-nav');
+  if (!nav) return;
+  var ticking = false;
+  function updateShadow() {
+    if (window.scrollY > nav.offsetTop) {
+      nav.style.boxShadow = 'var(--shadow-scroll)';
+    } else {
+      nav.style.boxShadow = 'var(--shadow-sm)';
+    }
+  }
+  window.addEventListener('scroll', function() {
+    if (!ticking) {
+      window.requestAnimationFrame(function() {
+        updateShadow();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+})();
+
+/* ===================================================================
+   INITIALIZE
+   =================================================================== */
 document.addEventListener('DOMContentLoaded', function() {
   renderPeriodTable();
   renderProvinceTable();
-  if (document.getElementById('period-select')) {
-    document.getElementById('period-select').value = periodNames.length > 2 ? periodNames[2] : '本月';
+
+  // 初始化默认 tab（summary）的图表
+  checkChartJsLoaded();
+  initTabCharts('summary');
+
+  // 设置默认筛选
+  var sel = document.getElementById('period-select');
+  if (sel) {
+    sel.value = periodNames.length > 2 ? periodNames[2] : '本月';
     filterByPeriod();
   }
 });

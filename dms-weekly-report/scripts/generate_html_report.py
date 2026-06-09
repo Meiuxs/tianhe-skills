@@ -316,6 +316,21 @@ def generate_html_report(
     html = _replace_json_field(html, "PERIOD_DATA", period_data)
     html = _replace_json_field(html, "PROVINCE_DATA", province_ranking)
 
+    # 构造图表需要的 KPI 原始数值（不含千分位，JS 端做格式化）
+    kpi_data = {
+        "orderedCount": kpis["ordered_count"],
+        "notOrderedCount": kpis["not_ordered_count"],
+        "modulePower": float(kpis["module_power"].replace(",", "")) if isinstance(kpis["module_power"], str) and kpis["module_power"] != "0" else 0,
+        "inverterPower": float(kpis["inverter_power"].replace(",", "")) if isinstance(kpis["inverter_power"], str) and kpis["inverter_power"] != "0" else 0,
+        "batteryCapacity": float(kpis["battery_capacity"].replace(",", "")) if isinstance(kpis["battery_capacity"], str) and kpis["battery_capacity"] != "0" else 0,
+        "wangjianApproved": wangjian["approved"],
+        "wangjianTotal": wangjian["total"],
+        "daysAvg": approval_days["avg"],
+        "daysMin": approval_days["min"],
+        "daysMax": approval_days["max"],
+    }
+    html = _replace_json_field(html, "KPI_DATA", kpi_data)
+
     # 输出
     output_dir = os.path.dirname(os.path.abspath(output_path))
     os.makedirs(output_dir, exist_ok=True)
