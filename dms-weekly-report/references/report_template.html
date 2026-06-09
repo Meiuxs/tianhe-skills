@@ -323,6 +323,10 @@ body {
 .kpi-card.green  { border-left-color: var(--color-green); }
 .kpi-card.orange .value { color: var(--color-orange); }
 .kpi-card.orange { border-left-color: var(--color-orange); }
+.kpi-card.orange.highlight {
+  border-left: 4px solid var(--primary);
+}
+.kpi-card.orange.highlight .label { color: var(--primary); font-weight: 600; }
 .kpi-card.red    .value { color: var(--color-red); }
 .kpi-card.red    { border-left-color: var(--color-red); }
 
@@ -340,6 +344,9 @@ body {
 }
 .chart-row.split-60-40 {
   grid-template-columns: 3fr 2fr;
+}
+.chart-row.split-40-60 {
+  grid-template-columns: 2fr 3fr;
 }
 .chart-card {
   background: var(--bg-white);
@@ -399,6 +406,9 @@ thead th {
   white-space: nowrap;
   font-size: 12px;
   letter-spacing: 0.3px;
+  position: sticky;
+  top: 48px;
+  z-index: 10;
 }
 tbody td {
   padding: 9px 14px;
@@ -490,6 +500,27 @@ th.number-right {
   background: var(--primary);
   color: white;
 }
+.tooltip-icon::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2C3E50;
+  color: white;
+  font-size: 11px;
+  font-weight: 400;
+  padding: 6px 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s;
+  z-index: 200;
+}
+.tooltip-icon:hover::after {
+  opacity: 1;
+}
 
 /* ===================================================================
    RANKING
@@ -520,6 +551,7 @@ td:first-child { text-align: center; width: 60px; }
 @media (max-width: 1024px) {
   .chart-row { grid-template-columns: 1fr; }
   .chart-row.split-60-40 { grid-template-columns: 1fr; }
+  .chart-row.split-40-60 { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
   .header-inner { flex-direction: column; text-align: center; }
@@ -620,28 +652,28 @@ td:first-child { text-align: center; width: 60px; }
     <div class="kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">询价项目总数</div>
-        <div class="value">{{KPI_TOTAL_PROJECTS}}</div>
+        <div class="value" id="kpi-total-projects">{{KPI_TOTAL_PROJECTS}}</div>
         <div class="unit">个</div>
       </div>
       <div class="kpi-card">
         <div class="label">涉及业务员</div>
-        <div class="value">{{KPI_TOTAL_SALESPERSONS}}</div>
+        <div class="value" id="kpi-total-salespersons">{{KPI_TOTAL_SALESPERSONS}}</div>
         <div class="unit">人</div>
       </div>
       <div class="kpi-card green">
         <div class="label">已下单</div>
-        <div class="value">{{KPI_ORDERED_COUNT}}</div>
+        <div class="value" id="kpi-ordered">{{KPI_ORDERED_COUNT}}</div>
         <div class="unit">个</div>
       </div>
-      <div class="kpi-card orange">
+      <div class="kpi-card orange highlight">
         <div class="label">未下单</div>
-        <div class="value">{{KPI_NOT_ORDERED_COUNT}}</div>
+        <div class="value" id="kpi-not-ordered">{{KPI_NOT_ORDERED_COUNT}}</div>
         <div class="unit">个</div>
       </div>
     </div>
 
     <!-- ──────────── 图表行一：订单状态饼图 + 功率对比柱状图 ──────────── -->
-    <div class="chart-row">
+    <div class="chart-row split-40-60">
       <div class="chart-card">
         <div class="chart-title">📊 订单状态分布</div>
         <div class="chart-wrap">
@@ -666,38 +698,23 @@ td:first-child { text-align: center; width: 60px; }
     <div class="kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">组件总功率</div>
-        <div class="value">{{KPI_MODULE_POWER}}</div>
+        <div class="value" id="kpi-module-power">{{KPI_MODULE_POWER}}</div>
         <div class="unit">kW</div>
       </div>
       <div class="kpi-card">
         <div class="label">逆变器总功率</div>
-        <div class="value">{{KPI_INVERTER_POWER}}</div>
+        <div class="value" id="kpi-inverter-power">{{KPI_INVERTER_POWER}}</div>
         <div class="unit">kW</div>
       </div>
       <div class="kpi-card">
         <div class="label">电池总容量</div>
-        <div class="value">{{KPI_BATTERY_CAPACITY}}</div>
+        <div class="value" id="kpi-battery-capacity">{{KPI_BATTERY_CAPACITY}}</div>
         <div class="unit">kWh</div>
       </div>
       <div class="kpi-card highlight">
         <div class="label">容配比</div>
-        <div class="value">{{KPI_RATIO}}</div>
+        <div class="value" id="kpi-ratio">{{KPI_RATIO}}</div>
         <div class="unit">组件/逆变器</div>
-      </div>
-    </div>
-
-    <!-- ──────────── 每日趋势折线图（替代原周期趋势柱状图）──────────── -->
-    <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      每日趋势
-    </h2>
-    <div class="chart-row single">
-      <div class="chart-card full">
-        <div class="chart-title">📊 每日询价项目数 & 组件功率趋势</div>
-        <div class="chart-wrap">
-          <canvas id="chart-daily-trend"></canvas>
-        </div>
-        <div class="chart-caption">按提交日期统计询价项目数和组件功率变化趋势</div>
       </div>
     </div>
 
@@ -796,7 +813,7 @@ td:first-child { text-align: center; width: 60px; }
     <h2 class="section-title">
       <span class="title-icon">◉</span>
       询价到审批完成天数
-      <span class="tooltip-icon" title="计算方式：从流程发起人提交审核时间（含当日）到最终审批完成时间（含当日）的日历天数。包含周末及节假日。">(?)</span>
+      <span class="tooltip-icon" data-tip="计算方式：从流程发起人提交审核时间（含当日）到最终审批完成时间（含当日）的日历天数，包含周末及节假日。">(?)</span>
     </h2>
     <div class="kpi-grid">
       <div class="kpi-card highlight">
@@ -839,17 +856,9 @@ td:first-child { text-align: center; width: 60px; }
       数据明细查询
     </h2>
 
-    <div class="filter-bar">
-      <label for="period-select">📅 时间段筛选：</label>
-      <select id="period-select" onchange="filterByPeriod()">
-        <option value="全部">全部</option>
-        <option value="本周">本周</option>
-        <option value="本月" selected>本月</option>
-        <option value="上月">上月</option>
-        <option value="本季度">本季度</option>
-      </select>
-      <span class="filter-result" id="detail-filter-result"></span>
-    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:var(--spacing-lg);background:var(--primary-l5);padding:10px 16px;border-radius:var(--radius);border-left:3px solid var(--primary);">
+      💡 当前正在展示 <strong id="detail-period-label">本月</strong> 的询价项目明细。如需切换，请使用右上角 <strong>全局时间筛选</strong>。
+    </p>
 
     <!-- ──────────── 周期功率趋势柱状图 ──────────── -->
     <div class="chart-row single">
@@ -888,7 +897,7 @@ td:first-child { text-align: center; width: 60px; }
     </div>
 
     <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-      💡 切换时间段后，上方图表与明细表格同步刷新。明细展示每条询价项目的具体信息。
+      💡 使用右上角<strong>全局时间筛选</strong>切换时间段后，上方图表与明细表格同步刷新。明细展示每条询价项目的具体信息。
     </p>
 
   </div>
@@ -1023,7 +1032,7 @@ function showNoData(canvasId, message, icon) {
    =================================================================== */
 const chartInstances = {};
 const tabCharts = {
-  overview:  ['chart-order-donut', 'chart-power-bar', 'chart-daily-trend', 'chart-province-bar'],
+  overview:  ['chart-order-donut', 'chart-power-bar', 'chart-province-bar'],
   approval:  ['chart-approval-donut', 'chart-approval-compare'],
   detail:    ['chart-query-bar'],
 };
@@ -1202,96 +1211,39 @@ function initOverviewCharts() {
           maxBarThickness: 60,
         }],
       },
-      options: makeBarOpts('类型', '容量'),
-    });
-  } else {
-    showNoData('chart-power-bar', '暂无功率数据', '⚡');
-  }
-
-  // ── 3. 每日趋势折线图 ──
-  var dailyDates = Object.keys(DAILY_DATA).sort();
-  if (dailyDates.length === 0) {
-    showNoData('chart-daily-trend', '暂无每日数据', '📈');
-  } else {
-    var dailyCounts = dailyDates.map(function(d) {
-      return DAILY_DATA[d] ? DAILY_DATA[d].count : 0;
-    });
-    var dailyModules = dailyDates.map(function(d) {
-      return DAILY_DATA[d] ? DAILY_DATA[d].module : 0;
-    });
-
-    if (!hasData(dailyCounts)) {
-      showNoData('chart-daily-trend', '近期暂无询价项目', '📈');
-    } else {
-      var datasets = [{
-        label: '项目数',
-        data: dailyCounts,
-        borderColor: CHART_COLORS.navy,
-        backgroundColor: 'rgba(29,78,216,0.08)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 4,
-        pointBackgroundColor: CHART_COLORS.navy,
-        yAxisID: 'y',
-      }];
-      if (hasData(dailyModules)) {
-        datasets.push({
-          label: '组件功率 (kW)',
-          data: dailyModules,
-          borderColor: CHART_COLORS.orange,
-          backgroundColor: 'rgba(245,158,11,0.06)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 3,
-          pointBackgroundColor: CHART_COLORS.orange,
-          yAxisID: 'y1',
-        });
-      }
-
-      createChart('chart-daily-trend', {
-        type: 'line',
-        data: { labels: dailyDates, datasets: datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          aspectRatio: 2.2,
-          animation: { duration: 600, easing: 'easeOutQuart' },
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, font: { size: 11 } } },
-            tooltip: {
-              backgroundColor: '#2C3E50',
-              padding: 10,
-              cornerRadius: 5,
-            },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 1.6,
+        animation: { duration: 600, easing: 'easeOutQuart' },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { padding: 16, usePointStyle: true, font: { size: 11 } },
           },
-          scales: {
-            x: {
-              grid: { display: false },
-              ticks: { font: { size: 10 }, maxRotation: 45 },
-            },
-            y: {
-              type: 'linear',
-              display: true,
-              position: 'left',
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.06)' },
-              ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
-              title: { display: true, text: '项目数', font: { size: 11 } },
-            },
-            y1: {
-              type: 'linear',
-              display: true,
-              position: 'right',
-              beginAtZero: true,
-              grid: { drawOnChartArea: false },
-              ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v) + ' kW'; } },
-              title: { display: true, text: '功率 (kW)', font: { size: 11 } },
+          tooltip: {
+            backgroundColor: '#2C3E50',
+            padding: 10,
+            cornerRadius: 5,
+            callbacks: {
+              label: function(ctx) {
+                return ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y);
+              }
             },
           },
         },
-      });
-    }
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+          },
+        },
+      },
+    });
+  } else {
+    showNoData('chart-power-bar', '暂无功率数据', '⚡');
   }
 
   // ── 4. 省公司排名横向条形图 ──
@@ -1395,6 +1347,34 @@ function getApproverStats(approverName) {
     }
   });
   return { approved: approved, total: total };
+}
+
+/* ===================================================================
+   KPI UPDATE — 根据全局时间段刷新 Tab 1 所有 KPI 卡片
+   =================================================================== */
+function updateOverviewKPIs(periodName) {
+  var d = PERIOD_DATA[periodName];
+  if (!d) return;
+
+  // 汇总 KPI
+  var elTotal = document.getElementById('kpi-total-projects');
+  if (elTotal) elTotal.textContent = d.count;
+  var elSp = document.getElementById('kpi-total-salespersons');
+  if (elSp) elSp.textContent = d.salespersons;
+  var elOrdered = document.getElementById('kpi-ordered');
+  if (elOrdered) elOrdered.textContent = d.ordered;
+  var elNot = document.getElementById('kpi-not-ordered');
+  if (elNot) elNot.textContent = d.notOrdered;
+
+  // 容量 KPI
+  var elMod = document.getElementById('kpi-module-power');
+  if (elMod) elMod.textContent = fmtNum(d.module);
+  var elInv = document.getElementById('kpi-inverter-power');
+  if (elInv) elInv.textContent = fmtNum(d.inverter);
+  var elBat = document.getElementById('kpi-battery-capacity');
+  if (elBat) elBat.textContent = fmtNum(d.battery);
+  var elRatio = document.getElementById('kpi-ratio');
+  if (elRatio) elRatio.textContent = d.ratio.toFixed(2);
 }
 
 function onApproverChange() {
@@ -1606,6 +1586,9 @@ function renderDetailTable(periodName) {
   if (!tbody) return;
   tbody.innerHTML = '';
 
+  var label = document.getElementById('detail-period-label');
+  if (label) label.textContent = periodName;
+
   var filtered = filterDetailByPeriod(ROWS_DETAIL, periodName);
 
   if (filtered.length === 0) {
@@ -1629,22 +1612,6 @@ function renderDetailTable(periodName) {
       tbody.appendChild(tr);
     });
   }
-
-  var resultEl = document.getElementById('detail-filter-result');
-  if (resultEl) {
-    resultEl.textContent = '当前：' + periodName + ' → ' + filtered.length + ' 条记录';
-  }
-}
-
-function filterByPeriod() {
-  var sel = document.getElementById('period-select');
-  if (sel) {
-    currentGlobalPeriod = sel.value;
-    // 同步全局筛选器
-    var gsel = document.getElementById('global-period-select');
-    if (gsel) gsel.value = currentGlobalPeriod;
-    renderDetailTable(currentGlobalPeriod);
-  }
 }
 
 /* ===================================================================
@@ -1657,11 +1624,8 @@ function onGlobalPeriodChange() {
   if (!sel) return;
   currentGlobalPeriod = sel.value;
 
-  // 同步 Tab 3 内的筛选器
-  var detailSel = document.getElementById('period-select');
-  if (detailSel) {
-    detailSel.value = currentGlobalPeriod;
-  }
+  // 更新 Tab 1 KPI 卡片
+  updateOverviewKPIs(currentGlobalPeriod);
 
   // 销毁所有现有图表实例
   Object.keys(chartInstances).forEach(function(id) {
@@ -1776,11 +1740,6 @@ document.addEventListener('DOMContentLoaded', function() {
     currentGlobalPeriod = gsel.value;
   }
 
-  // 同步 Tab 3 内部筛选器
-  var dsel = document.getElementById('period-select');
-  if (dsel) {
-    dsel.value = currentGlobalPeriod;
-  }
 });
 </script>
 
