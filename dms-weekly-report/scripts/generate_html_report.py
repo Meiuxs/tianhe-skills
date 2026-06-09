@@ -146,9 +146,12 @@ def compute_period_data(rows: list[list[Any]]) -> dict[str, dict[str, float | in
     result: dict[str, dict[str, float | int]] = {}
     for name, (s, e) in periods.items():
         cnt = 0
+        ordered_cnt = 0
+        not_ordered_cnt = 0
         mod = 0.0
         inv = 0.0
         bat = 0.0
+        sp_set: set[str] = set()
         for row in rows:
             fid = str(row[0]) if row[0] else ""
             if not re.match(r"^\d{15,}$", fid):
@@ -157,6 +160,17 @@ def compute_period_data(rows: list[list[Any]]) -> dict[str, dict[str, float | in
             if o is None or o < s or o > e:
                 continue
             cnt += 1
+            # 下单状态
+            ordered_val = str(row[13] if len(row) > 13 and row[13] else "")
+            if ordered_val == "是":
+                ordered_cnt += 1
+            else:
+                not_ordered_cnt += 1
+            # 业务员
+            sp = str(row[5] if len(row) > 5 and row[5] else "")
+            if sp and sp not in ("--", "无", ""):
+                sp_set.add(sp)
+            # 容量
             if len(row) > 6 and isinstance(row[6], (int, float)):
                 mod += float(row[6])
             if len(row) > 7 and isinstance(row[7], (int, float)):
@@ -166,6 +180,9 @@ def compute_period_data(rows: list[list[Any]]) -> dict[str, dict[str, float | in
         ratio = round(mod / inv, 2) if inv > 0 else 0
         result[name] = {
             "count": cnt,
+            "ordered": ordered_cnt,
+            "notOrdered": not_ordered_cnt,
+            "salespersons": len(sp_set),
             "module": round(mod, 2),
             "inverter": round(inv, 2),
             "battery": round(bat, 2),
