@@ -716,13 +716,6 @@ th.number-right {
           <option value="本季度">本季度</option>
         </select>
       </div>
-      <div class="header-actions" style="display:flex;gap:8px;">
-        <button id="export-excel-btn" style="padding:8px 16px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:var(--radius-sm);color:white;font-size:13px;font-family:var(--font-family);cursor:pointer;display:flex;align-items:center;gap:6px;">
-          📥 导出 Excel
-        </button>
-        <button id="refresh-data-btn" style="padding:8px 16px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:var(--radius-sm);color:white;font-size:13px;font-family:var(--font-family);cursor:pointer;display:flex;align-items:center;gap:6px;">
-          🔄 刷新数据
-        </button>
       </div>
     </div>
   </div>
@@ -874,7 +867,7 @@ th.number-right {
     </h2>
     <div class="filter-bar">
       <label for="approver-input">👤 审批人：</label>
-      <input list="approver-list" id="approver-input" class="form-control" placeholder="输入或选择审批人..." style="min-width:150px;">
+      <input list="approver-list" id="approver-input" class="form-control" placeholder="全部审批人（输入筛选）..." style="min-width:150px;">
       <datalist id="approver-list"></datalist>
       <span class="filter-result" id="approver-filter-result"></span>
     </div>
@@ -1144,10 +1137,12 @@ var donutCenterPlugin = {
     ctx.save();
     let centerX = width / 2;
     let centerY = height / 2 - 4;
-    let meta = chart.getDatasetMeta(0);
-    if (!meta || !meta.total) return;
-    let total = meta.total;
-    if (chart.options.cutout === 0) { ctx.restore(); return; }
+    // 从原始数据计算合计，排除 isSingleData hack 值（< 0.1）
+    let rawData = chart.data.datasets[0].data || [];
+    let total = rawData.reduce(function(sum, val) {
+      return sum + (Math.abs(val) < 0.1 ? 0 : val);
+    }, 0);
+    if (!chart.options.cutout || chart.options.cutout === 0) { ctx.restore(); return; }
     let fontSize = Math.min(width, height) * 0.08;
     ctx.font = '600 ' + fontSize + 'px ' + Chart.defaults.font.family;
     ctx.fillStyle = '#2C3E50';
@@ -1923,17 +1918,18 @@ function populateApproverList() {
   let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
   let approvers = extractApproverList(filtered);
 
-  datalist.innerHTML = '<option value="全部">全部审批人</option>';
+  // 仅填充实际审批人姓名；空值 =「全部」由 getSelectedApprover 处理
+  datalist.innerHTML = '';
   approvers.forEach(function(name) {
     let opt = document.createElement('option');
     opt.value = name;
     datalist.appendChild(opt);
   });
 
-  // 绑定输入事件
-  input.addEventListener('change', function() {
-    onApproverChange(this.value);
-  });
+  // 首次加载或清空时回退到「全部」
+  if (!input.value || input.value === '全部') {
+    input.value = '';
+  }
 }
 
 /* ===================================================================
@@ -1942,7 +1938,8 @@ function populateApproverList() {
 
 function getSelectedApprover() {
   let input = document.getElementById('approver-input');
-  return input ? input.value : '全部';
+  let val = input ? input.value.trim() : '';
+  return val === '' || val === '全部' ? '全部' : val;
 }
 
 function getActiveTab() {
@@ -2129,13 +2126,13 @@ function initEventListeners() {
     });
   });
 
-  /* 导出 Excel */
-  var exportBtn = document.getElementById('export-excel-btn');
-  if (exportBtn) exportBtn.addEventListener('click', exportToExcel);
-
-  /* 刷新数据 */
-  var refreshBtn = document.getElementById('refresh-data-btn');
-  if (refreshBtn) refreshBtn.addEventListener('click', refreshData);
+  /* 审批人输入 — 回车或失焦时触发筛选 */
+  var approverInput = document.getElementById('approver-input');
+  if (approverInput) {
+    approverInput.addEventListener('change', function() {
+      onApproverChange(this.value);
+    });
+  }
 
   /* 图表下载按钮 */
   document.querySelectorAll('.chart-download-btn').forEach(function(btn) {
