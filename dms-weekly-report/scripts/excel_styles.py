@@ -1,7 +1,17 @@
 """Excel 样式主题配置 — 专业报表风格（Corporate Blue）。
 
-提供所有共享样式常量（字体、填充、对齐、边框）和布局辅助函数。
-供 run_weekly_report.py 及其他脚本统一导入使用。
+架构定位：
+  本模块是所有 Excel 样式的唯一来源，被 run_weekly_report.py 导入。
+  提供字体、填充、对齐、边框等共享样式常量和布局辅助函数。
+  修改配色/字体只需在本模块调整，所有 Sheet 自动生效。
+
+样式体系：
+  Colors         — 调色板常量（主色、功能色、文字色）
+  FONT_*         — 字体预设（标题、表头、数据、KPI 等）
+  FILL_*         — 填充预设（深蓝表头、浅蓝底、卡片底色）
+  ALIGN_*        — 对齐预设
+  apply_*        — 快捷应用函数（apply_header_style, apply_data_row）
+  write_*        — 写入函数（write_section_title, write_kpi_card）
 """
 
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side

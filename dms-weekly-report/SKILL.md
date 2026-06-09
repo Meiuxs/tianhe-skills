@@ -3,12 +3,13 @@ name: dms-weekly-report
 description: >
   Use when the user asks for DMS weekly report, inquiry summary, completed inquiry
   extraction, or mentions "自动周报", "周报生成", "询价汇总", "本周询价", "已办询价",
-  "做周报", "一键周报", "导出询价明细", "帮我做一下周报".
+  "做周报", "一键周报", "导出询价明细", "帮我做一下周报", "出个报表", "汇总一下询价",
+  "看一下询价进度".
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.2.0
-  updated: 2026-06-08
+  version: 1.3.0
+  updated: 2026-06-10
 ---
 
 # DMS 非标询价周报生成器
@@ -19,15 +20,14 @@ metadata:
 
 ## When to Use
 
-当用户表达以下意图时触发（不需要用户明确说"使用周报skill"，直接认定）：
+用户说以下内容时直接触发：
 
 | 场景 | 用户可能说 |
 |------|-----------|
 | **定期周报** | "帮我做周报" / "这周询价汇总一下" / "做本周询价周报" |
-| **临时查询** | "查一下上周的询价流程" / "看看最近有哪些询价" |
-| **导出汇总** | "导出询价明细到Excel" / "把已办询价整理成表格" |
+| **临时查询 / 批量获取** | "查一下上周的询价" / "看看这个月的流程" / "把最近两周的都提取出来" |
+| **导出汇总** | "导出询价明细到Excel" / "把已办询价整理成表格" / "出个报表" |
 | **下单核查** | "检查哪些询价已下单了" / "哪些还没下单" |
-| **批量获取** | "把最近两周的询价都提取出来" / "看看这个月的流程" |
 
 ## When NOT to Use
 
@@ -40,7 +40,7 @@ metadata:
 
 ### 步骤 1：解析日期范围
 
-**不再需要三选一确认。** 直接根据用户话语中的时段词调用日期解析脚本：
+直接根据用户话语中的时段词调用日期解析脚本：
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
@@ -49,6 +49,8 @@ START=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['s
 END=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['end'])")
 RANGE_STR=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['range_str'])")
 ```
+
+> 以上命令将日期范围信息存入 `$START`（开始日期）、`$END`（结束日期）和 `$RANGE_STR`（显示用范围文本）三个 Shell 变量，后续步骤直接使用。
 
 **匹配规则（从用户话语中提取时段词）：**
 
@@ -78,44 +80,40 @@ RANGE_STR=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
-python "$SKILL_DIR/scripts/check_env.py" --check-browser
+python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
-- 检测来源：当前环境变量、`~/.bashrc`、`~/.bash_profile`、`~/.profile`、PowerShell 用户变量
+- 检测来源：当前环境变量、bash 系（.bashrc/.bash_profile/.profile）、zsh 系（.zshenv/.zprofile/.zshrc）、Windows 注册表/PowerShell
 - 同时验证 Playwright Chromium 是否已安装
-- 凭据未找到时提示用户配置（回复"已配置"后继续）
+
+**检查结果分支：**
+- ✅ 凭据就绪 + 浏览器正常 → 直接进入**步骤 3**
+- ❌ 凭据缺失 → 提示用户配置环境变量 `DMS_USER` / `DMS_PASSWORD`，用户回复“已配置”后重新执行 `dms_credentials.py` 确认，再进入**步骤 3**
 
 ### 步骤 3：运行脚本
 
-本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作：
+本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作。使用**步骤 1** 解析出的日期变量：
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
 SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
-# 用户确认默认范围
-python "$SCRIPT" --output-dir "$PWD"
-
-# 用户指定自定义范围
-python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-01" --end-date "2026-05-31"
-
-# 查上周（快捷方式）
-python "$SCRIPT" --output-dir "$PWD" --weeks 1
+# 使用步骤 1 解析的日期范围
+python "$SCRIPT" --output-dir "$PWD" --start-date "$START" --end-date "$END"
 
 # 无头模式（不显示浏览器）
-python "$SCRIPT" --output-dir "$PWD" --headless
+python "$SCRIPT" --output-dir "$PWD" --start-date "$START" --end-date "$END" --headless
 
 # 仅统计模式（跳过浏览器，从已有 Excel 重算统计）
-python "$SCRIPT" --output-dir "$PWD" --stats-only
+python "$SCRIPT" --output-dir "$PWD" --stats-only --start-date "$START" --end-date "$END"
 
-# 仅统计模式 - 本月快捷统计
-python "$SCRIPT" --output-dir "$PWD" --stats-only --this-month
-
-# 仅统计模式 - 自定义日期范围
-python "$SCRIPT" --output-dir "$PWD" --stats-only --start-date "2026-06-01" --end-date "2026-06-30"
+# 查上周（快捷方式，无需步骤 1）
+python "$SCRIPT" --output-dir "$PWD" --weeks 1
 ```
 
 > **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录，方便查找。
+>
+> **注意：** 如果生成的报表中流程编号最后几位不正确，说明 Excel 中该列以数字格式存储而非文本。详见 FAQ「流程编号显示为不正确的数字」。
 
 ### 步骤 4：呈现结果
 
@@ -152,10 +150,9 @@ AskUserQuestion:
 
 **根据用户确认/补充后：**
 - ✅ 更新 SKILL.md 中的说明、注意事项、常见错误
-- ✅ 记录到 memory 供下次会话参考
-- ✅ 如涉及脚本 bug，更新脚本待修复清单
+- ✅ 修改脚本或参考文件后，按 CLAUDE.md 同步规则复制到 `~/.claude/skills/`
 
-> **原则：** 先自行反思提炼，再给用户确认补充，而不是空泛地问"有没有要改进的"。
+> **原则：** 先自行反思提炼，再给用户确认补充。
 
 ## Quick Reference
 
@@ -168,7 +165,7 @@ AskUserQuestion:
 | `--weeks N` | 最近 N 周（0=本周, 1=上周） | 0 |
 | `--start-date YYYY-MM-DD` | 自定义开始日期 | 本周一 |
 | `--end-date YYYY-MM-DD` | 自定义结束日期 | 今天 |
-| `--workers N` | 并行并发数 | 3 |
+| `--workers N` | 并行并发数 | 4 |
 | `--verbose` | 详细日志输出 | 仅 info |
 | `--stats-only` | 仅统计模式：从已有Excel读取数据，按日期范围重新统计，跳过浏览器操作 | 无 |
 | `--this-month` | 快捷统计本月（配合`--stats-only`使用） | 无 |
@@ -176,21 +173,11 @@ AskUserQuestion:
 ### 输出文件
 
 > ⚠️ 每次运行自动生成带时间戳文件（`YYYYMMDD_HHMMSS`），避免覆盖历史数据。
-> 如需清理请手动删除旧文件。
+> 详见 `references/output_format.md`。
 
-- `{output_dir}/询价汇总_{时间戳}.xlsx` — 蓝色表头、边框、自适应列宽（示例：`询价汇总_20260609_121027.xlsx`）
-- `{output_dir}/询价汇总_{时间戳}_v2.xlsx` — 文件被占用时的备用
-- `{output_dir}/询价周报报表_{时间戳}.html` — 独立 HTML 报表，3 个 Tab（项目与容量概览/审批与时效流转/多维数据明细），含全局时间段筛选器，自动与 Excel 同步生成
-- **四个Sheet：**
-  - **「询价汇总」** — 每条询价记录的明细（含审批链信息：省总审批人/状态、采购审批人/状态、审批完成时间），按流程编号去重追加
-  - **「询价统计」** — 自动汇总页，统计全部历史数据的：项目总数、组件总功率(kW)、逆变器总功率(kW)、电池总容量(kWh)、容配比、已下单/未下单数量
-  - **「日期查询」** — **交互式查询页**，打开Excel即可操作：
-    1. 点击 **D3单元格** 的下拉菜单，选择「全部/本周/本月/上月/本季度」
-    2. 结果**自动刷新**，无需输入任何内容
-  - **「数据看板」** — **领导汇报专用**，包含：
-    - 关键节点审批统计（支持审批人下拉切换，非硬编码）
-    - 省公司审批耗时对比水平条形图
-    - 询价到审批完成的平均天数（含最短/最长）
+- `{output_dir}/询价汇总_{时间戳}.xlsx`
+- `{output_dir}/询价汇总_{时间戳}_v2.xlsx`（文件被占用时的备用）
+- `{output_dir}/询价周报报表_{时间戳}.html`
 
 ### HTML 独立生成（无需浏览器）
 
@@ -198,85 +185,44 @@ AskUserQuestion:
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
-
-# 不指定 --output 时自动生成带时间戳的文件
 python "$SKILL_DIR/scripts/generate_html_report.py" \
   --xlsx "询价汇总.xlsx" \
-  --range "2026-06-01 ~ 2026-06-07"
-
-# 也可以手动指定输出路径
-python "$SKILL_DIR/scripts/generate_html_report.py" \
-  --xlsx "询价汇总.xlsx" \
-  --output "询价周报报表.html" \
   --range "2026-06-01 ~ 2026-06-07"
 ```
 
-脚本会自动读取 xlsx「询价汇总」Sheet 的数据，计算统计指标，填充模板，输出独立 HTML 文件。模板位于 `references/report_template.html`，可修改 CSS 自定义样式。
-
-**HTML 报表功能特性（v1.3）：**
-- **全局时间段筛选器** — Header 右上角下拉框，切换后 3 个 Tab 全部联动刷新
-- **Tab 1：项目与容量概览** — KPI 卡片 + 订单状态饼图 + 功率对比柱状图 + 每日趋势折线图 + 省公司排名
-- **Tab 2：审批与时效流转** — 审批人下拉选择 + 审批通过率饼图 + 各省公司审批耗时对比条形图 + 天数统计
-- **Tab 3：多维数据明细** — 时间段筛选 + 周期功率趋势 + 逐条项目明细表格（下钻查询）
-- **数值右对齐** — 功率、容量等含小数点的数值列按财务报表规范右对齐
-- **空数据占位符** — 无数据时显示语义化图标提示而非空白
+详见 `scripts/generate_html_report.py` 模块文档和 `references/report_template.html`。
 
 ### Excel 列定义
 
-| 列 | 说明 |
-|----|------|
-| 流程编号 | DMS 流程 ID |
-| 项目名称 | 项目名称 |
-| 代理商编号/名称 | 代理商信息 |
-| 省公司 | 所属省份 |
-| 业务员 | 负责销售 |
-| 组件/逆变器/电池功率 | BOM 汇总 |
-| 瓦单价/总价 | 价格 |
-| 流程发起人提交审核时间 | 提交时间 |
-| 备注 | BOM 特殊项 |
-| 是否下单 | 是/否 |
-| 省总审批人 | 省总审批负责人（v1.2.0 新增） |
-| 省总审批状态 | 省总审批结果（v1.2.0 新增） |
-| 采购审批人 | 采购审批负责人（v1.2.0 新增） |
-| 采购审批状态 | 采购审批结果（v1.2.0 新增） |
-| 审批完成时间 | 最终审批完成时间（v1.2.0 新增） |
+详见 `references/excel_columns.md`。
 
 ## 前置依赖
 
+首次使用安装一次，之后无需重复：
 ```bash
-pip install playwright openpyxl
-playwright install chromium
+pip install playwright openpyxl && playwright install chromium
 ```
-
-首次使用需安装一次，之后无需重复。
 
 ## 登录配置
 
-DMS 登录凭据通过环境变量读取，**不硬编码密码**。检测逻辑位于本 skill 目录的 `scripts/dms_credentials.py`，`check_env.py` 与 `run_weekly_report.py` 共用。
+DMS 登录凭据通过环境变量读取，**不硬编码密码**。使用 `dms_credentials.py` 检测：
 
 ```bash
-python "$SKILL_DIR/scripts/check_env.py" --check-browser
+python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
 **配置方式（二选一）：**
 
 ```bash
-# 方式一：临时配置（仅当前会话有效）
-export DMS_USER="your_email@trinapower.com"
-export DMS_PASSWORD="your_password"
+# 临时（当前会话）
+export DMS_USER="your_email@trinapower.com" DMS_PASSWORD="your_password"
 
-# 方式二：永久配置（推荐，添加到 ~/.bashrc）
-echo 'export DMS_USER="your_email@trinapower.com"' >> ~/.bashrc
-echo 'export DMS_PASSWORD="your_password"' >> ~/.bashrc
+# 永久（推荐）：追加到 ~/.bashrc 后 source
+echo -e 'export DMS_USER="your_email@trinapower.com"\nexport DMS_PASSWORD="your_password"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-脚本自动按以下顺序检测凭据（实现见本 skill 目录的 `scripts/dms_credentials.py`）：
-1. 当前进程环境变量
-2. `~/.bashrc` → `~/.bash_profile` → `~/.profile`（先直读 `export` 行，再 bash 合并 source 兜底）
-3. PowerShell 用户环境变量（`-NoProfile`）
-
-全部未找到时暂停执行，向用户说明如何配置。配置完成后让用户回复"已配置"，然后继续。
+检测顺序（实现见 `scripts/dms_credentials.py`）：进程环境变量 → `~/.bashrc`/`~/.bash_profile`/`~/.profile` → PowerShell 用户变量。全部未找到时暂停，提示用户配置，回复"已配置"后继续。
 
 **登录持久化：** 使用 `launch_persistent_context` 保存登录状态到 `~/.dms_browser_data/`，首次登录后后续运行自动复用会话，无需重复登录。会话过期时自动重新登录。
 
@@ -338,6 +284,15 @@ DMS 偶尔触发验证码验证，此时需要手动操作：
   3. 脚本会自动继续
 ```
 
+### Q: 流程编号显示为不正确的数字
+
+```
+现象：报表中的流程编号最后几位与 DMS 系统中不一致。
+原因：Excel 中该列以数字格式存储，而非文本。Excel 的 IEEE 754 双精度
+     浮点数约 15-16 位有效数字，超过此范围的长编号精度丢失。
+解决：在 Excel 中将该列格式设为「文本」后重新导出 xlsx。
+     本 skill 运行时会检测此情况并输出 stderr 提醒。
+```
 ## 脚本架构
 
 核心模块：

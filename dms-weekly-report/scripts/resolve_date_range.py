@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """将中文时段标签解析为起止日期。
 
+架构定位：
+  本模块是日期解析层，被 SKILL.md 步骤 1 通过 CLI 调用。
+  将用户自然语言（“本周”“上月”“6月1号到6月7号”）转为标准日期范围。
+  输出 JSON 供 Agent shell 变量使用，驱动后续 run_weekly_report.py 的 --start-date/--end-date。
+
+支持的输入格式：
+  - 中文标签: 本周, 上周, 本月, 上月, 本季度, 上季度, 今年, 去年
+  - 英文标签: this week, last week, this month, last month 等
+  - 日期范围: YYYY-MM-DD ~ YYYY-MM-DD
+  - 中文日期: 6月1号到6月7号
+  - 单日期:   2026-06-01
+
 用法:
     python resolve_date_range.py "本周"
     python resolve_date_range.py "上月"

@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
 """DMS 非标询价周报自动化脚本（并行版 v2）。
 
-一键完成：登录 → 筛选本周已办询价 → 多Tab并行提取详情 → 多Tab并行检查下单 → 生成Excel。
+架构总览（完整模式）：
+  配置 → 登录 DMS → 筛选已办询价 → 多 Tab 并行提取详情（BOM + 审批） →
+  多 Tab 并行检查下单状态 → 生成 Excel（4 Sheet） + HTML 报表 → 终端摘要
+
+仅统计模式（--stats-only）：
+  配置 → 读取已有 Excel → 按日期范围筛选 → 更新统计 Sheet → 终端输出
+
+核心模块划分：
+  - 数据类: BOMItem, FlowRecord, TableProcessProcess — 提取过程中的数据结构
+  - 浏览器操作: do_login, filter_and_get_flow_ids, extract_detail_by_url — Playwright 自动化
+  - BOM 解析: _extract_power, _extract_capacity, _build_remark — 从物料名称解析功率/容量
+  - Excel 生成: generate_excel, _update_summary_sheet, _create_date_query_sheet_v2, _create_report_dashboard
+  - 下单检查: check_orders_parallel — 并行查询订单历史
 
 用法：
     python run_weekly_report.py [--headless] [--weeks N] [--workers N] [--verbose]
     python run_weekly_report.py --start-date 2026-05-01 --end-date 2026-05-31 [--headless]
+    python run_weekly_report.py --stats-only --start-date 2026-06-01 --end-date 2026-06-07
 """
 
 from __future__ import annotations
@@ -85,31 +98,40 @@ HEADERS: list[str] = [
     "省总审批人", "省总审批状态", "采购审批人", "采购审批状态", "审批完成时间",
 ]
 
-# Playwright 超时配置（毫秒）
-NAV_TIMEOUT = 30_000
-LOAD_TIMEOUT = 30_000
-WAIT_SHORT = 1000
-WAIT_MEDIUM = 2000
+# ==================== Playwright 超时与重试配置 ====================
+# 这些值影响浏览器自动化的稳定性，DMS 页面响应慢时可适当调大
+NAV_TIMEOUT = 30_000       # 页面导航超时（ms）
+LOAD_TIMEOUT = 30_000      # networkidle 等待超时（ms）
+WAIT_SHORT = 1000          # 短等待，用于 DOM 渲染后稳定（ms）
+WAIT_MEDIUM = 2000         # 中等等待，用于分页/查询后数据加载（ms）
 
-# 重试配置
+# 重试配置：失败时指数退避，避免网络抖动导致整体失败
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # 秒，指数退避基数
 
 
 # ==================== 数据类 ====================
+# 以下三个 dataclass 是提取流程中的核心数据结构，
+# 贯穿浏览器提取 → 数据计算 → Excel 生成全链路。
 
 @dataclass
 class BOMItem:
-    """BOM 清单条目。"""
-    code: str
-    name: str
-    qty: float | int
-    unit: str
+    """BOM 清单条目——从 DMS 详情页的物料表格中提取。"""
+    code: str      # 物料编号
+    name: str      # 物料名称（含功率/容量信息，用于解析）
+    qty: float | int  # 数量
+    unit: str      # 单位
 
 
 @dataclass
 class FlowRecord:
-    """提取到的单条询价记录。"""
+    """提取到的单条询价记录——最终写入 Excel 的一行数据。
+
+    字段分三组：
+      基本信息: flow_id ~ salesperson（从详情页 HTML 提取）
+      BOM 计算: module_kw ~ battery_kwh（从物料名称解析功率/容量）
+      审批链:   province_processor ~ final_approval_time（从审批历史表提取）
+    """
     flow_id: str = ""
     project_name: str = "--"
     agent_code: str = "--"
@@ -352,6 +374,11 @@ def _split_agent(agent_raw: str) -> tuple[str, str]:
     parts = agent_raw.split(" ", 1)
     return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else (agent_raw.strip(), "--")
 
+
+# ==================== BOM 物料名称解析 ====================
+# 以下函数从 DMS 物料名称中提取功率(kW)和容量(kWh)，
+# 是计算组件总功率、逆变器总功率、电池总容量的核心逻辑。
+# DMS 物料命名格式多样，需要多模式匹配回退。
 
 def _extract_power(name: str) -> float | None:
     """从物料名称中提取功率（kW）。
@@ -667,7 +694,12 @@ async def check_orders_parallel(
     return records
 
 
-# ==================== Excel 增强工具函数 ====================
+
+# ==================== Excel 增强 Sheet 生成 ====================
+# 以下函数在 generate_excel() 中调用，生成除「询价汇总」外的 3 个增强 Sheet：
+#   - _update_summary_sheet: 「询价统计」— KPI 仪表盘式汇总
+#   - _create_date_query_sheet_v2: 「日期查询」— 下拉交互式分时段统计
+#   - _create_report_dashboard: 「数据看板」— 审批人统计/省公司排名/审批天数
 
 
 def _fill_date_helper_column(ws: Any) -> None:
@@ -1246,10 +1278,19 @@ def print_summary(
     print("========================================")
 
 
-# ==================== 主流程 ====================
+# ==================== 主流程编排 ====================
 
 async def run(args: argparse.Namespace) -> None:
-    """主流程编排。"""
+    """完整模式主流程：登录 → 筛选 → 提取 → 检查下单 → 生成报表。
+
+    步骤：
+      1. 启动 Playwright 持久化浏览器上下文（复用登录缓存）
+      2. 登录 DMS（会话有效时跳过）
+      3. 导航到流程中心，按日期筛选已办询价，翻页收集流程编号
+      4. 并行打开新 Tab 提取每条流程的详情（BOM + 审批信息）
+      5. 并行检查每条流程的下单状态
+      6. 生成 Excel（4 Sheet）和 HTML 报表
+    """
     output_dir = args.output_dir or os.getcwd()
 
     if args.start_date:
@@ -1341,7 +1382,11 @@ async def run(args: argparse.Namespace) -> None:
 
 
 def stats_from_excel(args: argparse.Namespace) -> None:
-    """仅统计模式：从已有Excel读取数据，按日期范围筛选后更新统计Sheet。"""
+    """仅统计模式主流程：读取已有 Excel → 按日期筛选 → 更新统计 Sheet。
+
+    不启动浏览器，适用于已有数据只需重新计算统计的场景。
+    兼容旧版无时间戳的文件名，支持 --this-month 快捷统计本月。
+    """
     output_dir = args.output_dir or os.getcwd()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     # 尝试读取已有文件（兼容旧版无时间戳的文件名）
@@ -1485,8 +1530,8 @@ def main() -> None:
                         help="自定义开始日期（YYYY-MM-DD），优先于 --weeks")
     parser.add_argument("--end-date", type=str, default=None,
                         help="自定义结束日期（YYYY-MM-DD），默认为今天")
-    parser.add_argument("--workers", type=int, default=3,
-                        help="并行并发数（默认 3）")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="并行并发数（默认 4）")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="输出目录（默认为当前工作目录）")
     parser.add_argument("--verbose", "-v", action="store_true",
