@@ -2,12 +2,22 @@
 *.xlsx
 *.xls
 
+# 生成 HTML 报表
+*.html
+
+# 截图等测试产物
+*.png
+
 # 浏览器用户数据
 .dms_browser_data/
+
+# 浏览器截图缓存
+.playwright-mcp/
 
 # Python 缓存
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # GStack
 .gstack/
