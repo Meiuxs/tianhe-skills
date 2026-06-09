@@ -8,3 +8,10 @@
 # Python 缓存
 __pycache__/
 *.pyc
+
+# GStack
+.gstack/
+
+# assets 目录数据文件
+assets/*.xlsx
+assets/*.xls
