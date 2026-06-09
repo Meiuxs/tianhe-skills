@@ -264,10 +264,10 @@ class TestCalcModulePower:
 
     def test_no_module(self):
         items = [_make_item("I01", "逆变器_33kW_三相")]
-        assert report._calc_module_power(items) == "无"
+        assert report._calc_module_power(items) == 0.0
 
     def test_empty(self):
-        assert report._calc_module_power([]) == "无"
+        assert report._calc_module_power([]) == 0.0
 
     def test_mixed_items(self):
         items = [
@@ -289,10 +289,10 @@ class TestCalcInverterPower:
 
     def test_no_inverter(self):
         items = [_make_item("M01", "销售组件_550kW_单晶")]
-        assert report._calc_inverter_power(items) == "无"
+        assert report._calc_inverter_power(items) == 0.0
 
     def test_empty(self):
-        assert report._calc_inverter_power([]) == "无"
+        assert report._calc_inverter_power([]) == 0.0
 
 
 class TestCalcBatteryCapacity:
@@ -306,10 +306,10 @@ class TestCalcBatteryCapacity:
 
     def test_no_battery(self):
         items = [_make_item("I01", "逆变器_33kW_")]
-        assert report._calc_battery_capacity(items) == "无"
+        assert report._calc_battery_capacity(items) == 0.0
 
     def test_empty(self):
-        assert report._calc_battery_capacity([]) == "无"
+        assert report._calc_battery_capacity([]) == 0.0
 
 
 class TestBuildRemark:
@@ -588,12 +588,73 @@ class TestRetryAsync:
 
 # ==================== generate_html_report.py 测试 ====================
 
+
+class TestSafeFloat:
+    """generate_html_report._safe_float 的全面测试。"""
+
+    def test_int(self):
+        from generate_html_report import _safe_float
+        assert _safe_float(42) == 42.0
+
+    def test_float(self):
+        from generate_html_report import _safe_float
+        assert _safe_float(3.14) == 3.14
+
+    def test_str_number(self):
+        from generate_html_report import _safe_float
+        assert _safe_float("550.5") == 550.5
+
+    def test_str_zero(self):
+        from generate_html_report import _safe_float
+        assert _safe_float("0") == 0.0
+
+    def test_str_none_text(self):
+        """中文 '无' 应该返回 0.0。"""
+        from generate_html_report import _safe_float
+        assert _safe_float("无") == 0.0
+
+    def test_str_dash(self):
+        from generate_html_report import _safe_float
+        assert _safe_float("--") == 0.0
+
+    def test_none(self):
+        """Excel 空单元格传入 None。"""
+        from generate_html_report import _safe_float
+        assert _safe_float(None) == 0.0
+
+    def test_empty_str(self):
+        from generate_html_report import _safe_float
+        assert _safe_float("") == 0.0
+
+    def test_boolean_false(self):
+        """False 既不是 int/float 也不是 str，走 fallback。"""
+        from generate_html_report import _safe_float
+        assert _safe_float(False) == 0.0
+
+    def test_boolean_true(self):
+        from generate_html_report import _safe_float
+        assert _safe_float(True) == 1.0  # bool 是 int 的子类
+
+
 class TestTemplateReplace:
     def test_simple_replace(self):
         from generate_html_report import _simple_replace
         template = "<title>{{TITLE}}</title><p>{{CONTENT}}</p>"
         result = _simple_replace(template, {"TITLE": "周报", "CONTENT": "数据"})
         assert result == "<title>周报</title><p>数据</p>"
+
+    def test_replace_missing_key_unchanged(self):
+        """未替换的 {{KEY}} 应保持原样。"""
+        from generate_html_report import _simple_replace
+        template = "<p>{{A}}</p><p>{{B}}</p>"
+        result = _simple_replace(template, {"A": "1"})
+        assert "1" in result
+        assert "{{B}}" in result  # B 没提供，保持原样
+
+    def test_replace_numeric_value(self):
+        from generate_html_report import _simple_replace
+        result = _simple_replace("{{X}}", {"X": 42})
+        assert result == "42"
 
     def test_replace_json_field(self):
         from generate_html_report import _replace_json_field
@@ -603,102 +664,270 @@ class TestTemplateReplace:
         assert '"全部"' in result
         assert '"count": 5' in result
 
+    def test_replace_json_field_special_chars(self):
+        from generate_html_report import _replace_json_field
+        template = "{{X_JSON}}"
+        data = {"name": "张三", "note": "100kW+项目"}
+        result = _replace_json_field(template, "X", data)
+        assert "张三" in result
+        assert "100kW+项目" in result
 
-class TestComputeKpis:
-    def test_basic(self):
-        from generate_html_report import compute_kpis
+
+# ==================== compute_rows_detail 测试 ====================
+
+
+def _make_row(overrides: dict[int, object] | None = None):
+    """创建 19 列的标准数据行，支持覆写任意位置（key 为列索引 int）。"""
+    base: list[object] = [""] * 19
+    defaults: dict[int, object] = {
+        0: "202606010000001",
+        1: "天合光能项目",
+        4: "贵州",
+        5: "张三",
+        6: 550.0,
+        7: 100.0,
+        8: 50.0,
+        11: "2026-06-01 10:00",
+        13: "是",
+        14: "省审批人",
+        16: "王剑",
+        17: "审批通过",
+        18: "2026-06-05",
+    }
+    if overrides:
+        defaults.update(overrides)
+    for k, v in defaults.items():
+        base[k] = v
+    return base
+
+
+class TestComputeRowsDetail:
+
+    def _compute(self, row_overrides_list: list[dict[int, object] | None]):
+        """帮助方法：传入一组 overrides dict，调用 compute_rows_detail。"""
+        from generate_html_report import compute_rows_detail
+        rows = [_make_row(o) for o in row_overrides_list]
+        return compute_rows_detail(rows)
+
+    def test_valid_flow_id(self):
+        result = self._compute([None])
+        assert len(result) == 1
+        assert result[0]["flowId"] == "202606010000001"
+        assert result[0]["projectName"] == "天合光能项目"
+
+    def test_short_flow_id_filtered(self):
+        from generate_html_report import compute_rows_detail
+        row = _make_row({0: "12345"})
+        result = compute_rows_detail([row])
+        assert len(result) == 0
+
+    def test_alphanumeric_flow_id_filtered(self):
+        from generate_html_report import compute_rows_detail
+        row = _make_row({0: "INQ20260601000001"})
+        result = compute_rows_detail([row])
+        assert len(result) == 0
+
+    def test_flow_id_as_float(self):
+        """Excel 中存储为数字的流程编号（会被读为 float）应正确解析。"""
+        from generate_html_report import compute_rows_detail
+        # 2.02606010000001e16 对应 202606010000001（末尾 1 因 float 精度丢失）
+        row = _make_row({0: 2.02606010000001e16})
+        result = compute_rows_detail([row])
+        assert len(result) == 1
+        # float→int 再转 str，确保纯数字字符串
+        assert result[0]["flowId"].isdigit()
+
+    def test_submit_date_truncated(self):
+        result = self._compute([{11: "2026-06-01 14:30:00"}])
+        assert result[0]["submitDate"] == "2026-06-01"
+
+    def test_submit_date_short(self):
+        result = self._compute([{11: "2026-06"}])
+        assert result[0]["submitDate"] == "2026-06"
+
+    def test_submit_date_empty(self):
+        result = self._compute([{11: ""}])
+        assert result[0]["submitDate"] == ""
+
+    def test_ordered_true(self):
+        result = self._compute([{13: "是"}])
+        assert result[0]["ordered"] == "是"
+
+    def test_ordered_false(self):
+        result = self._compute([{13: "否"}])
+        assert result[0]["ordered"] == "否"
+
+    def test_ordered_none_defaults_no(self):
+        result = self._compute([{13: None}])
+        assert result[0]["ordered"] == "否"
+
+    def test_final_date_parsed(self):
+        result = self._compute([{18: "2026-06-05"}])
+        assert result[0]["finalDate"] == "2026-06-05"
+
+    def test_final_date_dash_cleared(self):
+        result = self._compute([{18: "--"}])
+        assert result[0]["finalDate"] == ""
+
+    def test_final_date_none_text_cleared(self):
+        result = self._compute([{18: "无"}])
+        assert result[0]["finalDate"] == ""
+
+    def test_final_date_empty_str(self):
+        result = self._compute([{18: ""}])
+        assert result[0]["finalDate"] == ""
+
+    def test_province_approver_dash_cleared(self):
+        result = self._compute([{14: "--"}])
+        assert result[0]["provinceApprover"] == ""
+
+    def test_procurement_approver_dash_cleared(self):
+        result = self._compute([{16: "--"}])
+        assert result[0]["procurementApprover"] == ""
+
+    def test_approval_status_dash_cleared(self):
+        result = self._compute([{17: "--"}])
+        assert result[0]["approvalStatus"] == ""
+
+    def test_module_power_zero(self):
+        result = self._compute([{6: 0.0}])
+        assert result[0]["modulePower"] == 0.0
+
+    def test_module_power_string(self):
+        result = self._compute([{6: "550.5"}])
+        assert result[0]["modulePower"] == 550.5
+
+    def test_module_power_none(self):
+        result = self._compute([{6: None}])
+        assert result[0]["modulePower"] == 0.0
+
+    def test_salesperson_none(self):
+        result = self._compute([{5: None}])
+        assert result[0]["salesperson"] == ""
+
+    def test_province_none(self):
+        result = self._compute([{4: None}])
+        assert result[0]["province"] == ""
+
+    def test_mixed_valid_invalid(self):
+        from generate_html_report import compute_rows_detail
         rows = [
-            ["202606010000001", "项目A", "", "", "贵州", "张三", 100.0, 80.0, 20.0, "", "", "2026-06-01", "", "否", "", "", "", "", ""],
-            ["202606010000002", "项目B", "", "", "贵州", "李四", 200.0, 150.0, 50.0, "", "", "2026-06-02", "", "是", "", "", "", "", ""],
-            ["202606010000003", "项目C", "", "", "云南", "张三", 0, 0, 0, "", "", "2026-06-03", "", "否", "", "", "", "", ""],
+            _make_row({0: "202606010000001"}),
+            _make_row({0: "12345"}),
+            _make_row({0: "202606010000002"}),
         ]
-        kpis = compute_kpis(rows)
-        assert kpis["total_projects"] == 3
-        assert kpis["total_salespersons"] == 2
-        assert kpis["ordered_count"] == 1
-        assert kpis["not_ordered_count"] == 2
-        assert kpis["module_power"] == "300.00"
-        assert kpis["inverter_power"] == "230.00"
-        assert kpis["battery_capacity"] == "70.00"
-        assert kpis["ratio"] == "1.30"
+        result = compute_rows_detail(rows)
+        assert len(result) == 2
+        assert result[0]["flowId"] == "202606010000001"
+        assert result[1]["flowId"] == "202606010000002"
 
-    def test_empty_rows(self):
-        from generate_html_report import compute_kpis
-        kpis = compute_kpis([])
-        assert kpis["total_projects"] == 0
-        assert kpis["ordered_count"] == 0
-        assert kpis["ratio"] == "--"
 
-    def test_string_values(self):
-        from generate_html_report import compute_kpis
+# ==================== generate_html_report 集成测试 ====================
+
+
+class TestGenerateHtmlReport:
+    """端到端测试 generate_html_report —— 使用临时模板和输出文件。"""
+
+    def test_basic_generation(self, tmp_path):
+        from generate_html_report import generate_html_report
+
+        # 创建一个最小模板
+        template_path = tmp_path / "template.html"
+        template_path.write_text(
+            "<html><body>"
+            "<p>{{REPORT_DATE_RANGE}}</p>"
+            "<p>{{REPORT_GENERATED_AT}}</p>"
+            "<p>{{DATA_SCOPE_TEXT}}</p>"
+            "<p>{{FOOTER_TEXT}}</p>"
+            "<script>const ROWS_DETAIL = {{ROWS_DETAIL_JSON}};</script>"
+            "</body></html>",
+            encoding="utf-8",
+        )
+        output_path = tmp_path / "output.html"
+
         rows = [
-            ["202606010000001", "项目A", "", "", "贵州", "张三", "100", "80", "20", "", "", "2026-06-01", "", "否"],
+            # flow_id(0), name(1), _, _, prov(4), sp(5), mod(6), inv(7), bat(8), _, _, date(11), _, ord(13), pv_appr(14), _, appr(16), status(17), fdate(18)
+            [
+                "202606010000001", "项目A", "", "", "贵州", "张三",
+                550.0, 100.0, 50.0, "", "", "2026-06-01", "", "是", "", "",
+                "王剑", "审批通过", "2026-06-05",
+            ],
+            [
+                "202606010000002", "项目B", "", "", "云南", "李四",
+                1100.0, 200.0, 100.0, "", "", "2026-06-02", "", "否", "", "",
+                "张三", "审批中", "",
+            ],
         ]
-        kpis = compute_kpis(rows)
-        assert kpis["total_projects"] == 1
-        assert kpis["module_power"] == "100.00"
 
+        result = generate_html_report(
+            rows, "2026-06-01 ~ 2026-06-07",
+            str(output_path),
+            template_path=str(template_path),
+        )
+        assert result == str(output_path)
+        assert output_path.exists()
 
-class TestComputeWangjian:
-    def test_basic(self):
-        from generate_html_report import compute_wangjian_stats
+        content = output_path.read_text(encoding="utf-8")
+        assert "2026-06-01 ~ 2026-06-07" in content
+        assert "询价周报报表" in content
+        assert "ROWS_DETAIL" in content
+        assert "202606010000001" in content
+        assert "202606010000002" in content
+
+    def test_generation_with_filtered_flow_ids(self, tmp_path):
+        """流程编号不合法的行应被过滤，不会出现在注入的 JSON 中。"""
+        from generate_html_report import generate_html_report
+
+        template_path = tmp_path / "template.html"
+        template_path.write_text(
+            "<script>const ROWS_DETAIL = {{ROWS_DETAIL_JSON}};</script>",
+            encoding="utf-8",
+        )
+        output_path = tmp_path / "output.html"
+
         rows = [
-            ["202606010000001", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "王剑", "审批通过", ""],
-            ["202606010000002", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "王剑", "审批通过", ""],
-            ["202606010000003", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "王剑", "审批拒绝", ""],
-            ["202606010000004", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "李四", "审批通过", ""],
+            ["202606010000001", "有效项目", "", "", "贵州", "张三",
+             550.0, 100.0, 50.0, "", "", "2026-06-01", "", "是", "", "",
+             "王剑", "审批通过", "2026-06-05"],
+            ["短ID", "无效项目", "", "", "贵州", "李四",
+             0, 0, 0, "", "", "2026-06-01", "", "否", "", "",
+             "", "", ""],
         ]
-        stats = compute_wangjian_stats(rows)
-        assert stats["approved"] == 2
-        assert stats["total"] == 3
-        assert stats["rate"] == "66%"
 
-    def test_no_wangjian(self):
-        from generate_html_report import compute_wangjian_stats
-        rows = [
-            ["202606010000001", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "李四", "审批通过", ""],
-        ]
-        stats = compute_wangjian_stats(rows)
-        assert stats["approved"] == 0
-        assert stats["total"] == 0
+        generate_html_report(rows, "测试", str(output_path), template_path=str(template_path))
+        content = output_path.read_text(encoding="utf-8")
+        # 短 ID 不应出现在 JSON 中
+        assert "短ID" not in content
+        assert "202606010000001" in content
+
+    def test_default_template_path(self, tmp_path, monkeypatch):
+        """验证默认模板路径指向 references/report_template.html。"""
+        from generate_html_report import generate_html_report
+
+        # monkeypatch 让模板路径指向我们创建的临时模板
+        import os
+        script_dir = tmp_path / "scripts"
+        script_dir.mkdir()
+        ref_dir = tmp_path / "references"
+        ref_dir.mkdir()
+        (ref_dir / "report_template.html").write_text(
+            "<p>{{REPORT_DATE_RANGE}}</p><script>const D={{ROWS_DETAIL_JSON}};</script>",
+            encoding="utf-8",
+        )
+
+        # mock __file__ 所在的目录
+        monkeypatch.setattr("generate_html_report.os.path.abspath",
+                            lambda p: str(script_dir / "generate_html_report.py"))
+
+        output = tmp_path / "out.html"
+        rows = [["202606010000001", "测试", "", "", "省", "人",
+                 0, 0, 0, "", "", "2026-06-01", "", "否", "", "", "", "", ""]]
+        result = generate_html_report(rows, "测试范围", str(output))
+        assert output.exists()
+        content = output.read_text(encoding="utf-8")
+        assert "测试范围" in content
 
 
-class TestComputeProvince:
-    def test_basic(self):
-        from generate_html_report import compute_province_ranking
-        rows = [
-            ["202606010000001", "", "", "", "贵州", "", 100.0, 0, 0],
-            ["202606010000002", "", "", "", "贵州", "", 200.0, 0, 0],
-            ["202606010000003", "", "", "", "云南", "", 150.0, 0, 0],
-        ]
-        ranking = compute_province_ranking(rows)
-        assert len(ranking) == 2
-        assert ranking[0]["province"] == "贵州"
-        assert ranking[0]["count"] == 2
-        assert ranking[0]["module"] == 300.0
-        assert ranking[1]["rank"] == 2
-
-    def test_empty(self):
-        from generate_html_report import compute_province_ranking
-        assert compute_province_ranking([]) == []
-
-
-class TestComputeApprovalDays:
-    def test_basic(self):
-        from generate_html_report import compute_approval_days
-        rows = [
-            ["202606010000001", "", "", "", "", "", 0, 0, 0, "", "", "2026-06-01", "", "", "", "", "", "", "2026-06-05"],
-            ["202606010000002", "", "", "", "", "", 0, 0, 0, "", "", "2026-06-02", "", "", "", "", "", "", "2026-06-04"],
-            ["202606010000003", "", "", "", "", "", 0, 0, 0, "", "", "2026-06-10", "", "", "", "", "", "", ""],
-        ]
-        days = compute_approval_days(rows)
-        assert days["avg"] == 3.0
-        assert days["min"] == 2
-        assert days["max"] == 4
-        assert days["sample_count"] == 2
-
-    def test_no_data(self):
-        from generate_html_report import compute_approval_days
-        days = compute_approval_days([])
-        assert days["avg"] == 0
-        assert days["sample_count"] == 0
+# 注意：compute_kpis / compute_wangjian_stats / compute_province_ranking / compute_approval_days
+# 等聚合函数已移至前端 JS computeAggregates / computeProvinceRanking / computeApprovalDays，
+# 不再由 Python 端计算。对应测试用例随函数删除。

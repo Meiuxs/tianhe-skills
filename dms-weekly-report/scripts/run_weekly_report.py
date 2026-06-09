@@ -441,8 +441,13 @@ def _build_remark(items: list[BOMItem]) -> str:
 # ==================== 详情提取（BOM + 审批时间） ====================
 
 async def _extract_bom(page: Any) -> list[BOMItem]:
-    """从详情页提取 BOM 清单。"""
+    """从详情页提取 BOM 清单。
+
+    支持多个 el-table 容器（组件表 + 逆变器/电池表分开的场景）。
+    通过 body table text content 去重，避免同一个表被重复处理。
+    """
     items: list[BOMItem] = []
+    processed_tables: set[str] = set()
     try:
         tables = await page.locator("table").all()
         for table in tables:
@@ -451,6 +456,14 @@ async def _extract_bom(page: Any) -> list[BOMItem]:
                 # 使用 following:: 而非 following-sibling:: 来应对跨容器布局
                 body_table = table.locator("xpath=./following::table[.//tbody][1]")
                 if await body_table.count() > 0:
+                    # 用 body table 的文本指纹去重，避免重复处理同一张表
+                    body_text = (await body_table.text_content()) or ""
+                    table_fingerprint = body_text.strip()[:200]
+                    if table_fingerprint in processed_tables:
+                        logger.debug("跳过已处理的 BOM 表（指纹重复）")
+                        continue
+                    processed_tables.add(table_fingerprint)
+
                     for row in await body_table.locator("tbody tr").all():
                         cells = await row.locator("td").all()
                         if len(cells) >= 4:
@@ -468,7 +481,7 @@ async def _extract_bom(page: Any) -> list[BOMItem]:
                                 except ValueError:
                                     continue
                             items.append(BOMItem(code=code, name=name, qty=qty, unit=unit))
-                break
+                # 不 break — 继续处理后续 el-table（组件和逆变器可能分不同 table）
     except Exception as e:
         logger.warning("BOM 提取异常: %s", e)
 
