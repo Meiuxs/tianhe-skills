@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>询价周报报表</title>
 <!-- Chart.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
 <style>
 /* ===================================================================
    DESIGN TOKENS — 报表风格配色系统
@@ -406,9 +406,6 @@ thead th {
   white-space: nowrap;
   font-size: 12px;
   letter-spacing: 0.3px;
-  position: sticky;
-  top: 48px;
-  z-index: 10;
 }
 tbody td {
   padding: 9px 14px;
@@ -526,7 +523,7 @@ th.number-right {
    RANKING
    =================================================================== */
 .rank-medal { display: inline-block; font-size: 15px; margin-right: 3px; }
-td:first-child { text-align: center; width: 60px; }
+#province-table-body td:first-child { text-align: center; width: 60px; }
 
 /* ===================================================================
    FOOTER
@@ -611,7 +608,7 @@ td:first-child { text-align: center; width: 60px; }
       </div>
       <div class="global-filter">
         <label for="global-period-select">📅 时间段：</label>
-        <select id="global-period-select" onchange="onGlobalPeriodChange()">
+        <select id="global-period-select">
           <option value="全部">全部</option>
           <option value="本周">本周</option>
           <option value="本月" selected>本月</option>
@@ -627,13 +624,13 @@ td:first-child { text-align: center; width: 60px; }
      TAB NAVIGATION
      =================================================================== -->
 <nav class="tab-nav" role="tablist">
-  <button class="tab-btn active" role="tab" data-tab="overview" onclick="switchTab('overview')">
+  <button class="tab-btn active" role="tab" data-tab="overview">
     📈 项目与容量概览 <span class="badge">KPI</span>
   </button>
-  <button class="tab-btn" role="tab" data-tab="approval" onclick="switchTab('approval')">
+  <button class="tab-btn" role="tab" data-tab="approval">
     ⏱ 审批与时效流转 <span class="badge">效率</span>
   </button>
-  <button class="tab-btn" role="tab" data-tab="detail" onclick="switchTab('detail')">
+  <button class="tab-btn" role="tab" data-tab="detail">
     📋 多维数据明细 <span class="badge">下钻</span>
   </button>
 </nav>
@@ -652,22 +649,22 @@ td:first-child { text-align: center; width: 60px; }
     <div class="kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">询价项目总数</div>
-        <div class="value" id="kpi-total-projects">{{KPI_TOTAL_PROJECTS}}</div>
+        <div class="value" id="kpi-total-projects">--</div>
         <div class="unit">个</div>
       </div>
       <div class="kpi-card">
         <div class="label">涉及业务员</div>
-        <div class="value" id="kpi-total-salespersons">{{KPI_TOTAL_SALESPERSONS}}</div>
+        <div class="value" id="kpi-total-salespersons">--</div>
         <div class="unit">人</div>
       </div>
       <div class="kpi-card green">
         <div class="label">已下单</div>
-        <div class="value" id="kpi-ordered">{{KPI_ORDERED_COUNT}}</div>
+        <div class="value" id="kpi-ordered">--</div>
         <div class="unit">个</div>
       </div>
       <div class="kpi-card orange highlight">
         <div class="label">未下单</div>
-        <div class="value" id="kpi-not-ordered">{{KPI_NOT_ORDERED_COUNT}}</div>
+        <div class="value" id="kpi-not-ordered">--</div>
         <div class="unit">个</div>
       </div>
     </div>
@@ -698,22 +695,22 @@ td:first-child { text-align: center; width: 60px; }
     <div class="kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">组件总功率</div>
-        <div class="value" id="kpi-module-power">{{KPI_MODULE_POWER}}</div>
+        <div class="value" id="kpi-module-power">--</div>
         <div class="unit">kW</div>
       </div>
       <div class="kpi-card">
         <div class="label">逆变器总功率</div>
-        <div class="value" id="kpi-inverter-power">{{KPI_INVERTER_POWER}}</div>
+        <div class="value" id="kpi-inverter-power">--</div>
         <div class="unit">kW</div>
       </div>
       <div class="kpi-card">
         <div class="label">电池总容量</div>
-        <div class="value" id="kpi-battery-capacity">{{KPI_BATTERY_CAPACITY}}</div>
+        <div class="value" id="kpi-battery-capacity">--</div>
         <div class="unit">kWh</div>
       </div>
       <div class="kpi-card highlight">
         <div class="label">容配比</div>
-        <div class="value" id="kpi-ratio">{{KPI_RATIO}}</div>
+        <div class="value" id="kpi-ratio">--</div>
         <div class="unit">组件/逆变器</div>
       </div>
     </div>
@@ -769,24 +766,24 @@ td:first-child { text-align: center; width: 60px; }
     </h2>
     <div class="filter-bar">
       <label for="approver-select">👤 审批人：</label>
-      <select id="approver-select" onchange="onApproverChange()">
+      <select id="approver-select">
         <option value="全部">全部审批人</option>
       </select>
     </div>
     <div class="kpi-grid">
       <div class="kpi-card green">
         <div class="label">审批通过</div>
-        <div class="value" id="approver-approved">{{WANGJIAN_APPROVED}}</div>
+        <div class="value" id="approver-approved">--</div>
         <div class="unit">次</div>
       </div>
       <div class="kpi-card">
         <div class="label">经手总次数</div>
-        <div class="value" id="approver-total">{{WANGJIAN_TOTAL}}</div>
+        <div class="value" id="approver-total">--</div>
         <div class="unit">次</div>
       </div>
       <div class="kpi-card highlight">
         <div class="label">通过率</div>
-        <div class="value" id="approver-rate">{{WANGJIAN_RATE}}</div>
+        <div class="value" id="approver-rate">--</div>
         <div class="unit"></div>
       </div>
     </div>
@@ -818,22 +815,22 @@ td:first-child { text-align: center; width: 60px; }
     <div class="kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">平均天数</div>
-        <div class="value">{{DAYS_AVG}}</div>
+        <div class="value" id="days-avg">--</div>
         <div class="unit">天</div>
       </div>
       <div class="kpi-card green">
         <div class="label">最短天数</div>
-        <div class="value">{{DAYS_MIN}}</div>
+        <div class="value" id="days-min">--</div>
         <div class="unit">天</div>
       </div>
       <div class="kpi-card orange">
         <div class="label">最长天数</div>
-        <div class="value">{{DAYS_MAX}}</div>
+        <div class="value" id="days-max">--</div>
         <div class="unit">天</div>
       </div>
       <div class="kpi-card">
         <div class="label">统计样本</div>
-        <div class="value">{{DAYS_SAMPLE_COUNT}}</div>
+        <div class="value" id="days-sample-count">--</div>
         <div class="unit">条</div>
       </div>
     </div>
@@ -913,29 +910,24 @@ td:first-child { text-align: center; width: 60px; }
 </footer>
 
 <!-- ===================================================================
-     JAVASCRIPT
+     JAVASCRIPT — 三层数据管道
      =================================================================== -->
 <script>
 /* ===================================================================
-   DATA — 由后端脚本注入
+   DATA — 由后端注入，唯一数据源
    =================================================================== */
-const PERIOD_DATA           = {{PERIOD_DATA_JSON}} || {};
-const PROVINCE_DATA         = {{PROVINCE_DATA_JSON}} || [];
-const KPI_DATA              = {{KPI_DATA_JSON}} || {};
-const DAILY_DATA            = {{DAILY_DATA_JSON}} || {};
-const ROWS_DETAIL           = {{ROWS_DETAIL_JSON}} || [];
-const APPROVAL_BY_PROVINCE  = {{APPROVAL_BY_PROVINCE_JSON}} || [];
-const APPROVAL_BY_SALESPERSON = {{APPROVAL_BY_SALESPERSON_JSON}} || [];
-const APPROVER_LIST         = {{APPROVER_LIST_JSON}} || [];
+const ROWS_DETAIL = {{ROWS_DETAIL_JSON}} || [];
+let currentGlobalPeriod = '本月';
 
-/* Chart.js 加载状态 */
+/* ===================================================================
+   CHART.JS 加载检查
+   =================================================================== */
 var CHART_JS_LOADED = typeof Chart !== 'undefined';
 
-/* 加载失败降级：显示提示而非空白 */
 function checkChartJsLoaded() {
   if (typeof Chart === 'undefined') {
     document.querySelectorAll('canvas[id^="chart-"]').forEach(function(canvas) {
-      var msg = document.createElement('p');
+      let msg = document.createElement('p');
       msg.style.cssText = 'text-align:center;padding:40px 16px;color:#95A5A6;font-size:14px;';
       msg.textContent = '⚠ 图表库加载失败，请检查网络连接后刷新页面';
       canvas.parentNode.replaceChild(msg, canvas);
@@ -949,7 +941,6 @@ function checkChartJsLoaded() {
   return true;
 }
 
-/* Chart.js 全局默认值（仅初始化一次） */
 function initChartDefaults() {
   if (!CHART_JS_LOADED) return;
   Chart.defaults.font.family = '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
@@ -958,15 +949,14 @@ function initChartDefaults() {
   Chart.register(donutCenterPlugin);
 }
 
-/* 仅在 Chart.js 可用时执行初始化 */
 function safeChartInit(fn) {
   if (!checkChartJsLoaded()) return null;
   return fn();
 }
 
-const periodNames = Object.keys(PERIOD_DATA);
-
-/* 报表风格图表调色板 */
+/* ===================================================================
+   CHART COLOR PALETTE & UTILITIES
+   =================================================================== */
 const CHART_COLORS = {
   navy:     '#1D4ED8',
   blue:     '#3B82F6',
@@ -981,13 +971,11 @@ const CHART_COLORS = {
   palette: ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4'],
 };
 
-/* 工具：格式化数字 */
 function fmtNum(n) {
   if (n == null) return '0';
   return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-/* 工具：HTML 转义（防 XSS） */
 function escHtml(s) {
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, function(c) {
@@ -995,30 +983,28 @@ function escHtml(s) {
   });
 }
 
-/* 工具：检查图表数据集是否有有效值 */
 function hasData(arr) {
   return Array.isArray(arr) && arr.some(function(v) { return parseFloat(v) > 0; });
 }
 
-/* 工具：无数据时在 canvas 父容器显示提示 */
 function showNoData(canvasId, message, icon) {
-  var canvas = document.getElementById(canvasId);
+  let canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  var wrap = canvas.parentNode;
+  let wrap = canvas.parentNode;
   if (!wrap) return;
-  var existing = wrap.querySelector('.no-data-msg');
+  let existing = wrap.querySelector('.no-data-msg');
   if (existing) existing.remove();
   canvas.style.display = 'none';
 
-  var container = document.createElement('div');
+  let container = document.createElement('div');
   container.className = 'no-data-msg';
   container.style.cssText = 'text-align:center;padding:48px 16px;';
 
-  var iconEl = document.createElement('div');
+  let iconEl = document.createElement('div');
   iconEl.style.cssText = 'font-size:40px;margin-bottom:12px;opacity:0.5;';
   iconEl.textContent = icon || '📭';
 
-  var msgEl = document.createElement('p');
+  let msgEl = document.createElement('p');
   msgEl.style.cssText = 'color:#95A5A6;font-size:13px;margin:0;';
   msgEl.textContent = message || '暂无数据';
 
@@ -1027,32 +1013,21 @@ function showNoData(canvasId, message, icon) {
   wrap.appendChild(container);
 }
 
-/* ===================================================================
-   CHART INSTANCES & FACTORIES
-   =================================================================== */
-const chartInstances = {};
-const tabCharts = {
-  overview:  ['chart-order-donut', 'chart-power-bar', 'chart-province-bar'],
-  approval:  ['chart-approval-donut', 'chart-approval-compare'],
-  detail:    ['chart-query-bar'],
-};
-const tabInitialized = { overview: false, approval: false, detail: false };
-
 /* ──────────── 饼图中心文字插件 ──────────── */
 var donutCenterPlugin = {
   id: 'donutCenterText',
   afterDraw: function(chart) {
-    var width = chart.width;
-    var height = chart.height;
-    var ctx = chart.ctx;
+    let width = chart.width;
+    let height = chart.height;
+    let ctx = chart.ctx;
     ctx.save();
-    var centerX = width / 2;
-    var centerY = height / 2 - 4;
-    var meta = chart.getDatasetMeta(0);
+    let centerX = width / 2;
+    let centerY = height / 2 - 4;
+    let meta = chart.getDatasetMeta(0);
     if (!meta || !meta.total) return;
-    var total = meta.total;
+    let total = meta.total;
     if (chart.options.cutout === 0) { ctx.restore(); return; }
-    var fontSize = Math.min(width, height) * 0.08;
+    let fontSize = Math.min(width, height) * 0.08;
     ctx.font = '600 ' + fontSize + 'px ' + Chart.defaults.font.family;
     ctx.fillStyle = '#2C3E50';
     ctx.textAlign = 'center';
@@ -1062,16 +1037,13 @@ var donutCenterPlugin = {
   },
 };
 
-/* ──────────── 通用配置工具 ──────────── */
+/* ──────────── 通用图表配置 ──────────── */
 function makeBarOpts(xLabel, yLabel) {
   return {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 2.2,
-    animation: {
-      duration: 600,
-      easing: 'easeOutQuart',
-    },
+    animation: { duration: 600, easing: 'easeOutQuart' },
     plugins: {
       legend: {
         position: 'bottom',
@@ -1091,10 +1063,7 @@ function makeBarOpts(xLabel, yLabel) {
       },
     },
     scales: {
-      x: {
-        grid: { display: false },
-        ticks: { font: { size: 11 } },
-      },
+      x: { grid: { display: false }, ticks: { font: { size: 11 } } },
       y: {
         beginAtZero: true,
         grid: { color: 'rgba(0,0,0,0.06)' },
@@ -1109,10 +1078,7 @@ function makeDonutOpts() {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 1.2,
-    animation: {
-      duration: 600,
-      easing: 'easeOutQuart',
-    },
+    animation: { duration: 600, easing: 'easeOutQuart' },
     plugins: {
       legend: {
         position: 'bottom',
@@ -1137,7 +1103,9 @@ function makeDonutOpts() {
   };
 }
 
-/* ──────────── 创建/更新图表 ──────────── */
+/* ──────────── 图表实例管理 ──────────── */
+const chartInstances = {};
+
 function createChart(canvasId, config) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return null;
@@ -1149,33 +1117,245 @@ function createChart(canvasId, config) {
   return chartInstances[canvasId];
 }
 
-function initTabCharts(tabName) {
-  if (!checkChartJsLoaded()) return;
+/* ===================================================================
+   LAYER 1: 过滤层 — 按时间段筛选原始数据
+   =================================================================== */
 
-  if (tabInitialized[tabName]) {
-    tabCharts[tabName].forEach(function(id) {
-      if (chartInstances[id]) {
-        setTimeout(function() { chartInstances[id].resize(); }, 10);
-      }
-    });
-    return;
-  }
+/**
+ * 获取时间段对应的日期范围 [start, end] 字符串。
+ * 返回 null 表示「全部」（不过滤）。
+ */
+function getPeriodDateRange(periodName) {
+  let today = new Date();
+  let y = today.getFullYear();
+  let m = today.getMonth(); // 0-based
+  let todayStr = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
 
-  switch (tabName) {
-    case 'overview': initOverviewCharts(); break;
-    case 'approval': initApprovalCharts(); break;
-    case 'detail':   initDetailCharts();   break;
+  switch (periodName) {
+    case '全部':
+      return null;
+    case '本周': {
+      let ws = new Date(today);
+      ws.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // 周一
+      return [ws.toISOString().split('T')[0], todayStr];
+    }
+    case '本月': {
+      let ms = y + '-' + String(m + 1).padStart(2, '0') + '-01';
+      return [ms, todayStr];
+    }
+    case '上月': {
+      let lmEnd = new Date(y, m, 0); // 上月最后一天
+      let lmStart = (m === 0 ? (y - 1) : y) + '-' + (m === 0 ? '12' : String(m).padStart(2, '0')) + '-01';
+      return [lmStart, lmEnd.toISOString().split('T')[0]];
+    }
+    case '本季度': {
+      let qs = Math.floor(m / 3) * 3;
+      let qStart = y + '-' + String(qs + 1).padStart(2, '0') + '-01';
+      return [qStart, todayStr];
+    }
+    default:
+      return null;
   }
-  tabInitialized[tabName] = true;
+}
+
+function filterRowsByPeriod(rows, periodName) {
+  let range = getPeriodDateRange(periodName);
+  if (!range) return rows; // '全部'
+  let start = range[0], end = range[1];
+  return rows.filter(function(row) {
+    return row.submitDate >= start && row.submitDate <= end;
+  });
 }
 
 /* ===================================================================
-   TAB 1: OVERVIEW CHARTS
+   LAYER 2: 计算层 — 纯函数，接收 rows[] 返回派生数据
    =================================================================== */
+
+/** 汇总统计：项目数、容量、下单率等 */
+function computeAggregates(rows) {
+  let total = 0, ordered = 0;
+  let modulePower = 0, inverterPower = 0, batteryCapacity = 0;
+  let spSet = {};
+
+  rows.forEach(function(row) {
+    total++;
+    if (row.ordered === '是') ordered++;
+    modulePower += row.modulePower || 0;
+    inverterPower += row.inverterPower || 0;
+    batteryCapacity += row.batteryCapacity || 0;
+    if (row.salesperson && row.salesperson !== '--' && row.salesperson !== '无') {
+      spSet[row.salesperson] = true;
+    }
+  });
+
+  return {
+    totalProjects: total,
+    orderedCount: ordered,
+    notOrderedCount: total - ordered,
+    salespersons: Object.keys(spSet).length,
+    modulePower: modulePower,
+    inverterPower: inverterPower,
+    batteryCapacity: batteryCapacity,
+    ratio: inverterPower > 0 ? Math.round(modulePower / inverterPower * 100) / 100 : 0,
+  };
+}
+
+/** 省公司排名 */
+function computeProvinceRanking(rows) {
+  let stats = {};
+  rows.forEach(function(row) {
+    let pv = row.province;
+    if (!pv || pv === '--' || pv === '无' || pv === '') return;
+    if (!stats[pv]) stats[pv] = { province: pv, count: 0, module: 0 };
+    stats[pv].count += 1;
+    stats[pv].module += row.modulePower || 0;
+  });
+  return Object.values(stats)
+    .sort(function(a, b) { return b.count - a.count; })
+    .map(function(item, i) {
+      item.rank = i + 1;
+      item.module = Math.round(item.module * 100) / 100;
+      return item;
+    });
+}
+
+/** 审批天数统计 */
+function computeApprovalDays(rows) {
+  let days = [];
+  rows.forEach(function(row) {
+    let sd = row.submitDate;
+    let fd = row.finalDate;
+    if (!sd || !fd) return;
+    let d1 = new Date(sd);
+    let d2 = new Date(fd);
+    // +1 使天数包含起始日和结束日（tooltip 注明"含当日"）
+    let diff = Math.round((d2 - d1) / 86400000) + 1;
+    if (diff >= 1) days.push(diff);
+  });
+  return {
+    avg: days.length > 0 ? Math.round(days.reduce(function(a,b) { return a+b; }, 0) / days.length * 10) / 10 : 0,
+    min: days.length > 0 ? Math.min.apply(null, days) : 0,
+    max: days.length > 0 ? Math.max.apply(null, days) : 0,
+    sampleCount: days.length,
+  };
+}
+
+/** 提取唯一的采购审批人列表 */
+function extractApproverList(rows) {
+  let set = {};
+  rows.forEach(function(row) {
+    let name = row.procurementApprover;
+    if (name && name !== '--' && name !== '无' && name !== '') {
+      set[name] = true;
+    }
+  });
+  return Object.keys(set).sort();
+}
+
+/** 统计指定审批人的审批通过情况 */
+function computeApproverStats(rows, approverName) {
+  let approved = 0, total = 0;
+  let hasApprover = function(name) {
+    return name && name !== '--' && name !== '无' && name !== '';
+  };
+  let isMatch = function(name) {
+    return approverName === '全部' ? hasApprover(name) : name === approverName;
+  };
+  rows.forEach(function(row) {
+    if (isMatch(row.procurementApprover)) {
+      total++;
+      if (row.approvalStatus.indexOf('审批通过') >= 0) approved++;
+    }
+  });
+  return { approved: approved, total: total, rate: total > 0 ? Math.round(approved / total * 100) + '%' : '--' };
+}
+
+/** 按维度（省公司/业务员）统计审批耗时对比 */
+function computeApprovalByDimension(rows, field) {
+  let stats = {};
+  rows.forEach(function(row) {
+    let sd = row.submitDate;
+    let fd = row.finalDate;
+    if (!sd || !fd) return;
+    let key = row[field] || '';
+    if (!key || key === '--' || key === '无' || key === '') return;
+    let d1 = new Date(sd);
+    let d2 = new Date(fd);
+    let diff = (d2 - d1) / 86400000;
+    if (diff < 0) return;
+    if (!stats[key]) stats[key] = [];
+    stats[key].push(diff);
+  });
+  return Object.keys(stats).map(function(key) {
+    let days = stats[key];
+    let sum = days.reduce(function(a,b) { return a+b; }, 0);
+    return {
+      name: key,
+      avg: Math.round(sum / days.length * 10) / 10,
+      min: Math.min.apply(null, days),
+      max: Math.max.apply(null, days),
+      count: days.length,
+    };
+  }).sort(function(a, b) { return b.avg - a.avg; });
+}
+
+/** 计算 5 个时间段的汇总数据（用于周期对比图），结果缓存复用 */
+let _periodSummaryCache = null;
+
+function computePeriodSummaries(rows) {
+  if (_periodSummaryCache) return _periodSummaryCache;
+  let periods = ['全部', '本周', '本月', '上月', '本季度'];
+  let allStats = {};
+  periods.forEach(function(name) {
+    let filtered = filterRowsByPeriod(rows, name);
+    allStats[name] = computeAggregates(filtered);
+  });
+  _periodSummaryCache = allStats;
+  return allStats;
+}
+
+/* ===================================================================
+   LAYER 3: 渲染层 — 接收派生数据，更新 DOM / Chart.js
+   =================================================================== */
+
+function updateOverviewKPIs(stats) {
+  setText('kpi-total-projects', stats.totalProjects);
+  setText('kpi-total-salespersons', stats.salespersons);
+  setText('kpi-ordered', stats.orderedCount);
+  setText('kpi-not-ordered', stats.notOrderedCount);
+  setText('kpi-module-power', fmtNum(stats.modulePower));
+  setText('kpi-inverter-power', fmtNum(stats.inverterPower));
+  setText('kpi-battery-capacity', fmtNum(stats.batteryCapacity));
+  setText('kpi-ratio', stats.ratio.toFixed(2));
+}
+
+function renderApproverKPI(stats) {
+  setText('approver-approved', stats.approved);
+  setText('approver-total', stats.total);
+  setText('approver-rate', stats.rate);
+}
+
+function renderApprovalDays(days) {
+  setText('days-avg', days.avg.toFixed(1));
+  setText('days-min', days.min);
+  setText('days-max', days.max);
+  setText('days-sample-count', days.sampleCount);
+}
+
+function setText(id, val) {
+  let el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+/* ──────────── Tab 1 图表：概览 ──────────── */
 function initOverviewCharts() {
-  // ── 1. 订单状态饼图 ──
-  const ordered    = parseFloat(KPI_DATA.orderedCount) || 0;
-  const notOrdered = parseFloat(KPI_DATA.notOrderedCount) || 0;
+  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let stats = computeAggregates(filtered);
+  let ranking = computeProvinceRanking(filtered);
+
+  // 1. 订单状态饼图
+  let ordered = stats.orderedCount;
+  let notOrdered = stats.notOrderedCount;
   if (hasData([ordered, notOrdered])) {
     createChart('chart-order-donut', {
       type: 'doughnut',
@@ -1194,10 +1374,10 @@ function initOverviewCharts() {
     showNoData('chart-order-donut', '暂无订单数据', '📊');
   }
 
-  // ── 2. 功率容量对比柱状图 ──
-  const mPower = parseFloat(KPI_DATA.modulePower) || 0;
-  const iPower = parseFloat(KPI_DATA.inverterPower) || 0;
-  const bPower = parseFloat(KPI_DATA.batteryCapacity) || 0;
+  // 2. 功率容量对比柱状图
+  let mPower = stats.modulePower;
+  let iPower = stats.inverterPower;
+  let bPower = stats.batteryCapacity;
   if (hasData([mPower, iPower, bPower])) {
     createChart('chart-power-bar', {
       type: 'bar',
@@ -1246,19 +1426,9 @@ function initOverviewCharts() {
     showNoData('chart-power-bar', '暂无功率数据', '⚡');
   }
 
-  // ── 4. 省公司排名横向条形图（按当前时间段动态聚合）──
-  var provRanking = getProvinceRankingForPeriod(currentGlobalPeriod);
-  var provLabels = [];
-  var provCounts = [];
-  var provModules = [];
-  var provColors = [];
-  provRanking.forEach(function(item, i) {
-    provLabels.push(item.province);
-    provCounts.push(item.count);
-    provModules.push(item.module);
-    provColors.push(CHART_COLORS.palette[i % CHART_COLORS.palette.length]);
-  });
-
+  // 3. 省公司排名横向条形图
+  let provLabels = ranking.map(function(r) { return r.province; });
+  let provCounts = ranking.map(function(r) { return r.count; });
   if (hasData(provCounts)) {
     createChart('chart-province-bar', {
       type: 'bar',
@@ -1267,7 +1437,9 @@ function initOverviewCharts() {
         datasets: [{
           label: '询价次数',
           data: provCounts,
-          backgroundColor: provColors,
+          backgroundColor: ranking.map(function(_, i) {
+            return CHART_COLORS.palette[i % CHART_COLORS.palette.length];
+          }),
           borderRadius: 3,
           maxBarThickness: 40,
         }],
@@ -1290,9 +1462,9 @@ function initOverviewCharts() {
                 return '询价次数: ' + fmtNum(ctx.parsed.x);
               },
               afterLabel: function(ctx) {
-                var i = ctx.dataIndex;
-                if (provModules[i] != null) return '组件功率: ' + fmtNum(provModules[i]) + ' kW';
-                return '';
+                let i = ctx.dataIndex;
+                let modVal = ranking[i] ? ranking[i].module : null;
+                return modVal != null ? '组件功率: ' + fmtNum(modVal) + ' kW' : '';
               }
             }
           },
@@ -1315,123 +1487,29 @@ function initOverviewCharts() {
   }
 }
 
-/* ===================================================================
-   TAB 2: APPROVAL CHARTS
-   =================================================================== */
-function getSelectedApprover() {
-  var sel = document.getElementById('approver-select');
-  return sel ? sel.value : '王剑';
-}
-
-function getApproverStats(approverName) {
-  if (approverName === '全部') {
-    var approved = 0, total = 0;
-    ROWS_DETAIL.forEach(function(row) {
-      total++;
-      if (row.approvalStatus.indexOf('审批通过') >= 0) approved++;
-    });
-    return { approved: approved, total: total };
-  }
-  // 与默认审批人相同时使用服务端预计算值
-  if (approverName === KPI_DATA.approverName) {
-    return {
-      approved: parseFloat(KPI_DATA.approverApproved) || 0,
-      total: parseFloat(KPI_DATA.approverTotal) || 0,
-    };
-  }
-  // 其他审批人：前端遍历 ROWS_DETAIL 实时计算
-  var approved = 0, total = 0;
-  ROWS_DETAIL.forEach(function(row) {
-    if (row.procurementApprover.indexOf(approverName) >= 0) {
-      total++;
-      if (row.approvalStatus.indexOf('审批通过') >= 0) approved++;
-    }
-  });
-  return { approved: approved, total: total };
-}
-
-/* ===================================================================
-   KPI UPDATE — 根据全局时间段刷新 Tab 1 所有 KPI 卡片
-   =================================================================== */
-function updateOverviewKPIs(periodName) {
-  var d = PERIOD_DATA[periodName];
-  if (!d) return;
-
-  // 汇总 KPI
-  var elTotal = document.getElementById('kpi-total-projects');
-  if (elTotal) elTotal.textContent = d.count;
-  var elSp = document.getElementById('kpi-total-salespersons');
-  if (elSp) elSp.textContent = d.salespersons;
-  var elOrdered = document.getElementById('kpi-ordered');
-  if (elOrdered) elOrdered.textContent = d.ordered;
-  var elNot = document.getElementById('kpi-not-ordered');
-  if (elNot) elNot.textContent = d.notOrdered;
-
-  // 容量 KPI
-  var elMod = document.getElementById('kpi-module-power');
-  if (elMod) elMod.textContent = fmtNum(d.module);
-  var elInv = document.getElementById('kpi-inverter-power');
-  if (elInv) elInv.textContent = fmtNum(d.inverter);
-  var elBat = document.getElementById('kpi-battery-capacity');
-  if (elBat) elBat.textContent = fmtNum(d.battery);
-  var elRatio = document.getElementById('kpi-ratio');
-  if (elRatio) elRatio.textContent = d.ratio.toFixed(2);
-}
-
-function onApproverChange() {
-  var stats = getApproverStats(getSelectedApprover());
-  // 更新 KPI 卡片
-  document.getElementById('approver-approved').textContent = stats.approved;
-  document.getElementById('approver-total').textContent = stats.total;
-  var rate = stats.total > 0 ? Math.round(stats.approved / stats.total * 100) + '%' : '--';
-  document.getElementById('approver-rate').textContent = rate;
-
-  // 重建审批图表
-  var chartIds = tabCharts.approval;
-  chartIds.forEach(function(id) {
-    if (chartInstances[id]) {
-      chartInstances[id].destroy();
-      delete chartInstances[id];
-    }
-  });
-  document.querySelectorAll('#tab-approval .no-data-msg').forEach(function(el) { el.remove(); });
-  document.querySelectorAll('#tab-approval canvas').forEach(function(c) { c.style.display = ''; });
-  initApprovalCharts();
-}
-
-function populateApproverSelect() {
-  var sel = document.getElementById('approver-select');
-  if (!sel) return;
-  var currentVal = sel.value;
-  sel.innerHTML = '<option value="全部">全部审批人</option>';
-  var defaultApprover = KPI_DATA.approverName || (APPROVER_LIST.length > 0 ? APPROVER_LIST[0] : '');
-  APPROVER_LIST.forEach(function(name) {
-    var opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    // 优先保留用户已选值，否则使用默认审批人
-    if (name === currentVal && APPROVER_LIST.indexOf(currentVal) >= 0) opt.selected = true;
-    else if (!currentVal || currentVal === '全部') {
-      if (name === defaultApprover) opt.selected = true;
-    }
-    sel.appendChild(opt);
-  });
-}
-
+/* ──────────── Tab 2 图表：审批 ──────────── */
 function initApprovalCharts() {
-  // ── 1. 审批通过率饼图（未通过用红色）──
-  var stats = getApproverStats(getSelectedApprover());
-  var wApproved = stats.approved;
-  var wTotal = stats.total;
-  var wNot = Math.max(0, wTotal - wApproved);
+  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let approverName = getSelectedApprover();
+  let approverStats = computeApproverStats(filtered, approverName);
+  let compareData = computeApprovalByDimension(filtered, 'province');
 
-  if (hasData([wApproved, wNot])) {
+  // KPI 卡片
+  renderApproverKPI(approverStats);
+  // 审批天数
+  renderApprovalDays(computeApprovalDays(filtered));
+
+  // 1. 审批通过率饼图
+  let approved = approverStats.approved;
+  let total = approverStats.total;
+  let notApproved = Math.max(0, total - approved);
+  if (hasData([approved, notApproved])) {
     createChart('chart-approval-donut', {
       type: 'doughnut',
       data: {
         labels: ['审批通过', '未通过'],
         datasets: [{
-          data: [wApproved, wNot],
+          data: [approved, notApproved],
           backgroundColor: [CHART_COLORS.green, CHART_COLORS.red],
           borderWidth: 2,
           borderColor: '#fff',
@@ -1443,23 +1521,19 @@ function initApprovalCharts() {
     showNoData('chart-approval-donut', '暂无审批数据', '✅');
   }
 
-  // ── 2. 审批耗时分组对比水平条形图 ──
-  var compareData = APPROVAL_BY_PROVINCE;
+  // 2. 审批耗时对比水平条形图
   if (!compareData || compareData.length === 0) {
     showNoData('chart-approval-compare', '暂无审批耗时对比数据', '⏱');
     return;
   }
-  var labels = compareData.map(function(d) { return d.name; });
-  var avgData = compareData.map(function(d) { return d.avg; });
-
   createChart('chart-approval-compare', {
     type: 'bar',
     data: {
-      labels: labels,
+      labels: compareData.map(function(d) { return d.name; }),
       datasets: [{
         label: '平均审批耗时 (天)',
-        data: avgData,
-        backgroundColor: labels.map(function(_, i) {
+        data: compareData.map(function(d) { return d.avg; }),
+        backgroundColor: compareData.map(function(_, i) {
           return CHART_COLORS.palette[i % CHART_COLORS.palette.length];
         }),
         borderRadius: 3,
@@ -1469,7 +1543,7 @@ function initApprovalCharts() {
     options: {
       responsive: true,
       maintainAspectRatio: true,
-      aspectRatio: Math.max(1.2, labels.length * 0.25),
+      aspectRatio: Math.max(1.2, compareData.length * 0.25),
       indexAxis: 'y',
       animation: { duration: 600, easing: 'easeOutQuart' },
       plugins: {
@@ -1480,8 +1554,7 @@ function initApprovalCharts() {
           cornerRadius: 5,
           callbacks: {
             label: function(ctx) {
-              var i = ctx.dataIndex;
-              var d = compareData[i];
+              let d = compareData[ctx.dataIndex];
               return '平均: ' + d.avg + '天 | 最短: ' + d.min + '天 | 最长: ' + d.max + '天 | 样本: ' + d.count + '条';
             },
           },
@@ -1505,22 +1578,22 @@ function initApprovalCharts() {
   });
 }
 
-/* ===================================================================
-   TAB 3: DETAIL CHARTS & TABLE
-   =================================================================== */
+/* ──────────── Tab 3 图表：明细 ──────────── */
 function initDetailCharts() {
-  const labels = periodNames.length ? periodNames : ['全部'];
-  const moduleData   = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.module : 0; });
-  const inverterData = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.inverter : 0; });
-  const batteryData  = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.battery : 0; });
+  let summaries = computePeriodSummaries(ROWS_DETAIL);
+  let periodNames = Object.keys(summaries);
+  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
 
-  if (!hasData(moduleData) && !hasData(inverterData) && !hasData(batteryData)) {
-    showNoData('chart-query-bar', '暂无周期功率数据', '📋');
-  } else {
+  // 周期功率趋势柱状图
+  let moduleData = periodNames.map(function(n) { return summaries[n].modulePower; });
+  let inverterData = periodNames.map(function(n) { return summaries[n].inverterPower; });
+  let batteryData = periodNames.map(function(n) { return summaries[n].batteryCapacity; });
+
+  if (hasData(moduleData) || hasData(inverterData) || hasData(batteryData)) {
     createChart('chart-query-bar', {
       type: 'bar',
       data: {
-        labels: labels,
+        labels: periodNames,
         datasets: [{
           label: '组件功率 (kW)',
           data: moduleData,
@@ -1543,156 +1616,185 @@ function initDetailCharts() {
       },
       options: makeBarOpts('时间段', '容量'),
     });
+  } else {
+    showNoData('chart-query-bar', '暂无周期功率数据', '📋');
   }
 
-  // 渲染明细表格
-  renderDetailTable(currentGlobalPeriod);
+  // 明细表格
+  renderDetailTable(filtered);
 }
 
-function filterDetailByPeriod(rows, periodName) {
-  if (!rows || rows.length === 0) return [];
-  if (periodName === '全部') return rows;
-
-  var today = new Date();
-  var todayStr = today.toISOString().split('T')[0];
-  var weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - today.getDay() + 1);
-
-  var monthStart = today.getFullYear() + '-' +
-    String(today.getMonth() + 1).padStart(2, '0') + '-01';
-
-  var lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-  var lastMonthStart = today.getFullYear() + '-' +
-    String(today.getMonth() === 0 ? 12 : today.getMonth()).padStart(2, '0') + '-01';
-  var lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
-
-  var quarterStartMonth = Math.floor(today.getMonth() / 3) * 3 + 1;
-  var quarterStart = today.getFullYear() + '-' +
-    String(quarterStartMonth).padStart(2, '0') + '-01';
-
-  return rows.filter(function(item) {
-    var d = item.submitDate;
-    if (!d) return false;
-    switch (periodName) {
-      case '本周':
-        return d >= weekStart.toISOString().split('T')[0] && d <= todayStr;
-      case '本月':
-        return d >= monthStart && d <= todayStr;
-      case '上月':
-        return d >= lastMonthStart && d <= lastMonthEndStr;
-      case '本季度':
-        return d >= quarterStart && d <= todayStr;
-      default:
-        return true;
-    }
-  });
+/* ──────────── 明细表格 ──────────── */
+function createTableCell(tag, content, className) {
+  let cell = document.createElement(tag);
+  if (className) cell.className = className;
+  cell.textContent = content;
+  return cell;
 }
 
-/* ===================================================================
-   PROVINCE RANKING — 从 ROWS_DETAIL 按时间段动态聚合省公司排名
-   =================================================================== */
-function getProvinceRankingForPeriod(periodName) {
-  var rows = filterDetailByPeriod(ROWS_DETAIL, periodName);
-  var stats = {};
-  rows.forEach(function(row) {
-    var pv = row.province;
-    if (!pv || pv === '--' || pv === '无' || pv === '') return;
-    if (!stats[pv]) stats[pv] = { province: pv, count: 0, module: 0 };
-    stats[pv].count += 1;
-    stats[pv].module += row.modulePower || 0;
-  });
-  var ranking = Object.values(stats).sort(function(a, b) { return b.count - a.count; });
-  ranking.forEach(function(item, i) {
-    item.rank = i + 1;
-    item.module = Math.round(item.module * 100) / 100;
-  });
-  return ranking;
-}
-
-function renderDetailTable(periodName) {
-  var tbody = document.getElementById('detail-table-body');
+function renderDetailTable(rows) {
+  let tbody = document.getElementById('detail-table-body');
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  var label = document.getElementById('detail-period-label');
-  if (label) label.textContent = periodName;
+  let label = document.getElementById('detail-period-label');
+  if (label) label.textContent = currentGlobalPeriod;
 
-  var filtered = filterDetailByPeriod(ROWS_DETAIL, periodName);
-
-  if (filtered.length === 0) {
-    var tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="10" style="text-align:center;padding:32px;color:#95A5A6;">该时间段暂无询价项目明细</td>';
+  if (rows.length === 0) {
+    let tr = document.createElement('tr');
+    let td = document.createElement('td');
+    td.colSpan = 10;
+    td.style.cssText = 'text-align:center;padding:32px;color:#95A5A6;';
+    td.textContent = '该时间段暂无询价项目明细';
+    tr.appendChild(td);
     tbody.appendChild(tr);
   } else {
-    filtered.forEach(function(item) {
-      var tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td>' + escHtml(item.flowId) + '</td>' +
-        '<td>' + escHtml(item.projectName) + '</td>' +
-        '<td>' + escHtml(item.province) + '</td>' +
-        '<td>' + escHtml(item.salesperson) + '</td>' +
-        '<td class="number-right">' + (item.modulePower > 0 ? item.modulePower.toFixed(2) : '--') + '</td>' +
-        '<td class="number-right">' + (item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--') + '</td>' +
-        '<td class="number-right">' + (item.batteryCapacity > 0 ? item.batteryCapacity.toFixed(2) : '--') + '</td>' +
-        '<td>' + escHtml(item.ordered) + '</td>' +
-        '<td>' + escHtml(item.submitDate) + '</td>' +
-        '<td>' + escHtml(item.procurementApprover) + '</td>';
+    rows.forEach(function(item) {
+      let tr = document.createElement('tr');
+      tr.appendChild(createTableCell('td', item.flowId));
+      tr.appendChild(createTableCell('td', item.projectName));
+      tr.appendChild(createTableCell('td', item.province));
+      tr.appendChild(createTableCell('td', item.salesperson));
+      tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--', 'number-right'));
+      tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--', 'number-right'));
+      tr.appendChild(createTableCell('td', item.batteryCapacity > 0 ? item.batteryCapacity.toFixed(2) : '--', 'number-right'));
+      tr.appendChild(createTableCell('td', item.ordered));
+      tr.appendChild(createTableCell('td', item.submitDate));
+      tr.appendChild(createTableCell('td', item.procurementApprover));
       tbody.appendChild(tr);
     });
   }
 }
 
-/* ===================================================================
-   GLOBAL PERIOD FILTER
-   =================================================================== */
-var currentGlobalPeriod = '本月';
+/* ──────────── 省公司排名表格 ──────────── */
+var MEDALS = ['🥇', '🥈', '🥉'];
 
-function onGlobalPeriodChange() {
-  var sel = document.getElementById('global-period-select');
+function renderProvinceTable() {
+  let tbody = document.getElementById('province-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let ranking = computeProvinceRanking(filtered);
+  ranking.forEach(function(item, i) {
+    let tr = document.createElement('tr');
+    let medal = MEDALS[i] || '';
+    tr.innerHTML = '<td>' + medal + '<span class="rank-medal">' + item.rank + '</span></td>' +
+      '<td>' + escHtml(item.province) + '</td>' +
+      '<td class="number-format">' + item.count + '</td>' +
+      '<td class="number-right">' + item.module.toFixed(2) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+/* ──────────── 审批人下拉菜单 ──────────── */
+function populateApproverSelect() {
+  let sel = document.getElementById('approver-select');
   if (!sel) return;
-  currentGlobalPeriod = sel.value;
+  let currentVal = sel.value;
+  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let approvers = extractApproverList(filtered);
 
-  // 更新 Tab 1 KPI 卡片
-  updateOverviewKPIs(currentGlobalPeriod);
+  sel.innerHTML = '<option value="全部">全部审批人</option>';
+  approvers.forEach(function(name) {
+    let opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    // 保留用户已选值
+    if (name === currentVal && approvers.indexOf(currentVal) >= 0) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
 
-  // 销毁所有现有图表实例
+/* ===================================================================
+   EVENT HANDLERS
+   =================================================================== */
+
+function getSelectedApprover() {
+  let sel = document.getElementById('approver-select');
+  return sel ? sel.value : '';
+}
+
+function getActiveTab() {
+  let activeTab = document.querySelector('.tab-content.active');
+  return activeTab ? activeTab.id.replace('tab-', '') : 'overview';
+}
+
+var tabInitialized = { overview: false, approval: false, detail: false };
+
+function initTabCharts(tabName) {
+  if (!checkChartJsLoaded()) return;
+
+  if (tabInitialized[tabName]) {
+    // 重新调整该 tab 下所有图表的尺寸（canvas 从 display:none 恢复后尺寸可能异常）
+    Object.keys(chartInstances).forEach(function(id) {
+      if (chartInstances[id]) chartInstances[id].resize();
+    });
+    return;
+  }
+
+  switch (tabName) {
+    case 'overview': initOverviewCharts(); break;
+    case 'approval': initApprovalCharts(); break;
+    case 'detail':   initDetailCharts();   break;
+  }
+  tabInitialized[tabName] = true;
+}
+
+function destroyAllCharts() {
   Object.keys(chartInstances).forEach(function(id) {
     if (chartInstances[id]) {
       chartInstances[id].destroy();
       delete chartInstances[id];
     }
   });
+  document.querySelectorAll('.no-data-msg').forEach(function(el) { el.remove(); });
+  document.querySelectorAll('canvas').forEach(function(c) { c.style.display = ''; });
+}
 
-  // 清除所有 no-data 提示
-  document.querySelectorAll('.no-data-msg').forEach(function(el) {
-    el.remove();
-  });
-  document.querySelectorAll('canvas').forEach(function(c) {
-    c.style.display = '';
-  });
+/* 全局时间段切换 — 所有数据联动 */
+function onGlobalPeriodChange() {
+  let sel = document.getElementById('global-period-select');
+  if (!sel) return;
+  currentGlobalPeriod = sel.value;
 
-  // 重置初始化状态
+  // 销毁所有图表
+  destroyAllCharts();
   tabInitialized.overview = false;
   tabInitialized.approval = false;
   tabInitialized.detail = false;
 
-  // 重新渲染当前激活的 Tab
-  var activeTab = document.querySelector('.tab-content.active');
-  if (activeTab) {
-    var tabName = activeTab.id.replace('tab-', '');
-    initTabCharts(tabName);
-    if (tabName === 'detail') {
-      renderDetailTable(currentGlobalPeriod);
-    }
-  }
-
-  // 刷新省公司排名表（跟随当前时间段）
+  // 更新静态元素
+  updateOverviewKPIs(computeAggregates(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod)));
   renderProvinceTable();
+  populateApproverSelect(); // 同步刷新审批人下拉列表
+
+  // 重建当前 Tab 的图表
+  let tabName = getActiveTab();
+  initTabCharts(tabName);
+
+  // Tab 3 表格单独刷新
+  if (tabName === 'detail') {
+    renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+  }
 }
 
-/* ===================================================================
-   TAB SWITCHING
-   =================================================================== */
+/* 审批人切换 */
+function onApproverChange() {
+  // 销毁审批相关的图表
+  ['chart-approval-donut', 'chart-approval-compare'].forEach(function(id) {
+    if (chartInstances[id]) {
+      chartInstances[id].destroy();
+      delete chartInstances[id];
+    }
+  });
+  document.querySelectorAll('#tab-approval .no-data-msg').forEach(function(el) { el.remove(); });
+  document.querySelectorAll('#tab-approval canvas').forEach(function(c) { c.style.display = ''; });
+
+  tabInitialized.approval = false;
+  initTabCharts('approval');
+}
+
+/* Tab 切换 */
 function switchTab(name) {
   document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
   document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
@@ -1701,32 +1803,25 @@ function switchTab(name) {
 
   setTimeout(function() {
     if (name === 'approval') {
-      populateApproverSelect();  // 先填充审批人列表（会触发 onApproverChange → initApprovalCharts）
-    }
-    if (name === 'detail') {
-      renderDetailTable(currentGlobalPeriod);
+      populateApproverSelect();
     }
     initTabCharts(name);
+    if (name === 'detail') {
+      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+    }
   }, 80);
 }
 
 /* ===================================================================
-   PROVINCE TABLE
+   EVENT LISTENERS — 替代内联 onclick/onchange
    =================================================================== */
-function renderProvinceTable() {
-  var tbody = document.getElementById('province-table-body');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  var medals = ['🥇', '🥈', '🥉'];
-  var ranking = getProvinceRankingForPeriod(currentGlobalPeriod);
-  ranking.forEach(function(item, i) {
-    var tr = document.createElement('tr');
-    var medal = medals[i] || '';
-    tr.innerHTML = '<td>' + medal + '<span class="rank-medal">' + escHtml(item.rank) + '</span></td>' +
-      '<td>' + escHtml(item.province) + '</td>' +
-      '<td class="number-format">' + escHtml(item.count) + '</td>' +
-      '<td class="number-right">' + escHtml(item.module.toFixed(2)) + '</td>';
-    tbody.appendChild(tr);
+function initEventListeners() {
+  document.getElementById('global-period-select').addEventListener('change', onGlobalPeriodChange);
+  document.getElementById('approver-select').addEventListener('change', onApproverChange);
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      switchTab(this.dataset.tab);
+    });
   });
 }
 
@@ -1734,9 +1829,9 @@ function renderProvinceTable() {
    TAB NAV SCROLL SHADOW
    =================================================================== */
 (function() {
-  var nav = document.querySelector('.tab-nav');
+  let nav = document.querySelector('.tab-nav');
   if (!nav) return;
-  var ticking = false;
+  let ticking = false;
   function updateShadow() {
     if (window.scrollY > nav.offsetTop) {
       nav.style.boxShadow = 'var(--shadow-scroll)';
@@ -1756,22 +1851,35 @@ function renderProvinceTable() {
 })();
 
 /* ===================================================================
+   CHART.JS RETRY — CDN 加载失败时重试
+   =================================================================== */
+function waitForChartJs(retries, callback) {
+  if (typeof Chart !== 'undefined') {
+    if (!CHART_JS_LOADED) {
+      CHART_JS_LOADED = true;
+      initChartDefaults();
+    }
+    callback();
+    return;
+  }
+  if (retries <= 0) {
+    checkChartJsLoaded();
+    return;
+  }
+  setTimeout(function() { waitForChartJs(retries - 1, callback); }, 1000);
+}
+
+/* ===================================================================
    INITIALIZE
    =================================================================== */
 document.addEventListener('DOMContentLoaded', function() {
-  renderProvinceTable();
-
-  // 初始化默认 tab（overview）的图表
+  initEventListeners();
   checkChartJsLoaded();
-  initTabCharts('overview');
 
-  // 设置全局筛选器默认值
-  var gsel = document.getElementById('global-period-select');
-  if (gsel && periodNames.length > 2) {
-    gsel.value = periodNames[2] || '本月';
-    currentGlobalPeriod = gsel.value;
-  }
-
+  // 初始渲染
+  updateOverviewKPIs(computeAggregates(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod)));
+  renderProvinceTable();
+  waitForChartJs(5, function() { initTabCharts('overview'); });
 });
 </script>
 
