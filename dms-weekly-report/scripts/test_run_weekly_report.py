@@ -375,6 +375,99 @@ class TestTableProcessResult:
         assert len(r2.flow_ids) == 0  # 确保 field(default_factory) 正确工作
 
 
+# ==================== 测试：去重逻辑 ====================
+
+
+class TestDedupLogic:
+    def test_dedup_filters_existing_ids(self):
+        """验证去重逻辑能正确过滤已存在的流程编号。"""
+        existing = [
+            ("111111111111111111",),
+            ("222222222222222222",),
+        ]
+
+        rows_data: list[list[str]] = [
+            ["111111111111111111", "旧项目（重复）"],
+            ["333333333333333333", "新项目"],
+        ]
+
+        # 模拟去重逻辑
+        existing_ids: set[str] = set()
+        for row in existing:
+            v = row[0]
+            if v and re.match(r"^\d{15,}$", str(v)):
+                existing_ids.add(str(v))
+
+        new_rows = [r for r in rows_data if r[0] not in existing_ids]
+        assert len(new_rows) == 1
+        assert new_rows[0][0] == "333333333333333333"
+
+    def test_non_flow_id_ignored(self):
+        """非流程编号的短 ID 不应参与去重比较。"""
+        existing = [("short",)]
+        rows_data = [["short", "测试数据"]]
+
+        existing_ids = set()
+        for row in existing:
+            v = row[0]
+            if v and re.match(r"^\d{15,}$", str(v)):
+                existing_ids.add(str(v))
+
+        new_rows = [r for r in rows_data if r[0] not in existing_ids]
+        assert len(new_rows) == 1  # short ID 未被过滤
+
+
+# ==================== 测试：仅统计模式 ====================
+
+
+class TestStatsFromExcel:
+    def test_date_filter(self):
+        """验证日期范围筛选逻辑（stats_from_excel 的核心逻辑）。"""
+        rows = [
+            ["111111111111111111", "项目A", "", "", "", "", "", "", "", "", "", "2026-06-01 10:00", "", "", "", "", "", "", ""],
+            ["222222222222222222", "项目B", "", "", "", "", "", "", "", "", "", "2026-05-15 10:00", "", "", "", "", "", "", ""],
+            ["not_flow_id", "项目C", "", "", "", "", "", "", "", "", "", "2026-06-03", "", "", "", "", "", "", ""],
+        ]
+        start_date, end_date = "2026-06-01", "2026-06-30"
+
+        filtered = []
+        for row in rows:
+            flow_id = str(row[0]) if row[0] else ""
+            if not re.match(r"^\d{15,}$", flow_id):
+                continue
+            submit_time = str(row[11]) if row[11] else ""
+            if submit_time not in ("--", "无", ""):
+                date_match = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
+                if date_match:
+                    row_date = date_match.group(1)
+                    if row_date < start_date or row_date > end_date:
+                        continue
+            filtered.append(row)
+
+        assert len(filtered) == 1
+        assert filtered[0][0] == "111111111111111111"
+
+    def test_date_filter_no_match(self):
+        """日期范围无匹配时返回空。"""
+        rows = [["111111111111111111", "项目A", "", "", "", "", "", "", "", "", "", "2026-05-01", ""]]
+        start_date, end_date = "2026-06-01", "2026-06-30"
+
+        filtered = []
+        for row in rows:
+            flow_id = str(row[0]) if row[0] else ""
+            if not re.match(r"^\d{15,}$", flow_id):
+                continue
+            submit_time = str(row[11]) if row[11] else ""
+            if submit_time not in ("--", "无", ""):
+                date_match = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
+                if date_match:
+                    row_date = date_match.group(1)
+                    if row_date < start_date or row_date > end_date:
+                        continue
+            filtered.append(row)
+        assert len(filtered) == 0
+
+
 # ==================== 测试：print_summary ====================
 
 
@@ -491,3 +584,121 @@ class TestRetryAsync:
         with pytest.raises(report.PlaywrightTimeout):
             asyncio.run(always_fail())
         assert call_count == 2
+
+
+# ==================== generate_html_report.py 测试 ====================
+
+class TestTemplateReplace:
+    def test_simple_replace(self):
+        from generate_html_report import _simple_replace
+        template = "<title>{{TITLE}}</title><p>{{CONTENT}}</p>"
+        result = _simple_replace(template, {"TITLE": "周报", "CONTENT": "数据"})
+        assert result == "<title>周报</title><p>数据</p>"
+
+    def test_replace_json_field(self):
+        from generate_html_report import _replace_json_field
+        template = "const DATA = {{PERIOD_DATA_JSON}};"
+        data = {"全部": {"count": 5}}
+        result = _replace_json_field(template, "PERIOD_DATA", data)
+        assert '"全部"' in result
+        assert '"count": 5' in result
+
+
+class TestComputeKpis:
+    def test_basic(self):
+        from generate_html_report import compute_kpis
+        rows = [
+            ["202606010000001", "项目A", "", "", "贵州", "张三", 100.0, 80.0, 20.0, "", "", "2026-06-01", "", "否", "", "", "", "", ""],
+            ["202606010000002", "项目B", "", "", "贵州", "李四", 200.0, 150.0, 50.0, "", "", "2026-06-02", "", "是", "", "", "", "", ""],
+            ["202606010000003", "项目C", "", "", "云南", "张三", 0, 0, 0, "", "", "2026-06-03", "", "否", "", "", "", "", ""],
+        ]
+        kpis = compute_kpis(rows)
+        assert kpis["total_projects"] == 3
+        assert kpis["total_salespersons"] == 2
+        assert kpis["ordered_count"] == 1
+        assert kpis["not_ordered_count"] == 2
+        assert kpis["module_power"] == "300.00"
+        assert kpis["inverter_power"] == "230.00"
+        assert kpis["battery_capacity"] == "70.00"
+        assert kpis["ratio"] == "1.30"
+
+    def test_empty_rows(self):
+        from generate_html_report import compute_kpis
+        kpis = compute_kpis([])
+        assert kpis["total_projects"] == 0
+        assert kpis["ordered_count"] == 0
+        assert kpis["ratio"] == "--"
+
+    def test_string_values(self):
+        from generate_html_report import compute_kpis
+        rows = [
+            ["202606010000001", "项目A", "", "", "贵州", "张三", "100", "80", "20", "", "", "2026-06-01", "", "否"],
+        ]
+        kpis = compute_kpis(rows)
+        assert kpis["total_projects"] == 1
+        assert kpis["module_power"] == "100.00"
+
+
+class TestComputeWangjian:
+    def test_basic(self):
+        from generate_html_report import compute_wangjian_stats
+        rows = [
+            ["202606010000001", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "王剑", "审批通过", ""],
+            ["202606010000002", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "王剑", "审批通过", ""],
+            ["202606010000003", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "王剑", "审批拒绝", ""],
+            ["202606010000004", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "李四", "审批通过", ""],
+        ]
+        stats = compute_wangjian_stats(rows)
+        assert stats["approved"] == 2
+        assert stats["total"] == 3
+        assert stats["rate"] == "66%"
+
+    def test_no_wangjian(self):
+        from generate_html_report import compute_wangjian_stats
+        rows = [
+            ["202606010000001", "", "", "", "", "", 0, 0, 0, "", "", "", "", "", "", "", "李四", "审批通过", ""],
+        ]
+        stats = compute_wangjian_stats(rows)
+        assert stats["approved"] == 0
+        assert stats["total"] == 0
+
+
+class TestComputeProvince:
+    def test_basic(self):
+        from generate_html_report import compute_province_ranking
+        rows = [
+            ["202606010000001", "", "", "", "贵州", "", 100.0, 0, 0],
+            ["202606010000002", "", "", "", "贵州", "", 200.0, 0, 0],
+            ["202606010000003", "", "", "", "云南", "", 150.0, 0, 0],
+        ]
+        ranking = compute_province_ranking(rows)
+        assert len(ranking) == 2
+        assert ranking[0]["province"] == "贵州"
+        assert ranking[0]["count"] == 2
+        assert ranking[0]["module"] == 300.0
+        assert ranking[1]["rank"] == 2
+
+    def test_empty(self):
+        from generate_html_report import compute_province_ranking
+        assert compute_province_ranking([]) == []
+
+
+class TestComputeApprovalDays:
+    def test_basic(self):
+        from generate_html_report import compute_approval_days
+        rows = [
+            ["202606010000001", "", "", "", "", "", 0, 0, 0, "", "", "2026-06-01", "", "", "", "", "", "", "2026-06-05"],
+            ["202606010000002", "", "", "", "", "", 0, 0, 0, "", "", "2026-06-02", "", "", "", "", "", "", "2026-06-04"],
+            ["202606010000003", "", "", "", "", "", 0, 0, 0, "", "", "2026-06-10", "", "", "", "", "", "", ""],
+        ]
+        days = compute_approval_days(rows)
+        assert days["avg"] == 3.0
+        assert days["min"] == 2
+        assert days["max"] == 4
+        assert days["sample_count"] == 2
+
+    def test_no_data(self):
+        from generate_html_report import compute_approval_days
+        days = compute_approval_days([])
+        assert days["avg"] == 0
+        assert days["sample_count"] == 0

@@ -7,15 +7,15 @@ description: >
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.1.0
-  updated: 2026-06-07
+  version: 1.2.0
+  updated: 2026-06-08
 ---
 
 # DMS 非标询价周报生成器
 
 ## Overview
 
-一键从 DMS 流程中心筛选已办询价流程，自动登录、提取项目详情和 BOM 清单、检查下单状态，生成格式化 Excel 汇总报告。使用 Playwright 自动化浏览器操作，支持多 Tab 并行提取和会话持久化。
+一键从 DMS 流程中心筛选已办询价流程，自动登录、提取项目详情和 BOM 清单、检查下单状态，生成含 **4 个 Sheet** 的格式化 Excel 汇总报告（询价汇总/询价统计/日期查询/数据看板）。支持仅统计模式（`--stats-only`）跳过浏览器操作直接重算统计。使用 Playwright 自动化浏览器操作，支持多 Tab 并行提取和会话持久化。
 
 ## When to Use
 
@@ -40,14 +40,17 @@ metadata:
 
 ### 步骤 1：确认日期范围
 
-计算默认范围（本周一到今天），然后向用户确认：
+agent 自动计算默认范围（本周一到今天），然后向用户确认。**下面的 Python 代码仅为逻辑说明，agent 会自动执行无需手动运行：**
 
 ```python
+# 逻辑说明（无需手动执行）
 from datetime import datetime, timedelta
 today = datetime.now()
 monday = today - timedelta(days=today.weekday())
 # 默认: monday.strftime("%Y-%m-%d") ~ today.strftime("%Y-%m-%d")
 ```
+
+> ⚠️ Windows 环境注意：本 skill 所有命令使用 `python`（而非 `python3`），因为 Windows 上 `python3` 不可用。如果手动测试命令请用 `python`。
 
 使用 **AskUserQuestion** 工具向用户展示三个选项：
 
@@ -95,7 +98,7 @@ digraph date_flow {
 确认日期范围后，先检查 DMS 登录凭据和浏览器环境：
 
 ```bash
-SKILL_DIR="C:/Users/Administrator/.claude/skills/dms-weekly-report"
+SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
 python "$SKILL_DIR/scripts/check_env.py" --check-browser
 ```
 
@@ -108,7 +111,7 @@ python "$SKILL_DIR/scripts/check_env.py" --check-browser
 本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作：
 
 ```bash
-SKILL_DIR="C:/Users/Administrator/.claude/skills/dms-weekly-report"
+SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
 SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
 # 用户确认默认范围
@@ -122,6 +125,15 @@ python "$SCRIPT" --output-dir "$PWD" --weeks 1
 
 # 无头模式（不显示浏览器）
 python "$SCRIPT" --output-dir "$PWD" --headless
+
+# 仅统计模式（跳过浏览器，从已有 Excel 重算统计）
+python "$SCRIPT" --output-dir "$PWD" --stats-only
+
+# 仅统计模式 - 本月快捷统计
+python "$SCRIPT" --output-dir "$PWD" --stats-only --this-month
+
+# 仅统计模式 - 自定义日期范围
+python "$SCRIPT" --output-dir "$PWD" --stats-only --start-date "2026-06-01" --end-date "2026-06-30"
 ```
 
 > **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录，方便查找。
@@ -135,7 +147,7 @@ python "$SCRIPT" --output-dir "$PWD" --headless
 📊 查询范围：2026-06-01 ~ 2026-06-06
 📝 共 12 条询价记录
 🟢 已下单 5 条 | 🔴 未下单 7 条
-📎 Excel文件已保存到：D:\询价汇总.xlsx
+📎 Excel文件已保存到：{output_dir}/询价汇总.xlsx
 ```
 
 ### 步骤 5：回顾与反思（流程完成后）
@@ -179,11 +191,38 @@ AskUserQuestion:
 | `--end-date YYYY-MM-DD` | 自定义结束日期 | 今天 |
 | `--workers N` | 并行并发数 | 3 |
 | `--verbose` | 详细日志输出 | 仅 info |
+| `--stats-only` | 仅统计模式：从已有Excel读取数据，按日期范围重新统计，跳过浏览器操作 | 无 |
+| `--this-month` | 快捷统计本月（配合`--stats-only`使用） | 无 |
 
 ### 输出文件
 
 - `{output_dir}/询价汇总.xlsx` — 蓝色表头、边框、自适应列宽
 - `{output_dir}/询价汇总_v2.xlsx` — 文件名被占用时的备用
+- `{output_dir}/询价周报报表.html` — **新增** 独立 HTML 报表，3 个 Tab（询价统计/日期查询/数据看板），自动与 Excel 同步生成
+- **四个Sheet：**
+  - **「询价汇总」** — 每条询价记录的明细（含审批链信息：省总审批人/状态、采购审批人/状态、审批完成时间），按流程编号去重追加
+  - **「询价统计」** — 自动汇总页，统计全部历史数据的：项目总数、组件总功率(kW)、逆变器总功率(kW)、电池总容量(kWh)、容配比、已下单/未下单数量
+  - **「日期查询」** — **交互式查询页**，打开Excel即可操作：
+    1. 点击 **D3单元格** 的下拉菜单，选择「全部/本周/本月/上月/本季度」
+    2. 结果**自动刷新**，无需输入任何内容
+  - **「数据看板」** — **领导汇报专用**，包含：
+    - 王剑采购审批通过次数及通过率
+    - 省公司询价排名（按次数降序）
+    - 询价到审批完成的平均天数（含最短/最长）
+
+### HTML 独立生成（无需浏览器）
+
+从已有 xlsx 单独生成 HTML 报表（不经过 DMS 登录流程）：
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
+python "$SKILL_DIR/scripts/generate_html_report.py" \
+  --xlsx "询价汇总.xlsx" \
+  --output "询价周报报表.html" \
+  --range "2026-06-01 ~ 2026-06-07"
+```
+
+脚本会自动读取 xlsx「询价汇总」Sheet 的数据，计算统计指标，填充模板，输出独立 HTML 文件。模板位于 `references/report_template.html`，可修改 CSS 自定义样式。
 
 ### Excel 列定义
 
@@ -199,6 +238,11 @@ AskUserQuestion:
 | 流程发起人提交审核时间 | 提交时间 |
 | 备注 | BOM 特殊项 |
 | 是否下单 | 是/否 |
+| 省总审批人 | 省总审批负责人（v1.2.0 新增） |
+| 省总审批状态 | 省总审批结果（v1.2.0 新增） |
+| 采购审批人 | 采购审批负责人（v1.2.0 新增） |
+| 采购审批状态 | 采购审批结果（v1.2.0 新增） |
+| 审批完成时间 | 最终审批完成时间（v1.2.0 新增） |
 
 ## 前置依赖
 
@@ -299,6 +343,8 @@ DMS 偶尔触发验证码验证，此时需要手动操作：
 
 ## 脚本架构
 
-核心模块：配置 → 登录 → 筛选 → 提取 → 下单检查 → Excel 生成 → 终端摘要
+核心模块：
+- **完整模式：** 配置 → 登录 → 筛选 → 提取 → 下单检查 → Excel（4 Sheet） → 终端摘要
+- **仅统计模式：** 配置 → 读取已有 Excel → 按日期筛选 → 更新统计 Sheet → 终端输出
 
 详细实现见 `scripts/run_weekly_report.py`。

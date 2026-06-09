@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>询价周报报表</title>
+<style>
+/* ========== CSS Custom Properties ========== */
+:root {
+  --primary: #0057AD;
+  --primary-dark: #003F80;
+  --primary-light: #3388CC;
+  --primary-lighter: #E0EFFA;
+  --primary-subtle: #F2F7FC;
+  --nav: #358CFA;
+  --accent-blue: #32BEFF;
+  --green: #70B347;
+  --orange: #FF851A;
+  --red: #FA252D;
+  --purple: #8740FF;
+  --text-primary: #222222;
+  --text-secondary: #555555;
+  --text-tertiary: #999999;
+  --bg-white: #FFFFFF;
+  --bg-page: #F5F6F8;
+  --bg-card: #FAFBFC;
+  --border-color: #CCCCCC;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+  --radius: 8px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 6px 16px rgba(0,0,0,0.08);
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background: var(--bg-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== Header ========== */
+.header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+.header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.header .meta {
+  font-size: 13px;
+  opacity: 0.85;
+  text-align: right;
+}
+.header .meta span {
+  display: inline-block;
+  margin-left: var(--spacing-md);
+}
+
+/* ========== Tab Navigation ========== */
+.tab-nav {
+  background: var(--bg-white);
+  border-bottom: 2px solid var(--border-color);
+  display: flex;
+  padding: 0 var(--spacing-xl);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+.tab-btn {
+  padding: 14px 28px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s, background 0.15s;
+  font-family: var(--font-family);
+}
+.tab-btn:hover { color: var(--nav); }
+.tab-btn:active { background: var(--primary-subtle); transition-duration: 0.05s; }
+.tab-btn.active {
+  color: var(--nav);
+  font-weight: 600;
+}
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--nav);
+  border-radius: 3px 3px 0 0;
+}
+.tab-btn .badge {
+  display: inline-block;
+  background: var(--primary-lighter);
+  color: var(--nav);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
+/* ========== Tab Content ========== */
+.tab-content { display: none; padding: var(--spacing-xl); max-width: 1200px; margin: 0 auto; }
+.tab-content.active { display: block; }
+
+/* ========== Section Title ========== */
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid #D6D6D6;
+}
+
+/* ========== KPI Cards Grid ========== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+.kpi-card {
+  background: var(--bg-white);
+  border-radius: var(--radius);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  text-align: center;
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.15s, background 0.15s;
+  cursor: default;
+}
+.kpi-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  border-color: var(--nav);
+}
+.kpi-card:active {
+  background: #F0F6FC;
+  border-color: var(--nav);
+  transform: translateY(0);
+  transition-duration: 0.05s;
+}
+.kpi-card .label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.kpi-card .value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+}
+.kpi-card .unit {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.kpi-card.highlight {
+  background: var(--bg-white);
+  border-color: var(--primary-lighter);
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card.highlight::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--primary);
+  border-radius: var(--radius) var(--radius) 0 0;
+  transition: background 0.15s;
+}
+.kpi-card.highlight:active::before {
+  background: var(--nav);
+}
+.kpi-card.highlight .label { color: var(--primary); font-weight: 600; }
+.kpi-card.highlight .value { color: var(--primary); font-weight: 700; }
+.kpi-card.highlight .unit { color: #666666; }
+
+/* ========== Table ========== */
+.table-container {
+  background: var(--bg-white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  overflow-x: auto;
+  margin-bottom: var(--spacing-lg);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+thead th {
+  background: var(--primary);
+  color: white;
+  padding: 12px 16px;
+  text-align: center;
+  font-weight: 500;
+  white-space: nowrap;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+tbody td {
+  padding: 10px 16px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background 0.15s;
+}
+tbody tr:nth-child(even) { background: #F7F8FA; }
+tbody tr:hover { background: var(--primary-lighter); }
+tbody tr:active td { background: #D6E8F5; transition-duration: 0.05s; }
+tbody tr:last-child td { border-bottom: none; }
+.number-format { font-variant-numeric: tabular-nums; }
+
+/* ========== Filter Bar ========== */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  background: var(--bg-white);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+.filter-bar label {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.filter-bar select {
+  padding: 8px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: var(--font-family);
+  background: white;
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 120px;
+}
+.filter-bar select:focus {
+  outline: 2px solid var(--nav);
+  outline-offset: 1px;
+}
+.filter-result {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+/* ========== Stats Row ========== */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+.stats-item {
+  text-align: center;
+  padding: var(--spacing-md);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  transition: border-color 0.15s, background 0.15s;
+  cursor: default;
+}
+.stats-item:hover { border-color: var(--nav); }
+.stats-item:active {
+  background: #F0F6FC;
+  border-color: var(--nav);
+  transition-duration: 0.05s;
+}
+.stats-item .label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+.stats-item .value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* ========== Ranking Table Specific ========== */
+.rank-medal { display: inline-block; font-size: 16px; margin-right: 4px; }
+
+/* ========== Footer ========== */
+.footer {
+  text-align: center;
+  padding: var(--spacing-lg);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  border-top: 1px solid var(--border-color);
+  margin-top: var(--spacing-xl);
+  background: var(--bg-white);
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+  .header { padding: var(--spacing-md); flex-direction: column; text-align: center; }
+  .header .meta { text-align: center; }
+  .header .meta span { margin: 0 var(--spacing-sm); }
+  .tab-nav { padding: 0 var(--spacing-sm); overflow-x: auto; }
+  .tab-btn { padding: 12px 16px; font-size: 13px; white-space: nowrap; }
+  .tab-content { padding: var(--spacing-md); }
+  .kpi-card .value { font-size: 26px; }
+  .filter-bar { flex-wrap: wrap; }
+  .filter-result { margin-left: 0; width: 100%; text-align: left; }
+}
+
+@media print {
+  body { background: white; }
+  .tab-nav { display: none; }
+  .tab-content { display: block !important; padding: 0; }
+  .footer { position: fixed; bottom: 0; width: 100%; }
+  .kpi-card { break-inside: avoid; box-shadow: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== Header ==================== -->
+<header class="header">
+  <h1>询价周报报表</h1>
+  <div class="meta">
+    <span>{{REPORT_DATE_RANGE}}</span>
+    <span>{{REPORT_GENERATED_AT}}</span>
+  </div>
+</header>
+
+<!-- ==================== Tab Navigation ==================== -->
+<nav class="tab-nav" role="tablist">
+  <button class="tab-btn active" role="tab" data-tab="summary" onclick="switchTab('summary')">
+    询价统计 <span class="badge">KPI</span>
+  </button>
+  <button class="tab-btn" role="tab" data-tab="query" onclick="switchTab('query')">
+    日期查询 <span class="badge">交互</span>
+  </button>
+  <button class="tab-btn" role="tab" data-tab="dashboard" onclick="switchTab('dashboard')">
+    数据看板 <span class="badge">管理</span>
+  </button>
+</nav>
+
+<!-- ==================== Tab 1: 询价统计 ==================== -->
+<section class="tab-content active" id="tab-summary" role="tabpanel">
+  <h2 class="section-title">询价概览</h2>
+  <div class="kpi-grid">
+    <div class="kpi-card highlight">
+      <div class="label">询价项目总数</div>
+      <div class="value">{{KPI_TOTAL_PROJECTS}}</div>
+      <div class="unit">个</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">涉及业务员</div>
+      <div class="value">{{KPI_TOTAL_SALESPERSONS}}</div>
+      <div class="unit">人</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">已下单</div>
+      <div class="value">{{KPI_ORDERED_COUNT}}</div>
+      <div class="unit">个</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">未下单</div>
+      <div class="value">{{KPI_NOT_ORDERED_COUNT}}</div>
+      <div class="unit">个</div>
+    </div>
+  </div>
+
+  <h2 class="section-title">功率容量统计</h2>
+  <div class="kpi-grid">
+    <div class="kpi-card highlight">
+      <div class="label">组件总功率</div>
+      <div class="value">{{KPI_MODULE_POWER}}</div>
+      <div class="unit">kW</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">逆变器总功率</div>
+      <div class="value">{{KPI_INVERTER_POWER}}</div>
+      <div class="unit">kW</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">电池总容量</div>
+      <div class="value">{{KPI_BATTERY_CAPACITY}}</div>
+      <div class="unit">kWh</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">容配比</div>
+      <div class="value">{{KPI_RATIO}}</div>
+      <div class="unit">组件/逆变器</div>
+    </div>
+  </div>
+
+  <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-md);">
+    {{DATA_SCOPE_TEXT}}
+  </p>
+</section>
+
+<!-- ==================== Tab 2: 日期查询 ==================== -->
+<section class="tab-content" id="tab-query" role="tabpanel">
+  <h2 class="section-title">日期查询统计</h2>
+
+  <div class="filter-bar">
+    <label for="period-select">时间段筛选：</label>
+    <select id="period-select" onchange="filterByPeriod()">
+      <option value="全部">全部</option>
+      <option value="本周">本周</option>
+      <option value="本月" selected>本月</option>
+      <option value="上月">上月</option>
+      <option value="本季度">本季度</option>
+    </select>
+    <span class="filter-result" id="filter-result"></span>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>时间段</th>
+          <th>项目数</th>
+          <th>组件功率(kW)</th>
+          <th>逆变器功率(kW)</th>
+          <th>电池容量(kWh)</th>
+          <th>容配比</th>
+        </tr>
+      </thead>
+      <tbody id="period-table-body"></tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title">当前选择结果</h2>
+  <div class="stats-row">
+    <div class="stats-item">
+      <div class="label">项目数</div>
+      <div class="value" id="result-count"></div>
+    </div>
+    <div class="stats-item">
+      <div class="label">组件功率 (kW)</div>
+      <div class="value" id="result-module"></div>
+    </div>
+    <div class="stats-item">
+      <div class="label">逆变器功率 (kW)</div>
+      <div class="value" id="result-inverter"></div>
+    </div>
+    <div class="stats-item">
+      <div class="label">电池容量 (kWh)</div>
+      <div class="value" id="result-battery"></div>
+    </div>
+    <div class="stats-item">
+      <div class="label">容配比</div>
+      <div class="value" id="result-ratio"></div>
+    </div>
+  </div>
+
+  <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
+    💡 点击上方下拉菜单切换时间段，数据自动刷新
+  </p>
+</section>
+
+<!-- ==================== Tab 3: 数据看板 ==================== -->
+<section class="tab-content" id="tab-dashboard" role="tabpanel">
+  <h2 class="section-title">王剑采购审批统计</h2>
+  <div class="kpi-grid">
+    <div class="kpi-card highlight">
+      <div class="label">审批通过</div>
+      <div class="value">{{WANGJIAN_APPROVED}}</div>
+      <div class="unit">次</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">经手总次数</div>
+      <div class="value">{{WANGJIAN_TOTAL}}</div>
+      <div class="unit">次</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">通过率</div>
+      <div class="value">{{WANGJIAN_RATE}}</div>
+      <div class="unit"></div>
+    </div>
+  </div>
+
+  <h2 class="section-title">省公司询价排名</h2>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>排名</th>
+          <th>省公司</th>
+          <th>询价次数</th>
+          <th>组件总功率(kW)</th>
+        </tr>
+      </thead>
+      <tbody id="province-table-body"></tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title">询价到审批完成天数</h2>
+  <div class="kpi-grid">
+    <div class="kpi-card highlight">
+      <div class="label">平均天数</div>
+      <div class="value">{{DAYS_AVG}}</div>
+      <div class="unit">天</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">最短天数</div>
+      <div class="value">{{DAYS_MIN}}</div>
+      <div class="unit">天</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">最长天数</div>
+      <div class="value">{{DAYS_MAX}}</div>
+      <div class="unit">天</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">统计样本</div>
+      <div class="value">{{DAYS_SAMPLE_COUNT}}</div>
+      <div class="unit">条</div>
+    </div>
+  </div>
+
+  <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
+    💡 数据基于采购审批节点、省公司统计及审批时间计算
+  </p>
+</section>
+
+<!-- ==================== Footer ==================== -->
+<footer class="footer">
+  <p>{{FOOTER_TEXT}}</p>
+</footer>
+
+<!-- ==================== Script ==================== -->
+<script>
+/* ========== DATA — 由后端脚本注入 ========== */
+const PERIOD_DATA = {{PERIOD_DATA_JSON}};
+const PROVINCE_DATA = {{PROVINCE_DATA_JSON}};
+const periodNames = Object.keys(PERIOD_DATA);
+
+/* ========== Tab Switching ========== */
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+}
+
+/* ========== Period Table ========== */
+function renderPeriodTable() {
+  const tbody = document.getElementById('period-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  for (const name of periodNames) {
+    const d = PERIOD_DATA[name];
+    if (!d) continue;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><strong>${name}</strong></td><td class="number-format">${d.count}</td><td class="number-format">${d.module.toFixed(2)}</td><td class="number-format">${d.inverter.toFixed(2)}</td><td class="number-format">${d.battery.toFixed(2)}</td><td class="number-format">${d.ratio.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function filterByPeriod() {
+  const name = document.getElementById('period-select').value;
+  const d = PERIOD_DATA[name];
+  if (!d) return;
+  document.getElementById('filter-result').textContent = `当前：${name} → ${d.count} 个项目`;
+  document.getElementById('result-count').textContent = d.count;
+  document.getElementById('result-module').textContent = d.module.toFixed(2);
+  document.getElementById('result-inverter').textContent = d.inverter.toFixed(2);
+  document.getElementById('result-battery').textContent = d.battery.toFixed(2);
+  document.getElementById('result-ratio').textContent = d.ratio.toFixed(2);
+}
+
+/* ========== Province Ranking ========== */
+function renderProvinceTable() {
+  const tbody = document.getElementById('province-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉'];
+  PROVINCE_DATA.forEach(function(item, i) {
+    const tr = document.createElement('tr');
+    const medal = medals[i] || '';
+    tr.innerHTML = `<td>${medal}${item.rank}</td><td>${item.province}</td><td class="number-format">${item.count}</td><td class="number-format">${item.module.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ========== Initialize ========== */
+document.addEventListener('DOMContentLoaded', function() {
+  renderPeriodTable();
+  renderProvinceTable();
+  if (document.getElementById('period-select')) {
+    document.getElementById('period-select').value = periodNames.length > 2 ? periodNames[2] : '本月';
+    filterByPeriod();
+  }
+});
+</script>
+
+</body>
+</html>

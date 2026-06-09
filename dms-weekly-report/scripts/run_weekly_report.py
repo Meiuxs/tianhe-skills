@@ -26,6 +26,21 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+
+# 共享 Excel 样式
+from excel_styles import (
+    Colors,
+    THIN_BORDER, BOTTOM_BORDER,
+    FONT_TITLE, FONT_SECTION, FONT_SUBSECTION, FONT_HEADER,
+    FONT_DATA, FONT_LABEL, FONT_KPI_BIG, FONT_KPI_MED,
+    FONT_HINT, FONT_VALUE,
+    FILL_HEADER, FILL_LIGHT, FILL_VERY_LIGHT, FILL_CARD,
+    ALIGN_CENTER, ALIGN_LEFT, ALIGN_DATA, ALIGN_HEADER,
+    ROW_HEIGHT_TITLE, ROW_HEIGHT_SECTION, ROW_HEIGHT_DATA, ROW_HEIGHT_HEADER,
+    COLUMN_WIDTHS,
+    apply_header_style, apply_data_row,
+    write_section_title, write_kpi_card,
+)
 from playwright._impl._errors import TargetClosedError
 
 # 修复 Windows 中文乱码
@@ -62,21 +77,13 @@ DMS_URL = "https://dms-admin.trinapower.com"
 LOGIN_CHECK_DOMAIN = "iauth.trinapower.com"
 USER_DATA_DIR = Path.home() / ".dms_browser_data"
 
-# Excel 样式常量
+# Excel 列定义
 HEADERS: list[str] = [
     "流程编号", "项目名称", "代理商编号", "代理商名称", "省公司", "业务员",
     "组件总功率(kW)", "逆变器总功率(kW)", "电池总容量(kWh)",
     "瓦单价(元/瓦)", "总价(元)", "流程发起人提交审核时间", "备注", "是否下单",
+    "省总审批人", "省总审批状态", "采购审批人", "采购审批状态", "审批完成时间",
 ]
-THIN_BORDER = Border(
-    left=Side("thin"), right=Side("thin"),
-    top=Side("thin"), bottom=Side("thin"),
-)
-BLUE_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-WHITE_BOLD = Font(bold=True, size=11, color="FFFFFF")
-HEADER_ALIGN = Alignment(wrap_text=True, vertical="center", horizontal="center")
-DATA_ALIGN = Alignment(wrap_text=True, vertical="center", horizontal="center")
-COLUMN_WIDTHS: list[int] = [18, 40, 14, 28, 18, 10, 16, 18, 18, 14, 14, 24, 30, 10]
 
 # Playwright 超时配置（毫秒）
 NAV_TIMEOUT = 30_000
@@ -117,6 +124,12 @@ class FlowRecord:
     submit_time: str = "--"
     remark: str = "无"
     ordered: str = "否"
+    # 以下 5 列为审批链信息（v1.2.0 新增）
+    province_processor: str = "--"
+    province_status: str = "--"
+    purchase_processor: str = "--"
+    purchase_status: str = "--"
+    final_approval_time: str = "--"
 
 
 @dataclass
@@ -231,6 +244,12 @@ async def _process_table_rows(
             continue
         cell_texts = [((await c.text_content()) or "").strip().strip('"') for c in cells]
         flow_text = cell_texts[0] if cell_texts else ""
+
+        # 按流程类型筛选：仅保留"户用小型工商业询价流程"
+        if len(cell_texts) >= 2 and "户用小型工商业询价流程" not in cell_texts[1]:
+            result.skipped_invalid += 1
+            logger.debug("跳过非目标流程类型: %s (%s)", flow_text, cell_texts[1] if len(cell_texts) > 1 else "?")
+            continue
 
         if not re.match(r"^\d{15,}$", flow_text):
             continue
@@ -414,8 +433,8 @@ async def _extract_bom(page: Any) -> list[BOMItem]:
         for table in tables:
             thead = table.locator("thead")
             if await thead.count() > 0 and "物料编号" in ((await thead.text_content()) or ""):
-                # 用 XPath 同级关系找到紧随其后的表体 table，比 `i + 1` 索引更健壮
-                body_table = table.locator("xpath=./following-sibling::table[1]")
+                # 使用 following:: 而非 following-sibling:: 来应对跨容器布局
+                body_table = table.locator("xpath=./following::table[.//tbody][1]")
                 if await body_table.count() > 0:
                     for row in await body_table.locator("tbody tr").all():
                         cells = await row.locator("td").all()
@@ -448,27 +467,47 @@ async def _extract_bom(page: Any) -> list[BOMItem]:
     return deduped
 
 
-async def _extract_submit_time(page: Any) -> str:
-    """从审批节点表中提取流程发起人提交审核时间。"""
+async def _extract_approval_info(page: Any) -> dict[str, str]:
+    """从审批历史表提取完整的审批链信息。
+
+    提取字段：提交时间、省总审批人/状态、采购审批人/状态、最终完成时间。
+    Returns: 包含 6 个键的 dict
+    """
+    result: dict[str, str] = {
+        "submit_time": "--", "province_processor": "--", "province_status": "--",
+        "purchase_processor": "--", "purchase_status": "--", "final_approval_time": "--",
+    }
     try:
         tables = await page.locator("table").all()
         for table in tables:
             thead = table.locator("thead")
             if await thead.count() > 0 and "审批节点" in ((await thead.text_content()) or ""):
-                # 用 XPath 同级关系找到紧随其后的表体 table
-                body_table = table.locator("xpath=./following-sibling::table[1]")
+                body_table = table.locator("xpath=./following::table[.//tbody][1]")
                 if await body_table.count() > 0:
                     for row in await body_table.locator("tbody tr").all():
-                        text = await row.text_content() or ""
-                        if "流程发起人" in text and "提交审核" in text:
-                            for cell in await row.locator("td").all():
-                                ct = ((await cell.text_content()) or "").strip()
-                                if re.match(r"\d{4}-\d{2}-\d{2}", ct):
-                                    return ct
+                        cells = await row.locator("td").all()
+                        if len(cells) >= 4:
+                            node = ((await cells[0].text_content()) or "").strip()
+                            processor = ((await cells[1].text_content()) or "").strip()
+                            status_val = ((await cells[2].text_content()) or "").strip()
+                            time_text = ((await cells[3].text_content()) or "").strip()
+
+                            if "流程发起人" in node and "提交审核" in status_val:
+                                result["submit_time"] = time_text
+                            elif "省总" in node or "省公司" in node:
+                                result["province_processor"] = processor
+                                result["province_status"] = status_val
+                            elif "采购" in node or "商务" in node:
+                                result["purchase_processor"] = processor
+                                result["purchase_status"] = status_val
+
+                            if "通过" in status_val and time_text not in ("--", ""):
+                                if result["final_approval_time"] in ("--", "") or time_text > result["final_approval_time"]:
+                                    result["final_approval_time"] = time_text
                 break
     except Exception:
         pass
-    return "--"
+    return result
 
 
 async def extract_detail_by_url(
@@ -493,15 +532,20 @@ async def extract_detail_by_url(
             rec.agent_code, rec.agent_name = _split_agent(agent_raw)
             rec.province = _extract_from_html(html, "省公司")
             rec.salesperson = _extract_from_html(html, "业务员")
-            rec.unit_price = _extract_from_html(html, "瓦单价\\(元/瓦\\)")
-            rec.total_price = _extract_from_html(html, "总价\\(元\\)")
-
+            rec.unit_price = _extract_from_html(html, "瓦单价(元/瓦)")
+            rec.total_price = _extract_from_html(html, "总价(元)")
             bom_items = await _extract_bom(page)
             rec.module_kw = _calc_module_power(bom_items)
             rec.inverter_kw = _calc_inverter_power(bom_items)
             rec.battery_kwh = _calc_battery_capacity(bom_items)
             rec.remark = _build_remark(bom_items)
-            rec.submit_time = await _extract_submit_time(page)
+            approval = await _extract_approval_info(page)
+            rec.submit_time = approval["submit_time"]
+            rec.province_processor = approval["province_processor"]
+            rec.province_status = approval["province_status"]
+            rec.purchase_processor = approval["purchase_processor"]
+            rec.purchase_status = approval["purchase_status"]
+            rec.final_approval_time = approval["final_approval_time"]
 
             return rec
         except (PlaywrightTimeout, OSError, ValueError, AttributeError) as e:
@@ -595,9 +639,476 @@ async def check_orders_parallel(
     return records
 
 
+# ==================== Excel 增强工具函数 ====================
+
+
+def _fill_date_helper_column(ws: Any) -> None:
+    """补充询价汇总Sheet的T列（日期序列号，供Excel公式使用），然后隐藏该列。"""
+    from datetime import date as dt_date
+    max_row = ws.max_row
+    for r in range(2, max_row + 1):
+        existing = ws.cell(row=r, column=20).value
+        if existing is not None and isinstance(existing, (int, float)) and existing < 100000:
+            continue
+        l_val = ws.cell(row=r, column=12).value
+        if l_val:
+            date_match = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(l_val))
+            if date_match:
+                y, m, d = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
+                excel_serial = dt_date(y, m, d).toordinal() - 693594
+                ws.cell(row=r, column=20, value=excel_serial)
+    # 隐藏辅助列 T
+    ws.column_dimensions["T"].hidden = True
+
+
+def _update_summary_sheet(
+    wb: Any, data_ws: Any, query_range: str,
+    filtered_rows: list[Any] | None = None,
+) -> None:
+    """更新「询价统计」Sheet — 仪表盘式 KPI 布局。"""
+    if "询价统计" in wb.sheetnames:
+        del wb["询价统计"]
+
+    ws = wb.create_sheet("询价统计")
+
+    # 列宽：A=标签, B=数值, C=单位（紧凑布局，去掉间隔列）
+    for c, w in enumerate([28, 20, 14], 1):
+        ws.column_dimensions[chr(64 + c)].width = w
+
+    # 计算统计数据（与原有逻辑相同）
+    total_module = 0.0
+    total_inverter = 0.0
+    total_battery = 0.0
+    total_projects = 0
+    ordered_count = 0
+    not_ordered_count = 0
+    salesperson_set: set[str] = set()
+
+    source_rows = filtered_rows if filtered_rows is not None else data_ws.iter_rows(min_row=2, values_only=True)
+
+    for row in source_rows:
+        flow_id = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", flow_id):
+            continue
+        total_projects += 1
+        mk = row[6]
+        if mk not in ("无", "--", None, ""):
+            try:
+                total_module += float(mk)
+            except (ValueError, TypeError):
+                pass
+        ik = row[7]
+        if ik not in ("无", "--", None, ""):
+            try:
+                total_inverter += float(ik)
+            except (ValueError, TypeError):
+                pass
+        bk = row[8]
+        if bk not in ("无", "--", None, ""):
+            try:
+                total_battery += float(bk)
+            except (ValueError, TypeError):
+                pass
+        ordered = str(row[13] if row[13] else "")
+        if ordered == "是":
+            ordered_count += 1
+        else:
+            not_ordered_count += 1
+        sp = str(row[5] if row[5] else "")
+        if sp not in ("--", "无", ""):
+            salesperson_set.add(sp)
+
+    # ---- 新排版：KPI 仪表盘 ----
+    r = 1
+
+    # 标题行
+    ws.cell(r, 1, "询价统计汇总").font = FONT_TITLE
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    ws.row_dimensions[r].height = ROW_HEIGHT_TITLE
+    r += 1
+
+    # 统计周期
+    ws.cell(r, 1, f"统计周期: {query_range}").font = FONT_VALUE
+    ws.cell(r, 1).fill = FILL_LIGHT
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    ws.row_dimensions[r].height = ROW_HEIGHT_SECTION
+    r += 2
+
+    # ---- 区域1：询价概览 —— 每个 KPI 一行，从 A 列开始 ----
+    ws.cell(r, 1, "询价概览").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    r += 1
+
+    kpis_1 = [
+        ("询价项目总数", f"{total_projects}", "个", FONT_KPI_BIG),
+        ("涉及业务员", f"{len(salesperson_set)}", "人" if salesperson_set else "", FONT_KPI_BIG),
+        ("已下单项目", f"{ordered_count}", "个", FONT_KPI_BIG),
+        ("未下单项目", f"{not_ordered_count}", "个", FONT_KPI_BIG),
+    ]
+    for i, (label, value, unit, vf) in enumerate(kpis_1):
+        write_kpi_card(ws, r + i, 1, label, value, unit, vf)
+
+    r += len(kpis_1) + 2
+
+    # ---- 区域2：功率容量统计 —— 每个 KPI 一行，从 A 列开始 ----
+    ws.cell(r, 1, "功率容量统计").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+    r += 1
+
+    module_display = f"{total_module:,.2f}" if total_module > 0 else "0"
+    inverter_display = f"{total_inverter:,.2f}" if total_inverter > 0 else "0"
+    battery_display = f"{total_battery:,.2f}" if total_battery > 0 else "0"
+    ratio_display = f"{total_module / total_inverter:.2f}" if total_inverter > 0 else "--"
+
+    kpis_2 = [
+        ("组件总功率", module_display, "kW", FONT_KPI_BIG),
+        ("逆变器总功率", inverter_display, "kW", FONT_KPI_BIG),
+        ("电池总容量", battery_display, "kWh", FONT_KPI_BIG),
+        ("容配比(组件/逆变器)", ratio_display, "", FONT_KPI_BIG),
+    ]
+    for i, (label, value, unit, vf) in enumerate(kpis_2):
+        write_kpi_card(ws, r + i, 1, label, value, unit, vf)
+
+    r += len(kpis_2) + 2
+    # 页脚说明
+    ws.cell(r, 1, f"数据范围：全部历史数据 | 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}").font = FONT_HINT
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+
+
+def _create_date_query_sheet_v2(wb: Any) -> None:
+    """创建「日期查询」交互 Sheet — 紧凑布局，从 A 列开始。"""
+    data_ws = wb["询价汇总"]
+    last_data_row = max(data_ws.max_row, 2)
+
+    rows_data: list[list[Any]] = []
+    for r in range(2, last_data_row + 1):
+        row = []
+        for c in range(1, 20):
+            row.append(data_ws.cell(r, c).value)
+        rows_data.append(row)
+
+    from datetime import date as dt_date
+
+    def excel_serial(d: dt_date) -> int:
+        return d.toordinal() - 693594
+
+    def parse_date(l_val: Any) -> int | None:
+        if l_val:
+            m = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(l_val))
+            if m:
+                return excel_serial(dt_date(int(m.group(1)), int(m.group(2)), int(m.group(3))))
+        return None
+
+    today = dt_date.today()
+    wd = today.weekday()
+    m_start = dt_date(today.year, today.month, 1)
+
+    periods: dict[str, tuple[int, int]] = {}
+    periods["全部"] = (excel_serial(dt_date(2000, 1, 1)), excel_serial(dt_date(2099, 12, 31)))
+    periods["本周"] = (excel_serial(dt_date.fromordinal(today.toordinal() - wd)), excel_serial(today))
+    periods["本月"] = (excel_serial(m_start), excel_serial(today))
+    if today.month == 1:
+        periods["上月"] = (excel_serial(dt_date(today.year - 1, 12, 1)), excel_serial(dt_date(today.year - 1, 12, 31)))
+    else:
+        lm = dt_date(today.year, today.month - 1, 1)
+        lme = dt_date(today.year, today.month, 1) - dt_date.resolution
+        periods["上月"] = (excel_serial(lm), excel_serial(lme))
+    qs = (today.month - 1) // 3 * 3 + 1
+    periods["本季度"] = (excel_serial(dt_date(today.year, qs, 1)), excel_serial(today))
+
+    stats: dict[str, list[Any]] = {}
+    for name, (s, e) in periods.items():
+        cnt = 0; mod = 0.0; inv = 0.0; bat = 0.0
+        for row in rows_data:
+            fid = str(row[0]) if row[0] else ""
+            if not re.match(r"^\d{15,}$", fid):
+                continue
+            o = parse_date(row[11] if len(row) > 11 else None)
+            if o is None or o < s or o > e:
+                continue
+            cnt += 1
+            if len(row) > 6 and isinstance(row[6], (int, float)):
+                mod += float(row[6])
+            if len(row) > 7 and isinstance(row[7], (int, float)):
+                inv += float(row[7])
+            if len(row) > 8 and isinstance(row[8], (int, float)):
+                bat += float(row[8])
+        ratio = round(mod / inv, 2) if inv > 0 else 0
+        stats[name] = [cnt, round(mod, 2), round(inv, 2), round(bat, 2), ratio]
+
+    for sheet_name in ("日期查询", "日期查询(旧)"):
+        if sheet_name in wb.sheetnames:
+            del wb[sheet_name]
+
+    ws = wb.create_sheet("日期查询")
+
+    # 列宽 — 从 A 列开始紧凑布局
+    for c, w in enumerate([24, 16, 20, 20, 20, 16, 18], 1):
+        ws.column_dimensions[chr(64 + c)].width = w
+
+    r = 1
+    # 标题
+    ws.cell(r, 1, "日期查询统计").font = FONT_TITLE
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    ws.row_dimensions[r].height = ROW_HEIGHT_TITLE
+    r += 1
+
+    # 筛选标签和下拉（从 B2 开始，比原来的 D3 更靠左）
+    ws.cell(r, 1, "时间段筛选：").font = FONT_LABEL
+    ws.cell(r, 1).alignment = ALIGN_LEFT
+    ws.cell(r, 1).border = THIN_BORDER
+    ws.cell(r, 2, "全部").font = FONT_DATA
+    ws.cell(r, 2).border = THIN_BORDER
+    ws.cell(r, 2).alignment = ALIGN_CENTER
+    ws.cell(r, 3, "  ← 点击选择").font = FONT_HINT
+    ws.cell(r, 3).alignment = ALIGN_LEFT
+    ws.row_dimensions[r].height = ROW_HEIGHT_DATA
+
+    # 下拉数据验证
+    presets = list(stats.keys())
+    dv = openpyxl.worksheet.datavalidation.DataValidation(
+        type="list", formula1=f'"{",".join(presets)}"',
+        allow_blank=True,
+    )
+    dv.prompt = "选择时间段"
+    dv.promptTitle = "快速选择"
+    ws.add_data_validation(dv)
+    dv.add(ws.cell(r, 2))
+    r += 2
+
+    # 预计算结果表
+    ws.cell(r, 1, "预计算结果").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    r += 1
+
+    headers = ["时间段", "项目数", "组件功率(kW)", "逆变器功率(kW)", "电池容量(kWh)", "容配比"]
+    apply_header_style(ws, r, headers)
+    table_header_row = r
+    r += 1
+
+    for i, name in enumerate(presets):
+        vals = [name] + stats[name]
+        fmts = [None, '0', '#,##0.00', '#,##0.00', '#,##0.00', '#,##0.00']
+        apply_data_row(ws, r, vals, is_alt=(i % 2 == 1))
+        for ci, nf in enumerate(fmts):
+            if nf:
+                ws.cell(r, 1 + ci).number_format = nf
+        ws.row_dimensions[r].height = ROW_HEIGHT_DATA
+        r += 1
+
+    r += 1
+
+    # INDEX/MATCH 公式结果（实时对应下拉选择）
+    ws.cell(r, 1, "当前选择结果").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    r += 1
+
+    n_p = len(presets)
+    data_first = table_header_row + 1
+    data_last = table_header_row + n_p
+    dr = f"$A${data_first}:$F${data_last}"
+    lr = f"$A${data_first}:$A${data_last}"
+
+    for label, ci, nf in [
+        ("询价项目数", 2, '0'),
+        ("组件总功率 (kW)", 3, '#,##0.00'),
+        ("逆变器总功率 (kW)", 4, '#,##0.00'),
+        ("电池总容量 (kWh)", 5, '#,##0.00'),
+        ("容配比（组件/逆变器）", 6, '#,##0.00'),
+    ]:
+        ws.cell(r, 1, label).font = FONT_LABEL
+        ws.cell(r, 1).border = THIN_BORDER
+        ws.cell(r, 1).alignment = ALIGN_CENTER
+        ws.cell(r, 2).value = f'=IFERROR(INDEX({dr},MATCH($B$2,{lr},0),{ci}),0)'
+        ws.cell(r, 2).font = Font(bold=True, size=11, color=Colors.RED_ACCENT)
+        ws.cell(r, 2).border = THIN_BORDER
+        ws.cell(r, 2).alignment = ALIGN_CENTER
+        ws.cell(r, 2).number_format = nf
+        ws.row_dimensions[r].height = ROW_HEIGHT_DATA
+        r += 1
+
+    r += 2
+    # 使用说明
+    ws.cell(r, 1, "使用说明").font = FONT_SECTION
+    r += 1
+    for tip in [
+        "1. 点击 B2 → 从下拉选择预设时间段",
+        "2. 预计算表格展示所有周期数据",
+        "3. '当前选择结果' 随下拉实时变化",
+        "4. 如需最新数据，重新运行周报脚本",
+    ]:
+        ws.cell(r, 1, tip).font = FONT_HINT
+        r += 1
+
+
+def _create_report_dashboard(wb: Any) -> None:
+    """创建「数据看板」Sheet — 管理层报表风格。"""
+    if "数据看板" in wb.sheetnames:
+        del wb["数据看板"]
+
+    ws = wb.create_sheet("数据看板")
+
+    data_ws = wb["询价汇总"]
+    last_data_row = max(data_ws.max_row, 2)
+
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 18
+    ws.column_dimensions["E"].width = 18
+    ws.column_dimensions["F"].width = 18
+    ws.column_dimensions["G"].width = 18
+
+    rows_data: list[list[Any]] = []
+    for r in range(2, last_data_row + 1):
+        row = []
+        for c in range(1, 20):
+            row.append(data_ws.cell(r, c).value)
+        rows_data.append(row)
+
+    r = 1
+    # 标题
+    ws.cell(r, 1, "询价数据看板").font = FONT_TITLE
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    ws.row_dimensions[r].height = ROW_HEIGHT_TITLE
+    r += 2
+
+    # ===== 区域1：王剑审批统计（一行三卡片） =====
+    ws.cell(r, 1, "王剑采购审批统计").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    r += 1
+
+    wangjian_count = 0
+    wangjian_total = 0
+    for row in rows_data:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        proc = str(row[16] if len(row) > 16 and row[16] else "")
+        status_val = str(row[17] if len(row) > 17 and row[17] else "")
+        if "王剑" in proc:
+            wangjian_total += 1
+            if "审批通过" in status_val:
+                wangjian_count += 1
+
+    rate = f"{wangjian_count/wangjian_total*100:.0f}%" if wangjian_total > 0 else "--"
+
+    cards = [
+        ("审批通过", wangjian_count, "次", FONT_KPI_BIG),
+        ("经手总次数", wangjian_total, "次", FONT_KPI_MED),
+        ("通过率", rate, "", FONT_KPI_BIG),
+    ]
+    for i, (label, value, unit, vf) in enumerate(cards):
+        col = 1 + i * 2  # A(1), C(3), E(5) — 从 A 列开始
+        write_kpi_card(ws, r, col, label, value, unit, vf, alt_fill=True)
+    r += 2
+
+    # ===== 区域2：省公司询价排名 =====
+    ws.cell(r, 1, "省公司询价排名").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    r += 1
+
+    province_stats: dict[str, dict[str, Any]] = {}
+    for row in rows_data:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        pv = str(row[4] if len(row) > 4 and row[4] else "")
+        if pv in ("--", "无", ""):
+            continue
+        g = float(row[6]) if len(row) > 6 and isinstance(row[6], (int, float)) else 0
+        if pv not in province_stats:
+            province_stats[pv] = {"cnt": 0, "module": 0.0}
+        province_stats[pv]["cnt"] += 1
+        province_stats[pv]["module"] += g
+
+    sorted_prov = sorted(province_stats.items(), key=lambda x: -x[1]["cnt"])
+
+    headers = ["排名", "省公司", "询价次数", "组件总功率(kW)"]
+    apply_header_style(ws, r, headers)
+    r += 1
+
+    for rank_i, (rank, (pv, data)) in enumerate(zip(range(1, len(sorted_prov) + 1), sorted_prov)):
+        row_vals = [rank, pv, data["cnt"], round(data["module"], 2)]
+        apply_data_row(ws, r, row_vals, is_alt=(rank_i % 2 == 1))
+        ws.cell(r, 4).number_format = '#,##0.00'
+        ws.row_dimensions[r].height = ROW_HEIGHT_DATA
+        r += 1
+
+    r += 2
+
+    # ===== 区域3：审批天数统计（一行四卡片） =====
+    ws.cell(r, 1, "询价到审批完成天数").font = FONT_SECTION
+    ws.cell(r, 1).alignment = ALIGN_CENTER
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    r += 1
+
+    days_list: list[int] = []
+    for row in rows_data:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        submit_time = str(row[11] if len(row) > 11 and row[11] else "")
+        final_time = str(row[18] if len(row) > 18 and row[18] else "")
+        if submit_time in ("--", "") or final_time in ("--", ""):
+            continue
+        sm = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
+        fm = re.match(r"(\d{4}-\d{2}-\d{2})", final_time)
+        if sm and fm:
+            from datetime import datetime as dt_dt
+            try:
+                sd = dt_dt.strptime(sm.group(1), "%Y-%m-%d")
+                fd = dt_dt.strptime(fm.group(1), "%Y-%m-%d")
+                delta = (fd - sd).days
+                if delta >= 0:
+                    days_list.append(delta)
+            except ValueError:
+                pass
+
+    avg_days = round(sum(days_list) / len(days_list), 1) if days_list else 0
+    total_with_both = len(days_list)
+
+    day_cards = [
+        ("平均天数", avg_days, "天", FONT_KPI_BIG),
+        ("最短天数", min(days_list) if days_list else 0, "天", FONT_KPI_MED),
+        ("最长天数", max(days_list) if days_list else 0, "天", FONT_KPI_MED),
+        ("统计样本数", total_with_both, "条", FONT_KPI_MED),
+    ]
+    for i, (label, value, unit, vf) in enumerate(day_cards):
+        col = 1 + i * 2  # A(1), C(3), E(5), G(7)
+        write_kpi_card(ws, r, col, label, value, unit, vf, alt_fill=True)
+    r += 2
+
+    # 说明
+    ws.cell(r, 1, "说明").font = FONT_SECTION
+    r += 1
+    for tip in [
+        "1. 王剑审批统计基于采购审批节点数据",
+        "2. 省公司排名按询价次数降序排列",
+        "3. 审批天数 = 审批完成时间 - 发起人提交审核时间",
+        "4. 如需最新数据，重新运行周报脚本即可",
+    ]:
+        ws.cell(r, 1, tip).font = FONT_HINT
+        r += 1
+
+
 # ==================== Excel 生成 ====================
 
-def generate_excel(records: list[FlowRecord], output_dir: str | None = None) -> str:
+def generate_excel(
+    records: list[FlowRecord],
+    output_dir: str | None = None,
+    query_range: str = "",
+) -> tuple[str, list[list[Any]]]:
     """生成格式化 Excel 文件。"""
     output_dir = output_dir or os.getcwd()
     file_path = os.path.join(output_dir, "询价汇总.xlsx")
@@ -611,7 +1122,7 @@ def generate_excel(records: list[FlowRecord], output_dir: str | None = None) -> 
             logger.warning("%s 被占用，使用备用文件名", file_path)
             file_path = backup_path
 
-    # 构建行数据
+    # 构建行数据（19 列，含审批链信息）
     rows_data: list[list[Any]] = []
     for r in records:
         rows_data.append([
@@ -621,38 +1132,53 @@ def generate_excel(records: list[FlowRecord], output_dir: str | None = None) -> 
             r.module_kw, r.inverter_kw, r.battery_kwh,
             r.unit_price, r.total_price,
             r.submit_time, r.remark, r.ordered,
+            r.province_processor, r.province_status,
+            r.purchase_processor, r.purchase_status,
+            r.final_approval_time,
         ])
 
     if os.path.exists(file_path):
         wb = openpyxl.load_workbook(file_path)
         ws = wb.active
+
+        # 读取已有流程编号，去重
+        existing_ids: set[str] = set()
+        for row in ws.iter_rows(min_row=2, max_col=1, values_only=True):
+            if row[0] and re.match(r"^\d{15,}$", str(row[0])):
+                existing_ids.add(str(row[0]))
+
+        new_rows = [r for r in rows_data if str(r[0]) not in existing_ids]
+        skipped = len(rows_data) - len(new_rows)
+        if skipped:
+            logger.info("跳过 %d 条重复记录", skipped)
+        rows_data = new_rows
+
         next_row = ws.max_row + 1
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "询价汇总"
-        for col, h in enumerate(HEADERS, 1):
-            cell = ws.cell(row=1, column=col, value=h)
-            cell.font = WHITE_BOLD
-            cell.fill = BLUE_FILL
-            cell.border = THIN_BORDER
-            cell.alignment = HEADER_ALIGN
+        apply_header_style(ws, 1, HEADERS)
         for i, w in enumerate(COLUMN_WIDTHS):
             ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
-        ws.row_dimensions[1].height = 30
+        ws.row_dimensions[1].height = ROW_HEIGHT_HEADER
         next_row = 2
 
-    for row_data in rows_data:
-        for col, val in enumerate(row_data, 1):
-            cell = ws.cell(row=next_row, column=col, value=val)
-            cell.border = THIN_BORDER
-            cell.alignment = DATA_ALIGN
-        ws.row_dimensions[next_row].height = 35
+    for i, row_data in enumerate(rows_data):
+        is_alt = (i % 2 == 1)
+        apply_data_row(ws, next_row, row_data, is_alt=is_alt)
+        ws.row_dimensions[next_row].height = ROW_HEIGHT_DATA
         next_row += 1
+
+    # 更新增强 Sheet（统计/日期查询/数据看板）
+    _update_summary_sheet(wb, ws, query_range)
+    _fill_date_helper_column(ws)
+    _create_date_query_sheet_v2(wb)
+    _create_report_dashboard(wb)
 
     wb.save(file_path)
     logger.info("Excel 已保存: %s (共 %d 条记录)", file_path, len(rows_data))
-    return file_path
+    return file_path, rows_data
 
 
 # ==================== 终端摘要 ====================
@@ -706,6 +1232,7 @@ async def run(args: argparse.Namespace) -> None:
     logger.info("=== 询价周报自动化（%d 并发）===", args.workers)
     logger.info("日期范围: %s ~ %s", start_date, end_date)
     logger.info("输出目录: %s", output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
     flow_ids: list[str] = []
     records: list[FlowRecord] = []
@@ -754,7 +1281,17 @@ async def run(args: argparse.Namespace) -> None:
             records = all_details
 
             # 5. 生成 Excel
-            excel_path = generate_excel(all_details, output_dir)
+            query_range = f"{start_date} ~ {end_date}"
+            excel_path, rows_data = generate_excel(all_details, output_dir, query_range=query_range)
+
+            # 6. 生成 HTML 报表（不影响主流程）
+            try:
+                from generate_html_report import generate_html_report as _gen_html
+                html_path = os.path.join(output_dir, "询价周报报表.html")
+                _gen_html(rows_data, query_range, html_path)
+                logger.info("HTML 报表已生成: %s", html_path)
+            except Exception as html_e:
+                logger.warning("HTML 报表生成失败（不影响 Excel）: %s", html_e)
 
         except Exception as e:
             error_msg = str(e)
@@ -768,6 +1305,137 @@ async def run(args: argparse.Namespace) -> None:
                 logger.debug("浏览器上下文已提前关闭，忽略")
 
     print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg)
+
+
+def stats_from_excel(args: argparse.Namespace) -> None:
+    """仅统计模式：从已有Excel读取数据，按日期范围筛选后更新统计Sheet。"""
+    output_dir = args.output_dir or os.getcwd()
+    file_path = os.path.join(output_dir, "询价汇总.xlsx")
+    backup_path = os.path.join(output_dir, "询价汇总_v2.xlsx")
+
+    if not os.path.exists(file_path) and os.path.exists(backup_path):
+        file_path = backup_path
+
+    if not os.path.exists(file_path):
+        logger.error("未找到询价汇总文件: %s", file_path)
+        return
+
+    # 计算日期范围
+    if args.this_month:
+        today = datetime.now()
+        start_date = today.replace(day=1).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+    elif args.start_date:
+        start_date = args.start_date
+        end_date = args.end_date or datetime.now().strftime("%Y-%m-%d")
+    else:
+        start_date, end_date = get_week_range(0)
+
+    query_range = f"{start_date} ~ {end_date}"
+    logger.info("=== 询价统计（仅统计模式）===")
+    logger.info("统计范围: %s", query_range)
+    logger.info("数据来源: %s", file_path)
+
+    wb = openpyxl.load_workbook(file_path)
+    data_ws = wb["询价汇总"]
+
+    # 确保列头完整（兼容老版本文件）
+    for col in range(1, len(HEADERS) + 1):
+        existing = data_ws.cell(row=1, column=col).value
+        header_value = HEADERS[col - 1]
+        if existing is None or existing != header_value:
+            cell = data_ws.cell(row=1, column=col, value=header_value)
+            cell.font = FONT_HEADER
+            cell.fill = FILL_HEADER
+            cell.border = THIN_BORDER
+            cell.alignment = ALIGN_HEADER
+
+    # 清除旧数据行中 15~19 列的残留，补充辅助列 T(20)
+    for r in range(2, data_ws.max_row + 1):
+        for c in range(15, 20):
+            data_ws.cell(row=r, column=c).value = None
+    _fill_date_helper_column(data_ws)
+
+    # 按日期范围筛选
+    filtered_rows: list[Any] = []
+    for row in data_ws.iter_rows(min_row=2, values_only=True):
+        flow_id = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", flow_id):
+            continue
+        submit_time = str(row[11]) if row[11] else ""
+        if submit_time not in ("--", "无", ""):
+            date_match = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
+            if date_match:
+                row_date = date_match.group(1)
+                if row_date < start_date or row_date > end_date:
+                    continue
+        filtered_rows.append(row)
+
+    # 计算统计
+    total_module = 0.0
+    total_inverter = 0.0
+    total_battery = 0.0
+    ordered_count = 0
+    not_ordered_count = 0
+    salesperson_set: set[str] = set()
+
+    for row in filtered_rows:
+        mk = row[6]
+        if mk not in ("无", "--", None, ""):
+            try:
+                total_module += float(mk)
+            except (ValueError, TypeError):
+                pass
+        ik = row[7]
+        if ik not in ("无", "--", None, ""):
+            try:
+                total_inverter += float(ik)
+            except (ValueError, TypeError):
+                pass
+        bk = row[8]
+        if bk not in ("无", "--", None, ""):
+            try:
+                total_battery += float(bk)
+            except (ValueError, TypeError):
+                pass
+        ordered = str(row[13] if row[13] else "")
+        if ordered == "是":
+            ordered_count += 1
+        else:
+            not_ordered_count += 1
+        sp = str(row[5] if row[5] else "")
+        if sp not in ("--", "无", ""):
+            salesperson_set.add(sp)
+
+    # 更新统计 Sheet
+    _update_summary_sheet(wb, data_ws, query_range, filtered_rows=filtered_rows)
+
+    # 更新日期查询和数据看板 Sheet
+    _fill_date_helper_column(data_ws)
+    _create_date_query_sheet_v2(wb)
+    _create_report_dashboard(wb)
+
+    wb.save(file_path)
+
+    # 终端输出
+    print(f"\n{'=' * 45}")
+    print(f"  📊 统计结果 ({query_range})")
+    print(f"{'=' * 45}")
+    print(f"  询价项目       {len(filtered_rows)} 个")
+    print(f"  涉及业务员     {len(salesperson_set)} 人")
+    print(f"  已下单         {ordered_count} 个")
+    print(f"  未下单         {not_ordered_count} 个")
+    print(f"  ——")
+    if total_module > 0:
+        print(f"  组件总功率     {total_module:.2f} kW")
+    if total_inverter > 0:
+        print(f"  逆变器总功率   {total_inverter:.2f} kW")
+    if total_battery > 0:
+        print(f"  电池总容量     {total_battery:.2f} kWh")
+    if total_inverter > 0:
+        print(f"  容配比         {total_module / total_inverter:.2f}")
+    print(f"{'=' * 45}")
+    logger.info("统计 Sheet 已更新到: %s", file_path)
 
 
 def main() -> None:
@@ -785,10 +1453,18 @@ def main() -> None:
                         help="输出目录（默认为当前工作目录）")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="输出详细调试日志")
+    parser.add_argument("--stats-only", action="store_true",
+                        help="仅统计模式：从已有Excel按日期范围重新统计，跳过浏览器操作")
+    parser.add_argument("--this-month", action="store_true",
+                        help="快捷统计本月（配合 --stats-only 使用）")
     args = parser.parse_args()
 
     configure_logging(verbose=args.verbose)
-    asyncio.run(run(args))
+
+    if args.stats_only:
+        stats_from_excel(args)
+    else:
+        asyncio.run(run(args))
 
 
 if __name__ == "__main__":
