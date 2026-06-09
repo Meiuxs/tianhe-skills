@@ -322,7 +322,7 @@ async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> 
 
         result = await _process_table_rows(page, result)
 
-    logger.info("有效记录: %d 条, 提取流程: %d 个", result.valid_rows, len(result.flow_ids))
+    logger.info("有效行: %d 行（去重后 %d 个流程）", result.valid_rows, len(result.flow_ids))
     if result.skipped_invalid:
         logger.info("跳过作废流程: %d 条", result.skipped_invalid)
     if result.skipped_dup:
@@ -1108,11 +1108,13 @@ def generate_excel(
     records: list[FlowRecord],
     output_dir: str | None = None,
     query_range: str = "",
+    timestamp_str: str | None = None,
 ) -> tuple[str, list[list[Any]]]:
     """生成格式化 Excel 文件。"""
     output_dir = output_dir or os.getcwd()
-    file_path = os.path.join(output_dir, "询价汇总.xlsx")
-    backup_path = os.path.join(output_dir, "询价汇总_v2.xlsx")
+    ts = timestamp_str or datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = os.path.join(output_dir, f"询价汇总_{ts}.xlsx")
+    backup_path = os.path.join(output_dir, f"询价汇总_{ts}_v2.xlsx")
 
     if os.path.exists(file_path):
         try:
@@ -1229,6 +1231,7 @@ async def run(args: argparse.Namespace) -> None:
         start_date, end_date = get_week_range(args.weeks)
 
     start_time = datetime.now()
+    timestamp_str = start_time.strftime("%Y%m%d_%H%M%S")
     logger.info("=== 询价周报自动化（%d 并发）===", args.workers)
     logger.info("日期范围: %s ~ %s", start_date, end_date)
     logger.info("输出目录: %s", output_dir)
@@ -1282,12 +1285,14 @@ async def run(args: argparse.Namespace) -> None:
 
             # 5. 生成 Excel
             query_range = f"{start_date} ~ {end_date}"
-            excel_path, rows_data = generate_excel(all_details, output_dir, query_range=query_range)
+            excel_path, rows_data = generate_excel(all_details, output_dir,
+                                                     query_range=query_range,
+                                                     timestamp_str=timestamp_str)
 
             # 6. 生成 HTML 报表（不影响主流程）
             try:
                 from generate_html_report import generate_html_report as _gen_html
-                html_path = os.path.join(output_dir, "询价周报报表.html")
+                html_path = os.path.join(output_dir, f"询价周报报表_{timestamp_str}.html")
                 _gen_html(rows_data, query_range, html_path)
                 logger.info("HTML 报表已生成: %s", html_path)
             except Exception as html_e:
@@ -1310,11 +1315,14 @@ async def run(args: argparse.Namespace) -> None:
 def stats_from_excel(args: argparse.Namespace) -> None:
     """仅统计模式：从已有Excel读取数据，按日期范围筛选后更新统计Sheet。"""
     output_dir = args.output_dir or os.getcwd()
-    file_path = os.path.join(output_dir, "询价汇总.xlsx")
-    backup_path = os.path.join(output_dir, "询价汇总_v2.xlsx")
-
-    if not os.path.exists(file_path) and os.path.exists(backup_path):
-        file_path = backup_path
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 尝试读取已有文件（兼容旧版无时间戳的文件名）
+    candidates = [
+        os.path.join(output_dir, f"询价汇总_{ts}.xlsx"),
+        os.path.join(output_dir, "询价汇总.xlsx"),
+        os.path.join(output_dir, "询价汇总_v2.xlsx"),
+    ]
+    file_path = next((p for p in candidates if os.path.exists(p)), candidates[0])
 
     if not os.path.exists(file_path):
         logger.error("未找到询价汇总文件: %s", file_path)
@@ -1415,7 +1423,9 @@ def stats_from_excel(args: argparse.Namespace) -> None:
     _create_date_query_sheet_v2(wb)
     _create_report_dashboard(wb)
 
-    wb.save(file_path)
+    # 保存到新文件（带时间戳，不覆盖原文件）
+    save_path = os.path.join(output_dir, f"询价汇总_{ts}.xlsx")
+    wb.save(save_path)
 
     # 终端输出
     print(f"\n{'=' * 45}")
@@ -1435,7 +1445,7 @@ def stats_from_excel(args: argparse.Namespace) -> None:
     if total_inverter > 0:
         print(f"  容配比         {total_module / total_inverter:.2f}")
     print(f"{'=' * 45}")
-    logger.info("统计 Sheet 已更新到: %s", file_path)
+    logger.info("统计结果已保存到: %s", save_path)
 
 
 def main() -> None:
