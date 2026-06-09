@@ -6,6 +6,13 @@
 <title>询价周报报表</title>
 <!-- Chart.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+<script>
+if (typeof Chart === 'undefined') {
+  document.write('<script src="https://unpkg.com/chart.js@4.4.7/dist/chart.umd.min.js"><\/script>');
+}
+</script>
+<!-- SheetJS CDN — Excel 导出 -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 /* ===================================================================
    DESIGN TOKENS — 报表风格配色系统
@@ -166,7 +173,6 @@ body {
   color: var(--text-primary);
   background: white;
 }
-
 /* ===================================================================
    TAB NAVIGATION
    =================================================================== */
@@ -229,8 +235,17 @@ body {
 /* ===================================================================
    TAB CONTENT LAYOUT
    =================================================================== */
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+.tab-content {
+  display: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+}
+.tab-content.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
 .tab-body {
   max-width: 1200px;
   margin: 0 auto;
@@ -327,6 +342,15 @@ body {
   border-left: 4px solid var(--primary);
 }
 .kpi-card.orange.highlight .label { color: var(--primary); font-weight: 600; }
+
+/* ── Warning KPI variant (for "not ordered" etc.) ── */
+.kpi-card.warning {
+  border-left: 4px solid var(--color-orange);
+  background: linear-gradient(to right, #FFF7ED 0%, white 100%);
+}
+.kpi-card.warning .label { color: var(--color-orange); font-weight: 600; }
+.kpi-card.warning .value { color: var(--color-orange); }
+
 .kpi-card.red    .value { color: var(--color-red); }
 .kpi-card.red    { border-left-color: var(--color-red); }
 
@@ -381,6 +405,21 @@ body {
   margin-top: var(--spacing-sm);
 }
 
+/* ── Skeleton Loader for Charts ── */
+.chart-skeleton {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+  z-index: 10;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ===================================================================
    TABLE
    =================================================================== */
@@ -428,6 +467,58 @@ th.number-right {
   text-align: right;
 }
 .number-format { font-variant-numeric: tabular-nums; }
+
+/* ── Pagination Controls ── */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-white);
+  border-top: 1px solid var(--border-light);
+  font-size: 13px;
+}
+.pagination-controls button {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: white;
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: all 0.15s;
+}
+.pagination-controls button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.pagination-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pagination-info {
+  color: var(--text-secondary);
+}
+
+/* ===================================================================
+   FORM CONTROLS — 统一 select/input 样式
+   =================================================================== */
+.form-control {
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: var(--font-family);
+  background: white;
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 110px;
+  transition: border-color .2s;
+}
+.form-control:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
 
 /* ===================================================================
    FILTER BAR
@@ -509,11 +600,13 @@ th.number-right {
   font-weight: 400;
   padding: 6px 12px;
   border-radius: 4px;
-  white-space: nowrap;
+  white-space: normal; /* 允许换行 */
+  max-width: 250px; /* 限制最大宽度 */
   pointer-events: none;
   opacity: 0;
   transition: opacity .2s;
   z-index: 200;
+  line-height: 1.4;
 }
 .tooltip-icon:hover::after {
   opacity: 1;
@@ -563,6 +656,13 @@ th.number-right {
   .chart-card { padding: var(--spacing-md); }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-result { margin-left: 0; }
+  /* Tooltip 响应式：小屏幕右对齐防止溢出 */
+  .tooltip-icon::after {
+    left: auto;
+    right: 0;
+    transform: none;
+    max-width: 200px;
+  }
 }
 
 /* ===================================================================
@@ -608,13 +708,21 @@ th.number-right {
       </div>
       <div class="global-filter">
         <label for="global-period-select">📅 时间段：</label>
-        <select id="global-period-select">
+        <select id="global-period-select" class="form-control">
           <option value="全部">全部</option>
           <option value="本周">本周</option>
           <option value="本月" selected>本月</option>
           <option value="上月">上月</option>
           <option value="本季度">本季度</option>
         </select>
+      </div>
+      <div class="header-actions" style="display:flex;gap:8px;">
+        <button id="export-excel-btn" style="padding:8px 16px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:var(--radius-sm);color:white;font-size:13px;font-family:var(--font-family);cursor:pointer;display:flex;align-items:center;gap:6px;">
+          📥 导出 Excel
+        </button>
+        <button id="refresh-data-btn" style="padding:8px 16px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:var(--radius-sm);color:white;font-size:13px;font-family:var(--font-family);cursor:pointer;display:flex;align-items:center;gap:6px;">
+          🔄 刷新数据
+        </button>
       </div>
     </div>
   </div>
@@ -662,7 +770,7 @@ th.number-right {
         <div class="value" id="kpi-ordered">--</div>
         <div class="unit">个</div>
       </div>
-      <div class="kpi-card orange highlight">
+      <div class="kpi-card warning">
         <div class="label">未下单</div>
         <div class="value" id="kpi-not-ordered">--</div>
         <div class="unit">个</div>
@@ -672,14 +780,14 @@ th.number-right {
     <!-- ──────────── 图表行一：订单状态饼图 + 功率对比柱状图 ──────────── -->
     <div class="chart-row split-40-60">
       <div class="chart-card">
-        <div class="chart-title">📊 订单状态分布</div>
+        <div class="chart-title">📊 订单状态分布<button class="chart-download-btn" data-chart-id="chart-order-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
         <div class="chart-wrap">
           <canvas id="chart-order-donut"></canvas>
         </div>
         <div class="chart-caption">已下单 vs 未下单 项目占比</div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">📊 功率容量对比</div>
+        <div class="chart-title">📊 功率容量对比<button class="chart-download-btn" data-chart-id="chart-power-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
         <div class="chart-wrap">
           <canvas id="chart-power-bar"></canvas>
         </div>
@@ -722,7 +830,7 @@ th.number-right {
     </h2>
     <div class="chart-row split-60-40">
       <div class="chart-card">
-        <div class="chart-title">📊 省公司询价次数排名</div>
+        <div class="chart-title">📊 省公司询价次数排名<button class="chart-download-btn" data-chart-id="chart-province-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
         <div class="chart-wrap">
           <canvas id="chart-province-bar"></canvas>
         </div>
@@ -765,10 +873,10 @@ th.number-right {
       关键节点审批统计
     </h2>
     <div class="filter-bar">
-      <label for="approver-select">👤 审批人：</label>
-      <select id="approver-select">
-        <option value="全部">全部审批人</option>
-      </select>
+      <label for="approver-input">👤 审批人：</label>
+      <input list="approver-list" id="approver-input" class="form-control" placeholder="输入或选择审批人..." style="min-width:150px;">
+      <datalist id="approver-list"></datalist>
+      <span class="filter-result" id="approver-filter-result"></span>
     </div>
     <div class="kpi-grid">
       <div class="kpi-card green">
@@ -791,14 +899,14 @@ th.number-right {
     <!-- ──────────── 图表行：审批通过率饼图 + 审批耗时分组对比 ──────────── -->
     <div class="chart-row">
       <div class="chart-card">
-        <div class="chart-title">📊 审批通过率</div>
+        <div class="chart-title">📊 审批通过率<button class="chart-download-btn" data-chart-id="chart-approval-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
         <div class="chart-wrap">
           <canvas id="chart-approval-donut"></canvas>
         </div>
         <div class="chart-caption">审批通过 / 未通过 占比</div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">📊 各省公司审批耗时对比</div>
+        <div class="chart-title">📊 各省公司审批耗时对比<button class="chart-download-btn" data-chart-id="chart-approval-compare" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
         <div class="chart-wrap">
           <canvas id="chart-approval-compare"></canvas>
         </div>
@@ -860,7 +968,7 @@ th.number-right {
     <!-- ──────────── 周期功率趋势柱状图 ──────────── -->
     <div class="chart-row single">
       <div class="chart-card full">
-        <div class="chart-title">📊 各周期功率容量趋势</div>
+        <div class="chart-title">📊 各周期功率容量趋势<button class="chart-download-btn" data-chart-id="chart-query-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
         <div class="chart-wrap">
           <canvas id="chart-query-bar"></canvas>
         </div>
@@ -918,6 +1026,14 @@ th.number-right {
    =================================================================== */
 const ROWS_DETAIL = {{ROWS_DETAIL_JSON}} || [];
 let currentGlobalPeriod = '本月';
+const SERVER_NOW = '{{SERVER_TIMESTAMP}}' || null; // 后端注入 ISO 8601 格式时间戳
+
+/* ── 明细表格分页状态 ── */
+let detailPageState = {
+  currentPage: 1,
+  pageSize: 20,
+  totalRows: 0,
+};
 
 /* ===================================================================
    CHART.JS 加载检查
@@ -946,7 +1062,6 @@ function initChartDefaults() {
   Chart.defaults.font.family = '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
   Chart.defaults.font.size   = 12;
   Chart.defaults.color       = '#5D6D7E';
-  Chart.register(donutCenterPlugin);
 }
 
 function safeChartInit(fn) {
@@ -981,6 +1096,12 @@ function escHtml(s) {
   return String(s).replace(/[&<>"']/g, function(c) {
     return '&#' + c.charCodeAt(0) + ';';
   });
+}
+
+/** 将本地 Date 格式化为 YYYY-MM-DD（不经过时区转换，避免 toISOString 的 UTC 截断） */
+function fmtLocalDate(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
 
 function hasData(arr) {
@@ -1037,13 +1158,18 @@ var donutCenterPlugin = {
   },
 };
 
+// 注册插件（必须在定义之后）
+if (typeof Chart !== 'undefined') {
+  Chart.register(donutCenterPlugin);
+}
+
 /* ──────────── 通用图表配置 ──────────── */
 function makeBarOpts(xLabel, yLabel) {
   return {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 2.2,
-    animation: { duration: 600, easing: 'easeOutQuart' },
+    animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
     plugins: {
       legend: {
         position: 'bottom',
@@ -1078,7 +1204,7 @@ function makeDonutOpts() {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 1.2,
-    animation: { duration: 600, easing: 'easeOutQuart' },
+    animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
     plugins: {
       legend: {
         position: 'bottom',
@@ -1093,8 +1219,9 @@ function makeDonutOpts() {
         callbacks: {
           label: function(ctx) {
             const total = ctx.dataset.data.reduce(function(a,b) { return a + b; }, 0);
-            const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
-            return ctx.label + ': ' + fmtNum(ctx.parsed) + ' (' + pct + '%)';
+            const value = typeof ctx.parsed === 'number' ? ctx.parsed : ctx.raw;
+            const pct = total > 0 ? (value / total * 100).toFixed(1) : 0;
+            return ctx.label + ': ' + fmtNum(value) + ' (' + pct + '%)';
           }
         }
       },
@@ -1109,11 +1236,21 @@ const chartInstances = {};
 function createChart(canvasId, config) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return null;
+
+  // 显示 skeleton loader
+  let wrap = canvas.parentNode;
+  if (wrap && !wrap.querySelector('.chart-skeleton')) {
+    let skeleton = document.createElement('div');
+    skeleton.className = 'chart-skeleton';
+    wrap.insertBefore(skeleton, canvas);
+  }
+
   if (chartInstances[canvasId]) {
     chartInstances[canvasId].destroy();
   }
   const ctx = canvas.getContext('2d');
   chartInstances[canvasId] = new Chart(ctx, config);
+
   return chartInstances[canvasId];
 }
 
@@ -1126,10 +1263,15 @@ function createChart(canvasId, config) {
  * 返回 null 表示「全部」（不过滤）。
  */
 function getPeriodDateRange(periodName) {
-  let today = new Date();
+  let today;
+  if (SERVER_NOW) {
+    today = new Date(SERVER_NOW);
+  } else {
+    today = new Date();
+  }
   let y = today.getFullYear();
   let m = today.getMonth(); // 0-based
-  let todayStr = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  let todayStr = y + '-' + ('0' + (m + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
 
   switch (periodName) {
     case '全部':
@@ -1137,20 +1279,20 @@ function getPeriodDateRange(periodName) {
     case '本周': {
       let ws = new Date(today);
       ws.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // 周一
-      return [ws.toISOString().split('T')[0], todayStr];
+      return [fmtLocalDate(ws), todayStr];
     }
     case '本月': {
-      let ms = y + '-' + String(m + 1).padStart(2, '0') + '-01';
+      let ms = y + '-' + ('0' + (m + 1)).slice(-2) + '-01';
       return [ms, todayStr];
     }
     case '上月': {
       let lmEnd = new Date(y, m, 0); // 上月最后一天
-      let lmStart = (m === 0 ? (y - 1) : y) + '-' + (m === 0 ? '12' : String(m).padStart(2, '0')) + '-01';
-      return [lmStart, lmEnd.toISOString().split('T')[0]];
+      let lmStart = (m === 0 ? (y - 1) : y) + '-' + (m === 0 ? '12' : ('0' + m).slice(-2)) + '-01';
+      return [lmStart, fmtLocalDate(lmEnd)];
     }
     case '本季度': {
       let qs = Math.floor(m / 3) * 3;
-      let qStart = y + '-' + String(qs + 1).padStart(2, '0') + '-01';
+      let qStart = y + '-' + ('0' + (qs + 1)).slice(-2) + '-01';
       return [qStart, todayStr];
     }
     default:
@@ -1228,9 +1370,9 @@ function computeApprovalDays(rows) {
     if (!sd || !fd) return;
     let d1 = new Date(sd);
     let d2 = new Date(fd);
-    // +1 使天数包含起始日和结束日（tooltip 注明"含当日"）
+    // 同天为 1 天，跨天按实际日历日差计算（不含时区偏移）
     let diff = Math.max(1, Math.round((d2 - d1) / 86400000));
-    if (diff >= 1) days.push(diff);
+    days.push(diff);
   });
   return {
     avg: days.length > 0 ? Math.round(days.reduce(function(a,b) { return a+b; }, 0) / days.length * 10) / 10 : 0,
@@ -1264,7 +1406,8 @@ function computeApproverStats(rows, approverName) {
   rows.forEach(function(row) {
     if (isMatch(row.procurementApprover)) {
       total++;
-      if (row.approvalStatus.indexOf('审批通过') >= 0) approved++;
+      let status = row.approvalStatus || '';
+      if (status.indexOf('审批通过') >= 0) approved++;
     }
   });
   return { approved: approved, total: total, rate: total > 0 ? Math.round(approved / total * 100) + '%' : '--' };
@@ -1282,7 +1425,6 @@ function computeApprovalByDimension(rows, field) {
     let d1 = new Date(sd);
     let d2 = new Date(fd);
     let diff = Math.max(1, Math.round((d2 - d1) / 86400000));
-    if (diff < 0) return;
     if (!stats[key]) stats[key] = [];
     stats[key].push(diff);
   });
@@ -1326,7 +1468,12 @@ function updateOverviewKPIs(stats) {
   setText('kpi-module-power', fmtNum(stats.modulePower));
   setText('kpi-inverter-power', fmtNum(stats.inverterPower));
   setText('kpi-battery-capacity', fmtNum(stats.batteryCapacity));
-  setText('kpi-ratio', stats.ratio.toFixed(2));
+  // 容配比：逆变器功率为 0 时显示 N/A
+  if (stats.inverterPower === 0) {
+    setText('kpi-ratio', 'N/A');
+  } else {
+    setText('kpi-ratio', stats.ratio.toFixed(2));
+  }
 }
 
 function renderApproverKPI(stats) {
@@ -1357,6 +1504,9 @@ function initOverviewCharts() {
   let ordered = stats.orderedCount;
   let notOrdered = stats.notOrderedCount;
   if (hasData([ordered, notOrdered])) {
+    // 检查是否单一数据占比 100%
+    let isSingleData = (ordered === 0 || notOrdered === 0);
+
     createChart('chart-order-donut', {
       type: 'doughnut',
       data: {
@@ -1366,6 +1516,11 @@ function initOverviewCharts() {
           backgroundColor: [CHART_COLORS.green, CHART_COLORS.orange],
           borderWidth: 2,
           borderColor: '#fff',
+          // 单一数据时添加半透明占位
+          ...(isSingleData ? {
+            data: [ordered || 0.01, notOrdered || 0.01],
+            backgroundColor: ordered > 0 ? [CHART_COLORS.green, 'rgba(0,0,0,0.05)'] : ['rgba(0,0,0,0.05)', CHART_COLORS.orange]
+          } : {})
         }],
       },
       options: makeDonutOpts(),
@@ -1395,7 +1550,7 @@ function initOverviewCharts() {
         responsive: true,
         maintainAspectRatio: true,
         aspectRatio: 1.6,
-        animation: { duration: 600, easing: 'easeOutQuart' },
+        animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
         plugins: {
           legend: {
             position: 'bottom',
@@ -1449,6 +1604,7 @@ function initOverviewCharts() {
         maintainAspectRatio: true,
         aspectRatio: 1.8,
         indexAxis: 'y',
+        animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -1545,7 +1701,7 @@ function initApprovalCharts() {
       maintainAspectRatio: true,
       aspectRatio: Math.max(1.2, compareData.length * 0.25),
       indexAxis: 'y',
-      animation: { duration: 600, easing: 'easeOutQuart' },
+      animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -1553,6 +1709,10 @@ function initApprovalCharts() {
           padding: 10,
           cornerRadius: 5,
           callbacks: {
+            title: function(ctx) {
+              let d = compareData[ctx[0].dataIndex];
+              return d ? d.name : ''; /* tooltip 中显示完整名称 */
+            },
             label: function(ctx) {
               let d = compareData[ctx.dataIndex];
               return '平均: ' + d.avg + '天 | 最短: ' + d.min + '天 | 最长: ' + d.max + '天 | 样本: ' + d.count + '条';
@@ -1571,7 +1731,15 @@ function initApprovalCharts() {
         },
         y: {
           grid: { display: false },
-          ticks: { font: { size: 11 } },
+          ticks: {
+            font: { size: 11 },
+            padding: 8, /* 增加间距防止标签溢出 */
+            callback: function(value, index) {
+              let label = compareData[index] ? compareData[index].name : '';
+              /* 超过 10 字符截断 */
+              return label.length > 10 ? label.slice(0, 10) + '...' : label;
+            }
+          },
         },
       },
     },
@@ -1648,22 +1816,81 @@ function renderDetailTable(rows) {
     td.textContent = '该时间段暂无询价项目明细';
     tr.appendChild(td);
     tbody.appendChild(tr);
-  } else {
-    rows.forEach(function(item) {
-      let tr = document.createElement('tr');
-      tr.appendChild(createTableCell('td', item.flowId));
-      tr.appendChild(createTableCell('td', item.projectName));
-      tr.appendChild(createTableCell('td', item.province));
-      tr.appendChild(createTableCell('td', item.salesperson));
-      tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--', 'number-right'));
-      tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--', 'number-right'));
-      tr.appendChild(createTableCell('td', item.batteryCapacity > 0 ? item.batteryCapacity.toFixed(2) : '--', 'number-right'));
-      tr.appendChild(createTableCell('td', item.ordered));
-      tr.appendChild(createTableCell('td', item.submitDate));
-      tr.appendChild(createTableCell('td', item.procurementApprover));
-      tbody.appendChild(tr);
-    });
+
+    // 移除分页控件
+    removePaginationControls();
+    return;
   }
+
+  // 更新分页状态
+  detailPageState.totalRows = rows.length;
+  let totalPages = Math.ceil(rows.length / detailPageState.pageSize);
+  if (detailPageState.currentPage > totalPages) {
+    detailPageState.currentPage = totalPages;
+  }
+
+  // 计算当前页数据
+  let startIdx = (detailPageState.currentPage - 1) * detailPageState.pageSize;
+  let endIdx = Math.min(startIdx + detailPageState.pageSize, rows.length);
+  let pageRows = rows.slice(startIdx, endIdx);
+
+  // 渲染当前页
+  pageRows.forEach(function(item) {
+    let tr = document.createElement('tr');
+    tr.appendChild(createTableCell('td', item.flowId));
+    tr.appendChild(createTableCell('td', item.projectName));
+    tr.appendChild(createTableCell('td', item.province));
+    tr.appendChild(createTableCell('td', item.salesperson));
+    tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--', 'number-right'));
+    tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--', 'number-right'));
+    // 电池容量：0 是合法值（无电池项目），也显示 "0.00" 而非 "--"
+    tr.appendChild(createTableCell('td', item.batteryCapacity != null ? item.batteryCapacity.toFixed(2) : '--', 'number-right'));
+    tr.appendChild(createTableCell('td', item.ordered));
+    tr.appendChild(createTableCell('td', item.submitDate));
+    tr.appendChild(createTableCell('td', item.procurementApprover));
+    tbody.appendChild(tr);
+  });
+
+  // 渲染分页控件
+  renderPaginationControls(totalPages, startIdx + 1, endIdx, rows.length);
+}
+
+function renderPaginationControls(totalPages, startRow, endRow, totalRows) {
+  // 移除旧的分页控件
+  removePaginationControls();
+
+  let tableContainer = document.querySelector('#tab-detail .table-container');
+  if (!tableContainer) return;
+
+  let paginationDiv = document.createElement('div');
+  paginationDiv.className = 'pagination-controls';
+  paginationDiv.id = 'detail-pagination';
+
+  paginationDiv.innerHTML =
+    '<button id="prev-page-btn" ' + (detailPageState.currentPage <= 1 ? 'disabled' : '') + '>上一页</button>' +
+    '<span class="pagination-info">显示 ' + startRow + '-' + endRow + ' / 共 ' + totalRows + ' 条（第 ' + detailPageState.currentPage + '/' + totalPages + ' 页）</span>' +
+    '<button id="next-page-btn" ' + (detailPageState.currentPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
+
+  tableContainer.appendChild(paginationDiv);
+
+  // 绑定事件
+  document.getElementById('prev-page-btn').addEventListener('click', function() {
+    if (detailPageState.currentPage > 1) {
+      detailPageState.currentPage--;
+      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+    }
+  });
+  document.getElementById('next-page-btn').addEventListener('click', function() {
+    if (detailPageState.currentPage < totalPages) {
+      detailPageState.currentPage++;
+      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+    }
+  });
+}
+
+function removePaginationControls() {
+  let existing = document.getElementById('detail-pagination');
+  if (existing) existing.remove();
 }
 
 /* ──────────── 省公司排名表格 ──────────── */
@@ -1678,7 +1905,8 @@ function renderProvinceTable() {
   ranking.forEach(function(item, i) {
     let tr = document.createElement('tr');
     let medal = MEDALS[i] || '';
-    tr.innerHTML = '<td>' + medal + '<span class="rank-medal">' + item.rank + '</span></td>' +
+    // 合并奖牌和排名数字为一个单元格
+    tr.innerHTML = '<td style="text-align:center;width:80px;">' + medal + item.rank + '</td>' +
       '<td>' + escHtml(item.province) + '</td>' +
       '<td class="number-format">' + item.count + '</td>' +
       '<td class="number-right">' + item.module.toFixed(2) + '</td>';
@@ -1686,22 +1914,25 @@ function renderProvinceTable() {
   });
 }
 
-/* ──────────── 审批人下拉菜单 ──────────── */
-function populateApproverSelect() {
-  let sel = document.getElementById('approver-select');
-  if (!sel) return;
-  let currentVal = sel.value;
+/* ──────────── 审批人搜索列表 ──────────── */
+function populateApproverList() {
+  let input = document.getElementById('approver-input');
+  let datalist = document.getElementById('approver-list');
+  if (!input || !datalist) return;
+
   let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
   let approvers = extractApproverList(filtered);
 
-  sel.innerHTML = '<option value="全部">全部审批人</option>';
+  datalist.innerHTML = '<option value="全部">全部审批人</option>';
   approvers.forEach(function(name) {
     let opt = document.createElement('option');
     opt.value = name;
-    opt.textContent = name;
-    // 保留用户已选值
-    if (name === currentVal && approvers.indexOf(currentVal) >= 0) opt.selected = true;
-    sel.appendChild(opt);
+    datalist.appendChild(opt);
+  });
+
+  // 绑定输入事件
+  input.addEventListener('change', function() {
+    onApproverChange(this.value);
   });
 }
 
@@ -1710,8 +1941,8 @@ function populateApproverSelect() {
    =================================================================== */
 
 function getSelectedApprover() {
-  let sel = document.getElementById('approver-select');
-  return sel ? sel.value : '';
+  let input = document.getElementById('approver-input');
+  return input ? input.value : '全部';
 }
 
 function getActiveTab() {
@@ -1757,6 +1988,9 @@ function onGlobalPeriodChange() {
   if (!sel) return;
   currentGlobalPeriod = sel.value;
 
+  // 重置分页状态
+  detailPageState.currentPage = 1;
+
   // 销毁所有图表
   destroyAllCharts();
   tabInitialized.overview = false;
@@ -1766,7 +2000,7 @@ function onGlobalPeriodChange() {
   // 更新静态元素
   updateOverviewKPIs(computeAggregates(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod)));
   renderProvinceTable();
-  populateApproverSelect(); // 同步刷新审批人下拉列表
+  populateApproverList(); // 同步刷新审批人搜索列表
 
   // 重建当前 Tab 的图表
   let tabName = getActiveTab();
@@ -1779,7 +2013,12 @@ function onGlobalPeriodChange() {
 }
 
 /* 审批人切换 */
-function onApproverChange() {
+function onApproverChange(selectedValue) {
+  let input = document.getElementById('approver-input');
+  if (input && selectedValue) {
+    input.value = selectedValue;
+  }
+
   // 销毁审批相关的图表
   ['chart-approval-donut', 'chart-approval-compare'].forEach(function(id) {
     if (chartInstances[id]) {
@@ -1796,20 +2035,87 @@ function onApproverChange() {
 
 /* Tab 切换 */
 function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
-  document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
-  document.getElementById('tab-' + name).classList.add('active');
-  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+  // 先淡出当前 tab
+  let currentActive = document.querySelector('.tab-content.active');
+  if (currentActive) {
+    currentActive.style.opacity = '0';
+    currentActive.style.transform = 'translateY(-8px)';
+  }
 
+  // 等待淡出完成后切换
   setTimeout(function() {
-    if (name === 'approval') {
-      populateApproverSelect();
-    }
-    initTabCharts(name);
-    if (name === 'detail') {
-      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
-    }
-  }, 80);
+    document.querySelectorAll('.tab-content').forEach(function(el) {
+      el.classList.remove('active');
+      el.style.opacity = '';
+      el.style.transform = '';
+    });
+    document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+    document.getElementById('tab-' + name).classList.add('active');
+    document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+
+    setTimeout(function() {
+      if (name === 'approval') {
+        populateApproverList();
+      }
+      initTabCharts(name);
+      if (name === 'detail') {
+        renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+      }
+    }, 80);
+  }, 250); // 与 CSS transition 时长一致
+}
+
+/* ===================================================================
+   EXPORT / DOWNLOAD / REFRESH
+   =================================================================== */
+
+/** 导出当前筛选数据为 Excel */
+function exportToExcel() {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel 导出库加载失败，请检查网络连接后刷新页面');
+    return;
+  }
+  var filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  var ws = XLSX.utils.json_to_sheet(filtered.map(function(row) {
+    return {
+      '流程编号': row.flowId,
+      '项目名称': row.projectName,
+      '省公司': row.province,
+      '业务员': row.salesperson,
+      '组件功率(kW)': row.modulePower,
+      '逆变器功率(kW)': row.inverterPower,
+      '电池容量(kWh)': row.batteryCapacity,
+      '已下单': row.ordered,
+      '提交日期': row.submitDate,
+      '采购审批人': row.procurementApprover,
+    };
+  }));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '询价明细');
+  XLSX.writeFile(wb, '询价周报_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+
+/** 下载图表为 PNG 图片 */
+function downloadChart(chartId) {
+  var canvas = document.getElementById(chartId);
+  if (!canvas) return;
+  var link = document.createElement('a');
+  link.download = chartId + '_' + new Date().toISOString().slice(0, 10) + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+/** 刷新数据（演示模式，实际项目替换为真实 API） */
+function refreshData() {
+  document.body.style.cursor = 'wait';
+  // 模拟 API 调用（实际项目中替换为 fetch）
+  setTimeout(function() {
+    // fetch('/api/weekly-report?period=' + currentGlobalPeriod)
+    //   .then(function(res) { return res.json(); })
+    //   .then(function(data) { ROWS_DETAIL = data; rebuildAll(); });
+    alert('数据已刷新（演示模式：请配置真实 API 接口）');
+    document.body.style.cursor = 'default';
+  }, 500);
 }
 
 /* ===================================================================
@@ -1817,10 +2123,25 @@ function switchTab(name) {
    =================================================================== */
 function initEventListeners() {
   document.getElementById('global-period-select').addEventListener('change', onGlobalPeriodChange);
-  document.getElementById('approver-select').addEventListener('change', onApproverChange);
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       switchTab(this.dataset.tab);
+    });
+  });
+
+  /* 导出 Excel */
+  var exportBtn = document.getElementById('export-excel-btn');
+  if (exportBtn) exportBtn.addEventListener('click', exportToExcel);
+
+  /* 刷新数据 */
+  var refreshBtn = document.getElementById('refresh-data-btn');
+  if (refreshBtn) refreshBtn.addEventListener('click', refreshData);
+
+  /* 图表下载按钮 */
+  document.querySelectorAll('.chart-download-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var chartId = this.dataset.chartId;
+      downloadChart(chartId);
     });
   });
 }
