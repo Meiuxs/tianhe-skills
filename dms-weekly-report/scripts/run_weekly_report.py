@@ -116,9 +116,9 @@ class FlowRecord:
     agent_name: str = "--"
     province: str = "--"
     salesperson: str = "--"
-    module_kw: float | str = "无"
-    inverter_kw: float | str = "无"
-    battery_kwh: float | str = "无"
+    module_kw: float = 0.0
+    inverter_kw: float = 0.0
+    battery_kwh: float = 0.0
     unit_price: str = "--"
     total_price: str = "--"
     submit_time: str = "--"
@@ -354,8 +354,19 @@ def _split_agent(agent_raw: str) -> tuple[str, str]:
 
 
 def _extract_power(name: str) -> float | None:
-    """从物料名称中提取功率（kW）。"""
+    """从物料名称中提取功率（kW）。
+
+    支持多种 DMS 物料命名格式：
+    - 下划线分隔：SUN2000-50KTL_50_kW_ 或 xxx_50000_W_
+    - 无分隔符：组串式逆变器50kW 或 逆变器 100kW
+    """
+    # 优先匹配标准下划线分隔格式
     m = re.search(r"_(\d+(?:\.\d+)?)\s*(k?W)_", name, re.IGNORECASE)
+    if m:
+        val = float(m.group(1))
+        return val / 1000 if m.group(2).lower() == "w" else val
+    # 回退：匹配任意位置的 XXXXkW 或 XXXX W 格式
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?W)", name, re.IGNORECASE)
     if m:
         val = float(m.group(1))
         return val / 1000 if m.group(2).lower() == "w" else val
@@ -371,31 +382,35 @@ def _extract_capacity(name: str) -> float | None:
     return None
 
 
-def _calc_module_power(items: list[BOMItem]) -> float | str:
+def _calc_module_power(items: list[BOMItem]) -> float:
     total = 0.0
     for i in items:
         kw = _extract_power(i.name)
         if kw is not None and ("销售组件" in i.name or "组件" in i.name):
             total += kw * i.qty
-    return round(total, 2) if total > 0 else "无"
+    return round(total, 2)
 
 
-def _calc_inverter_power(items: list[BOMItem]) -> float | str:
+def _calc_inverter_power(items: list[BOMItem]) -> float:
     total = 0.0
     for i in items:
         kw = _extract_power(i.name)
         if kw is not None and "逆变器" in i.name:
             total += kw * i.qty
-    return round(total, 2) if total > 0 else "无"
+    if total == 0:
+        inv_names = [i.name for i in items if "逆变器" in i.name.lower()]
+        if inv_names:
+            logger.debug("逆变器物料名称未匹配功率: %s", inv_names)
+    return round(total, 2)
 
 
-def _calc_battery_capacity(items: list[BOMItem]) -> float | str:
+def _calc_battery_capacity(items: list[BOMItem]) -> float:
     total = 0.0
     for i in items:
         kwh = _extract_capacity(i.name)
         if kwh is not None and ("电池" in i.name or "储能" in i.name):
             total += kwh * i.qty
-    return round(total, 2) if total > 0 else "无"
+    return round(total, 2)
 
 
 def _build_remark(items: list[BOMItem]) -> str:

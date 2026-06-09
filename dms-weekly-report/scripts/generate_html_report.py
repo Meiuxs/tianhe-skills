@@ -18,6 +18,21 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
+# ==================== 工具函数 ====================
+
+
+def _safe_float(value: Any) -> float:
+    """安全地将单元格值转为 float，处理字符串 "无" 等非数字值。"""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
 # ==================== 模板替换 ====================
 
 
@@ -171,12 +186,12 @@ def compute_period_data(rows: list[list[Any]]) -> dict[str, dict[str, float | in
             if sp and sp not in ("--", "无", ""):
                 sp_set.add(sp)
             # 容量
-            if len(row) > 6 and isinstance(row[6], (int, float)):
-                mod += float(row[6])
-            if len(row) > 7 and isinstance(row[7], (int, float)):
-                inv += float(row[7])
-            if len(row) > 8 and isinstance(row[8], (int, float)):
-                bat += float(row[8])
+            if len(row) > 6:
+                mod += _safe_float(row[6])
+            if len(row) > 7:
+                inv += _safe_float(row[7])
+            if len(row) > 8:
+                bat += _safe_float(row[8])
         ratio = round(mod / inv, 2) if inv > 0 else 0
         result[name] = {
             "count": cnt,
@@ -210,12 +225,12 @@ def compute_daily_data(rows: list[list[Any]]) -> dict[str, dict[str, int | float
             continue
 
         daily[date_str]["count"] += 1
-        if len(row) > 6 and isinstance(row[6], (int, float)):
-            daily[date_str]["module"] += float(row[6])
-        if len(row) > 7 and isinstance(row[7], (int, float)):
-            daily[date_str]["inverter"] += float(row[7])
-        if len(row) > 8 and isinstance(row[8], (int, float)):
-            daily[date_str]["battery"] += float(row[8])
+        if len(row) > 6:
+            daily[date_str]["module"] += _safe_float(row[6])
+        if len(row) > 7:
+            daily[date_str]["inverter"] += _safe_float(row[7])
+        if len(row) > 8:
+            daily[date_str]["battery"] += _safe_float(row[8])
 
     sorted_dates = sorted(daily.keys())
     result: dict[str, dict[str, int | float]] = {}
@@ -258,7 +273,7 @@ def compute_province_ranking(rows: list[list[Any]]) -> list[dict[str, Any]]:
         pv = str(row[4] if len(row) > 4 and row[4] else "")
         if pv in ("--", "无", ""):
             continue
-        g = float(row[6]) if len(row) > 6 and isinstance(row[6], (int, float)) else 0
+        g = _safe_float(row[6]) if len(row) > 6 else 0
         if pv not in stats:
             stats[pv] = {"cnt": 0, "module": 0.0}
         stats[pv]["cnt"] += 1
@@ -379,9 +394,9 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[dict[str, Any]]:
             "projectName": str(row[1]) if row[1] else "",
             "province": str(row[4]) if row[4] else "",
             "salesperson": str(row[5]) if row[5] else "",
-            "modulePower": float(row[6]) if len(row) > 6 and isinstance(row[6], (int, float)) else 0,
-            "inverterPower": float(row[7]) if len(row) > 7 and isinstance(row[7], (int, float)) else 0,
-            "batteryCapacity": float(row[8]) if len(row) > 8 and isinstance(row[8], (int, float)) else 0,
+            "modulePower": _safe_float(row[6]) if len(row) > 6 else 0,
+            "inverterPower": _safe_float(row[7]) if len(row) > 7 else 0,
+            "batteryCapacity": _safe_float(row[8]) if len(row) > 8 else 0,
             "ordered": str(row[13]) if row[13] else "否",
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "provinceApprover": str(row[14]) if len(row) > 14 and row[14] and row[14] != "--" else "",
