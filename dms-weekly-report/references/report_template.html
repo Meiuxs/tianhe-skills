@@ -810,7 +810,7 @@ th.number-right {
     <h2 class="section-title">
       <span class="title-icon">◉</span>
       询价到审批完成天数
-      <span class="tooltip-icon" data-tip="计算方式：从流程发起人提交审核时间（含当日）到最终审批完成时间（含当日）的日历天数，包含周末及节假日。">(?)</span>
+      <span class="tooltip-icon" data-tip="计算方式：从流程发起人提交审核日到最终审批完成日的日历天数（同天为1天），包含周末及节假日。">(?)</span>
     </h2>
     <div class="kpi-grid">
       <div class="kpi-card highlight">
@@ -1229,7 +1229,7 @@ function computeApprovalDays(rows) {
     let d1 = new Date(sd);
     let d2 = new Date(fd);
     // +1 使天数包含起始日和结束日（tooltip 注明"含当日"）
-    let diff = Math.round((d2 - d1) / 86400000) + 1;
+    let diff = Math.max(1, Math.round((d2 - d1) / 86400000));
     if (diff >= 1) days.push(diff);
   });
   return {
@@ -1281,7 +1281,7 @@ function computeApprovalByDimension(rows, field) {
     if (!key || key === '--' || key === '无' || key === '') return;
     let d1 = new Date(sd);
     let d2 = new Date(fd);
-    let diff = (d2 - d1) / 86400000;
+    let diff = Math.max(1, Math.round((d2 - d1) / 86400000));
     if (diff < 0) return;
     if (!stats[key]) stats[key] = [];
     stats[key].push(diff);
