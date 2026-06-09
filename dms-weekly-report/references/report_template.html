@@ -11,37 +11,37 @@
    DESIGN TOKENS — 报表风格配色系统
    =================================================================== */
 :root {
-  /* ── 主色：藏蓝系，适合打印和屏幕阅读 ── */
-  --primary:       #1B4F8B;
-  --primary-dark:  #0D3B6E;
-  --primary-light: #4A7FB5;
-  --primary-l10:   #D6E4F0;  /* 10% lightness tint */
-  --primary-l5:    #EBF2FA;   /* 5% lightness tint */
+  /* ── 主色：靛蓝系，现代专业报表风格 ── */
+  --primary:       #1D4ED8;  /* 靛蓝-主色 */
+  --primary-dark:  #1E3A8A;  /* 靛蓝-深色 */
+  --primary-light: #60A5FA;  /* 靛蓝-浅色 */
+  --primary-l10:   #DBEAFE;  /* 10% 浅色 tint */
+  --primary-l5:    #EFF6FF;  /* 5% 浅色 tint */
 
   /* ── 功能色 ── */
-  --color-green:  #28A745;
-  --color-orange: #E67E22;
-  --color-red:    #DC3545;
-  --color-purple: #6F42C1;
-  --color-teal:   #17A2B8;
+  --color-green:  #10B981;  /* 翠绿 */
+  --color-orange: #F59E0B;  /* 琥珀 */
+  --color-red:    #EF4444;  /* 朱红 */
+  --color-purple: #8B5CF6;  /* 紫罗兰 */
+  --color-teal:   #06B6D4;  /* 青碧 */
 
-  /* ── 图表调色板（报表风格，低饱和度） ── */
-  --chart-1: #2E86C1;
-  --chart-2: #28B463;
-  --chart-3: #E67E22;
-  --chart-4: #8E44AD;
-  --chart-5: #DC3545;
-  --chart-6: #17A2B8;
+  /* ── 图表调色板 ── */
+  --chart-1: #3B82F6;  /* 蓝 */
+  --chart-2: #10B981;  /* 绿 */
+  --chart-3: #F59E0B;  /* 黄 */
+  --chart-4: #8B5CF6;  /* 紫 */
+  --chart-5: #EF4444;  /* 红 */
+  --chart-6: #06B6D4;  /* 青 */
 
-  /* ── 中性色 ── */
-  --text-primary:    #2C3E50;
-  --text-secondary:  #5D6D7E;
-  --text-tertiary:   #95A5A6;
-  --bg-page:         #F0F2F5;
+  /* ── 中性色（石板暖灰系） ── */
+  --text-primary:    #0F172A;  /* 石板-900 */
+  --text-secondary:  #475569;  /* 石板-600 */
+  --text-tertiary:   #94A3B8;  /* 石板-400 */
+  --bg-page:         #F1F5F9;  /* 石板-100 */
   --bg-white:        #FFFFFF;
-  --bg-card:         #F8F9FA;
-  --border-color:    #DEE2E6;
-  --border-light:    #E9ECEF;
+  --bg-card:         #F8FAFC;  /* 石板-50 */
+  --border-color:    #CBD5E1;  /* 石板-300 */
+  --border-light:    #E2E8F0;  /* 石板-200 */
 
   /* ── 排版 ── */
   --font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
@@ -77,7 +77,7 @@ body {
 }
 
 /* ===================================================================
-   HEADER — 报表页眉
+   HEADER — 报表页眉（含全局筛选器）
    =================================================================== */
 .header {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 60%, var(--primary-light) 100%);
@@ -118,6 +118,12 @@ body {
   opacity: 0.75;
   margin-top: 2px;
 }
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+}
 .header .meta {
   font-size: 12px;
   opacity: 0.85;
@@ -127,6 +133,38 @@ body {
 .header .meta span {
   display: inline-block;
   margin-left: var(--spacing-md);
+}
+.global-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: rgba(255,255,255,0.12);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+}
+.global-filter label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+}
+.global-filter select {
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-family);
+  background: rgba(255,255,255,0.15);
+  color: white;
+  cursor: pointer;
+  min-width: 100px;
+}
+.global-filter select:focus {
+  outline: 2px solid rgba(255,255,255,0.6);
+  outline-offset: 1px;
+}
+.global-filter select option {
+  color: var(--text-primary);
+  background: white;
 }
 
 /* ===================================================================
@@ -300,6 +338,9 @@ body {
 .chart-row.single {
   grid-template-columns: 1fr;
 }
+.chart-row.split-60-40 {
+  grid-template-columns: 3fr 2fr;
+}
 .chart-card {
   background: var(--bg-white);
   border-radius: var(--radius);
@@ -370,6 +411,15 @@ tbody td {
 tbody tr:nth-child(even) { background: #F7F8FA; }
 tbody tr:hover td { background: var(--primary-l5); }
 tbody tr:last-child td { border-bottom: none; }
+
+/* 数值右对齐（财务报表规范） */
+td.number-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+th.number-right {
+  text-align: right;
+}
 .number-format { font-variant-numeric: tabular-nums; }
 
 /* ===================================================================
@@ -417,37 +467,28 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 /* ===================================================================
-   STATS ROW
+   TOOLTIP ICON
    =================================================================== */
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
-}
-.stats-item {
-  text-align: center;
-  padding: var(--spacing-md);
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-color);
-  transition: border-color .2s;
-  cursor: default;
-}
-.stats-item:hover { border-color: var(--primary-light); }
-.stats-item .label {
+.tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--border-color);
+  color: var(--text-secondary);
   font-size: 11px;
-  font-weight: 500;
-  color: var(--text-tertiary);
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  font-weight: 600;
+  cursor: help;
+  margin-left: 6px;
+  position: relative;
+  vertical-align: middle;
+  transition: background .2s;
 }
-.stats-item .value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
+.tooltip-icon:hover {
+  background: var(--primary);
+  color: white;
 }
 
 /* ===================================================================
@@ -478,9 +519,11 @@ td:first-child { text-align: center; width: 60px; }
    =================================================================== */
 @media (max-width: 1024px) {
   .chart-row { grid-template-columns: 1fr; }
+  .chart-row.split-60-40 { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
   .header-inner { flex-direction: column; text-align: center; }
+  .header-right { align-items: center; }
   .header .meta { text-align: center; }
   .header .meta span { margin: 0 var(--spacing-sm); }
   .tab-nav { padding: 0 var(--spacing-sm); }
@@ -491,8 +534,6 @@ td:first-child { text-align: center; width: 60px; }
   .chart-card { padding: var(--spacing-md); }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-result { margin-left: 0; }
-  .stats-row { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
-  .stats-item .value { font-size: 18px; }
 }
 
 /* ===================================================================
@@ -520,7 +561,7 @@ td:first-child { text-align: center; width: 60px; }
 <body>
 
 <!-- ===================================================================
-     HEADER
+     HEADER（含全局时间段筛选器）
      =================================================================== -->
 <header class="header">
   <div class="header-inner">
@@ -531,9 +572,21 @@ td:first-child { text-align: center; width: 60px; }
         <div class="subtitle">DMS 采购询价数据统计</div>
       </div>
     </div>
-    <div class="meta">
-      <span>📅 {{REPORT_DATE_RANGE}}</span><br>
-      <span>⏱ {{REPORT_GENERATED_AT}}</span>
+    <div class="header-right">
+      <div class="meta">
+        <span>📅 {{REPORT_DATE_RANGE}}</span>
+        <span>⏱ {{REPORT_GENERATED_AT}}</span>
+      </div>
+      <div class="global-filter">
+        <label for="global-period-select">📅 时间段：</label>
+        <select id="global-period-select" onchange="onGlobalPeriodChange()">
+          <option value="全部">全部</option>
+          <option value="本周">本周</option>
+          <option value="本月" selected>本月</option>
+          <option value="上月">上月</option>
+          <option value="本季度">本季度</option>
+        </select>
+      </div>
     </div>
   </div>
 </header>
@@ -542,21 +595,21 @@ td:first-child { text-align: center; width: 60px; }
      TAB NAVIGATION
      =================================================================== -->
 <nav class="tab-nav" role="tablist">
-  <button class="tab-btn active" role="tab" data-tab="summary" onclick="switchTab('summary')">
-    📈 询价统计 <span class="badge">KPI</span>
+  <button class="tab-btn active" role="tab" data-tab="overview" onclick="switchTab('overview')">
+    📈 项目与容量概览 <span class="badge">KPI</span>
   </button>
-  <button class="tab-btn" role="tab" data-tab="query" onclick="switchTab('query')">
-    🔍 日期查询 <span class="badge">交互</span>
+  <button class="tab-btn" role="tab" data-tab="approval" onclick="switchTab('approval')">
+    ⏱ 审批与时效流转 <span class="badge">效率</span>
   </button>
-  <button class="tab-btn" role="tab" data-tab="dashboard" onclick="switchTab('dashboard')">
-    📋 数据看板 <span class="badge">管理</span>
+  <button class="tab-btn" role="tab" data-tab="detail" onclick="switchTab('detail')">
+    📋 多维数据明细 <span class="badge">下钻</span>
   </button>
 </nav>
 
 <!-- ===================================================================
-     TAB 1: 询价统计
+     TAB 1: 项目与容量概览
      =================================================================== -->
-<section class="tab-content active" id="tab-summary" role="tabpanel">
+<section class="tab-content active" id="tab-overview" role="tabpanel">
   <div class="tab-body">
 
     <!-- ──────────── 询价概览 ──────────── -->
@@ -633,18 +686,49 @@ td:first-child { text-align: center; width: 60px; }
       </div>
     </div>
 
-    <!-- ──────────── 图表行二：周期趋势柱状图 ──────────── -->
+    <!-- ──────────── 每日趋势折线图（替代原周期趋势柱状图）──────────── -->
     <h2 class="section-title">
       <span class="title-icon">◉</span>
-      周期趋势
+      每日趋势
     </h2>
     <div class="chart-row single">
       <div class="chart-card full">
-        <div class="chart-title">📊 各周期询价项目数</div>
+        <div class="chart-title">📊 每日询价项目数 & 组件功率趋势</div>
         <div class="chart-wrap">
-          <canvas id="chart-trend-bar"></canvas>
+          <canvas id="chart-daily-trend"></canvas>
         </div>
-        <div class="chart-caption">按时间段统计询价项目数量趋势</div>
+        <div class="chart-caption">按提交日期统计询价项目数和组件功率变化趋势</div>
+      </div>
+    </div>
+
+    <!-- ──────────── 省公司询价排名：横向条形图 + 表格 ──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      省公司询价排名
+    </h2>
+    <div class="chart-row split-60-40">
+      <div class="chart-card">
+        <div class="chart-title">📊 省公司询价次数排名</div>
+        <div class="chart-wrap">
+          <canvas id="chart-province-bar"></canvas>
+        </div>
+        <div class="chart-caption">各省公司询价项目数量</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📄 排名明细</div>
+        <div class="table-container" style="border:none;box-shadow:none;margin:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>排名</th>
+                <th>省公司</th>
+                <th>询价次数</th>
+                <th class="number-right">组件功率(kW)</th>
+              </tr>
+            </thead>
+            <tbody id="province-table-body"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -656,135 +740,55 @@ td:first-child { text-align: center; width: 60px; }
 </section>
 
 <!-- ===================================================================
-     TAB 2: 日期查询
+     TAB 2: 审批与时效流转
      =================================================================== -->
-<section class="tab-content" id="tab-query" role="tabpanel">
+<section class="tab-content" id="tab-approval" role="tabpanel">
   <div class="tab-body">
 
+    <!-- ──────────── 关键节点审批统计 ──────────── -->
     <h2 class="section-title">
       <span class="title-icon">◉</span>
-      日期查询统计
+      关键节点审批统计
     </h2>
-
     <div class="filter-bar">
-      <label for="period-select">📅 时间段筛选：</label>
-      <select id="period-select" onchange="filterByPeriod()">
-        <option value="全部">全部</option>
-        <option value="本周">本周</option>
-        <option value="本月" selected>本月</option>
-        <option value="上月">上月</option>
-        <option value="本季度">本季度</option>
+      <label for="approver-select">👤 审批人：</label>
+      <select id="approver-select" onchange="onApproverChange()">
+        <option value="全部">全部审批人</option>
       </select>
-      <span class="filter-result" id="filter-result"></span>
     </div>
-
-    <!-- ──────────── 交互式趋势柱状图 ──────────── -->
-    <div class="chart-row single">
-      <div class="chart-card full">
-        <div class="chart-title">📊 各周期功率容量趋势</div>
-        <div class="chart-wrap">
-          <canvas id="chart-query-bar"></canvas>
-        </div>
-        <div class="chart-caption">组件功率 / 逆变器功率 / 电池容量 按时间段对比</div>
-      </div>
-    </div>
-
-    <!-- ──────────── 明细表格 ──────────── -->
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>时间段</th>
-            <th>项目数</th>
-            <th>组件功率(kW)</th>
-            <th>逆变器功率(kW)</th>
-            <th>电池容量(kWh)</th>
-            <th>容配比</th>
-          </tr>
-        </thead>
-        <tbody id="period-table-body"></tbody>
-      </table>
-    </div>
-
-    <!-- ──────────── 当前选择结果 ──────────── -->
-    <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      当前选择结果
-    </h2>
-    <div class="stats-row">
-      <div class="stats-item">
-        <div class="label">项目数</div>
-        <div class="value" id="result-count"></div>
-      </div>
-      <div class="stats-item">
-        <div class="label">组件功率 (kW)</div>
-        <div class="value" id="result-module"></div>
-      </div>
-      <div class="stats-item">
-        <div class="label">逆变器功率 (kW)</div>
-        <div class="value" id="result-inverter"></div>
-      </div>
-      <div class="stats-item">
-        <div class="label">电池容量 (kWh)</div>
-        <div class="value" id="result-battery"></div>
-      </div>
-      <div class="stats-item">
-        <div class="label">容配比</div>
-        <div class="value" id="result-ratio"></div>
-      </div>
-    </div>
-
-    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-      💡 点击上方下拉菜单切换时间段，图表与数据自动刷新
-    </p>
-
-  </div>
-</section>
-
-<!-- ===================================================================
-     TAB 3: 数据看板
-     =================================================================== -->
-<section class="tab-content" id="tab-dashboard" role="tabpanel">
-  <div class="tab-body">
-
-    <!-- ──────────── 王剑采购审批 ──────────── -->
-    <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      王剑采购审批统计
-    </h2>
     <div class="kpi-grid">
       <div class="kpi-card green">
         <div class="label">审批通过</div>
-        <div class="value">{{WANGJIAN_APPROVED}}</div>
+        <div class="value" id="approver-approved">{{WANGJIAN_APPROVED}}</div>
         <div class="unit">次</div>
       </div>
       <div class="kpi-card">
         <div class="label">经手总次数</div>
-        <div class="value">{{WANGJIAN_TOTAL}}</div>
+        <div class="value" id="approver-total">{{WANGJIAN_TOTAL}}</div>
         <div class="unit">次</div>
       </div>
       <div class="kpi-card highlight">
         <div class="label">通过率</div>
-        <div class="value">{{WANGJIAN_RATE}}</div>
+        <div class="value" id="approver-rate">{{WANGJIAN_RATE}}</div>
         <div class="unit"></div>
       </div>
     </div>
 
-    <!-- ──────────── 图表行：王剑审批饼图 + 审批天数柱状图 ──────────── -->
+    <!-- ──────────── 图表行：审批通过率饼图 + 审批耗时分组对比 ──────────── -->
     <div class="chart-row">
       <div class="chart-card">
         <div class="chart-title">📊 审批通过率</div>
         <div class="chart-wrap">
-          <canvas id="chart-wangjian-donut"></canvas>
+          <canvas id="chart-approval-donut"></canvas>
         </div>
         <div class="chart-caption">审批通过 / 未通过 占比</div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">📊 审批耗时统计</div>
+        <div class="chart-title">📊 各省公司审批耗时对比</div>
         <div class="chart-wrap">
-          <canvas id="chart-days-bar"></canvas>
+          <canvas id="chart-approval-compare"></canvas>
         </div>
-        <div class="chart-caption">询价到审批完成天数</div>
+        <div class="chart-caption">各省公司询价到审批完成的平均耗时（天）</div>
       </div>
     </div>
 
@@ -792,6 +796,7 @@ td:first-child { text-align: center; width: 60px; }
     <h2 class="section-title">
       <span class="title-icon">◉</span>
       询价到审批完成天数
+      <span class="tooltip-icon" title="计算方式：从流程发起人提交审核时间（含当日）到最终审批完成时间（含当日）的日历天数。包含周末及节假日。">(?)</span>
     </h2>
     <div class="kpi-grid">
       <div class="kpi-card highlight">
@@ -816,39 +821,74 @@ td:first-child { text-align: center; width: 60px; }
       </div>
     </div>
 
-    <!-- ──────────── 省公司询价排名：横向条形图 + 表格 ──────────── -->
+    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
+      💡 数据基于采购审批节点、省公司统计及审批时间计算
+    </p>
+
+  </div>
+</section>
+
+<!-- ===================================================================
+     TAB 3: 多维数据明细
+     =================================================================== -->
+<section class="tab-content" id="tab-detail" role="tabpanel">
+  <div class="tab-body">
+
     <h2 class="section-title">
       <span class="title-icon">◉</span>
-      省公司询价排名
+      数据明细查询
     </h2>
-    <div class="chart-row">
-      <div class="chart-card">
-        <div class="chart-title">📊 省公司询价次数排名</div>
+
+    <div class="filter-bar">
+      <label for="period-select">📅 时间段筛选：</label>
+      <select id="period-select" onchange="filterByPeriod()">
+        <option value="全部">全部</option>
+        <option value="本周">本周</option>
+        <option value="本月" selected>本月</option>
+        <option value="上月">上月</option>
+        <option value="本季度">本季度</option>
+      </select>
+      <span class="filter-result" id="detail-filter-result"></span>
+    </div>
+
+    <!-- ──────────── 周期功率趋势柱状图 ──────────── -->
+    <div class="chart-row single">
+      <div class="chart-card full">
+        <div class="chart-title">📊 各周期功率容量趋势</div>
         <div class="chart-wrap">
-          <canvas id="chart-province-bar"></canvas>
+          <canvas id="chart-query-bar"></canvas>
         </div>
-        <div class="chart-caption">各省公司询价项目数量</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">📄 排名明细</div>
-        <div class="table-container" style="border:none;box-shadow:none;margin:0;">
-          <table>
-            <thead>
-              <tr>
-                <th>排名</th>
-                <th>省公司</th>
-                <th>询价次数</th>
-                <th>组件功率(kW)</th>
-              </tr>
-            </thead>
-            <tbody id="province-table-body"></tbody>
-          </table>
-        </div>
+        <div class="chart-caption">组件功率 / 逆变器功率 / 电池容量 按时间段对比</div>
       </div>
     </div>
 
+    <!-- ──────────── 明细数据表格（逐条记录下钻）──────────── -->
+    <h2 class="section-title">
+      <span class="title-icon">◉</span>
+      询价项目明细
+    </h2>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>流程编号</th>
+            <th>项目名称</th>
+            <th>省公司</th>
+            <th>业务员</th>
+            <th class="number-right">组件功率(kW)</th>
+            <th class="number-right">逆变器功率(kW)</th>
+            <th class="number-right">电池容量(kWh)</th>
+            <th>已下单</th>
+            <th>提交日期</th>
+            <th>采购审批人</th>
+          </tr>
+        </thead>
+        <tbody id="detail-table-body"></tbody>
+      </table>
+    </div>
+
     <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-      💡 数据基于采购审批节点、省公司统计及审批时间计算
+      💡 切换时间段后，上方图表与明细表格同步刷新。明细展示每条询价项目的具体信息。
     </p>
 
   </div>
@@ -870,9 +910,14 @@ td:first-child { text-align: center; width: 60px; }
 /* ===================================================================
    DATA — 由后端脚本注入
    =================================================================== */
-const PERIOD_DATA    = typeof PERIOD_DATA_JSON !== 'undefined' ? {{PERIOD_DATA_JSON}} : {};
-const PROVINCE_DATA  = typeof PROVINCE_DATA_JSON !== 'undefined' ? {{PROVINCE_DATA_JSON}} : [];
-const KPI_DATA       = typeof KPI_DATA_JSON !== 'undefined' ? {{KPI_DATA_JSON}} : {};
+const PERIOD_DATA           = {{PERIOD_DATA_JSON}} || {};
+const PROVINCE_DATA         = {{PROVINCE_DATA_JSON}} || [];
+const KPI_DATA              = {{KPI_DATA_JSON}} || {};
+const DAILY_DATA            = {{DAILY_DATA_JSON}} || {};
+const ROWS_DETAIL           = {{ROWS_DETAIL_JSON}} || [];
+const APPROVAL_BY_PROVINCE  = {{APPROVAL_BY_PROVINCE_JSON}} || [];
+const APPROVAL_BY_SALESPERSON = {{APPROVAL_BY_SALESPERSON_JSON}} || [];
+const APPROVER_LIST         = {{APPROVER_LIST_JSON}} || [];
 
 /* Chart.js 加载状态 */
 var CHART_JS_LOADED = typeof Chart !== 'undefined';
@@ -901,7 +946,6 @@ function initChartDefaults() {
   Chart.defaults.font.family = '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
   Chart.defaults.font.size   = 12;
   Chart.defaults.color       = '#5D6D7E';
-  // 注册中心文字插件
   Chart.register(donutCenterPlugin);
 }
 
@@ -915,17 +959,17 @@ const periodNames = Object.keys(PERIOD_DATA);
 
 /* 报表风格图表调色板 */
 const CHART_COLORS = {
-  navy:     '#1B4F8B',
-  blue:     '#2E86C1',
-  lightBlue:'#85C1E9',
-  green:    '#28A745',
-  orange:   '#E67E22',
-  red:      '#DC3545',
-  purple:   '#6F42C1',
-  teal:     '#17A2B8',
-  gray:     '#95A5A6',
-  ltGray:   '#D5D8DC',
-  palette: ['#2E86C1','#28A745','#E67E22','#6F42C1','#DC3545','#17A2B8'],
+  navy:     '#1D4ED8',
+  blue:     '#3B82F6',
+  lightBlue:'#93C5FD',
+  green:    '#10B981',
+  orange:   '#F59E0B',
+  red:      '#EF4444',
+  purple:   '#8B5CF6',
+  teal:     '#06B6D4',
+  gray:     '#94A3B8',
+  ltGray:   '#D1D5DB',
+  palette: ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4'],
 };
 
 /* 工具：格式化数字 */
@@ -948,19 +992,30 @@ function hasData(arr) {
 }
 
 /* 工具：无数据时在 canvas 父容器显示提示 */
-function showNoData(canvasId, message) {
+function showNoData(canvasId, message, icon) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
   var wrap = canvas.parentNode;
   if (!wrap) return;
   var existing = wrap.querySelector('.no-data-msg');
-  if (existing) return;
+  if (existing) existing.remove();
   canvas.style.display = 'none';
-  var msg = document.createElement('p');
-  msg.className = 'no-data-msg';
-  msg.style.cssText = 'text-align:center;padding:48px 16px;color:#95A5A6;font-size:13px;';
-  msg.textContent = message || '暂无数据';
-  wrap.appendChild(msg);
+
+  var container = document.createElement('div');
+  container.className = 'no-data-msg';
+  container.style.cssText = 'text-align:center;padding:48px 16px;';
+
+  var iconEl = document.createElement('div');
+  iconEl.style.cssText = 'font-size:40px;margin-bottom:12px;opacity:0.5;';
+  iconEl.textContent = icon || '📭';
+
+  var msgEl = document.createElement('p');
+  msgEl.style.cssText = 'color:#95A5A6;font-size:13px;margin:0;';
+  msgEl.textContent = message || '暂无数据';
+
+  container.appendChild(iconEl);
+  container.appendChild(msgEl);
+  wrap.appendChild(container);
 }
 
 /* ===================================================================
@@ -968,11 +1023,11 @@ function showNoData(canvasId, message) {
    =================================================================== */
 const chartInstances = {};
 const tabCharts = {
-  summary:   ['chart-order-donut', 'chart-power-bar', 'chart-trend-bar'],
-  query:     ['chart-query-bar'],
-  dashboard: ['chart-wangjian-donut', 'chart-days-bar', 'chart-province-bar'],
+  overview:  ['chart-order-donut', 'chart-power-bar', 'chart-daily-trend', 'chart-province-bar'],
+  approval:  ['chart-approval-donut', 'chart-approval-compare'],
+  detail:    ['chart-query-bar'],
 };
-const tabInitialized = { summary: false, query: false, dashboard: false };
+const tabInitialized = { overview: false, approval: false, detail: false };
 
 /* ──────────── 饼图中心文字插件 ──────────── */
 var donutCenterPlugin = {
@@ -1062,7 +1117,7 @@ function makeDonutOpts() {
         cornerRadius: 5,
         callbacks: {
           label: function(ctx) {
-            const total = ctx.dataset.data.reduce((a,b) => a + b, 0);
+            const total = ctx.dataset.data.reduce(function(a,b) { return a + b; }, 0);
             const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
             return ctx.label + ': ' + fmtNum(ctx.parsed) + ' (' + pct + '%)';
           }
@@ -1089,10 +1144,8 @@ function initTabCharts(tabName) {
   if (!checkChartJsLoaded()) return;
 
   if (tabInitialized[tabName]) {
-    // 已初始化：切换回显时 chart.resize() 触发重绘
     tabCharts[tabName].forEach(function(id) {
       if (chartInstances[id]) {
-        // 延时确保容器已 layout
         setTimeout(function() { chartInstances[id].resize(); }, 10);
       }
     });
@@ -1100,17 +1153,17 @@ function initTabCharts(tabName) {
   }
 
   switch (tabName) {
-    case 'summary': initSummaryCharts(); break;
-    case 'query':   initQueryCharts();   break;
-    case 'dashboard': initDashboardCharts(); break;
+    case 'overview': initOverviewCharts(); break;
+    case 'approval': initApprovalCharts(); break;
+    case 'detail':   initDetailCharts();   break;
   }
   tabInitialized[tabName] = true;
 }
 
 /* ===================================================================
-   TAB 1: SUMMARY CHARTS
+   TAB 1: OVERVIEW CHARTS
    =================================================================== */
-function initSummaryCharts() {
+function initOverviewCharts() {
   // ── 1. 订单状态饼图 ──
   const ordered    = parseFloat(KPI_DATA.orderedCount) || 0;
   const notOrdered = parseFloat(KPI_DATA.notOrderedCount) || 0;
@@ -1129,7 +1182,7 @@ function initSummaryCharts() {
       options: makeDonutOpts(),
     });
   } else {
-    showNoData('chart-order-donut', '暂无订单数据');
+    showNoData('chart-order-donut', '暂无订单数据', '📊');
   }
 
   // ── 2. 功率容量对比柱状图 ──
@@ -1152,129 +1205,96 @@ function initSummaryCharts() {
       options: makeBarOpts('类型', '容量'),
     });
   } else {
-    showNoData('chart-power-bar', '暂无功率数据');
+    showNoData('chart-power-bar', '暂无功率数据', '⚡');
   }
 
-  // ── 3. 周期趋势柱状图 ──
-  const trendLabels = periodNames.length ? periodNames : ['全部'];
-  const trendData = trendLabels.map(function(n) {
-    const d = PERIOD_DATA[n];
-    return d ? d.count : 0;
-  });
-  if (hasData(trendData)) {
-    createChart('chart-trend-bar', {
-      type: 'bar',
-      data: {
-        labels: trendLabels,
-        datasets: [{
-          label: '项目数',
-          data: trendData,
-          backgroundColor: trendData.map(function(_, i) {
-            return i === trendData.length - 1 ? CHART_COLORS.navy : CHART_COLORS.blue;
-          }),
-          borderRadius: 4,
-          maxBarThickness: 50,
-        }],
-      },
-      options: makeBarOpts('时间段', '项目数'),
-    });
+  // ── 3. 每日趋势折线图 ──
+  var dailyDates = Object.keys(DAILY_DATA).sort();
+  if (dailyDates.length === 0) {
+    showNoData('chart-daily-trend', '暂无每日数据', '📈');
   } else {
-    showNoData('chart-trend-bar', '暂无周期数据');
-  }
-}
-
-/* ===================================================================
-   TAB 2: QUERY CHARTS
-   =================================================================== */
-function initQueryCharts() {
-  const labels = periodNames.length ? periodNames : ['全部'];
-  const moduleData   = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.module : 0; });
-  const inverterData = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.inverter : 0; });
-  const batteryData  = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.battery : 0; });
-
-  if (!hasData(moduleData) && !hasData(inverterData) && !hasData(batteryData)) {
-    showNoData('chart-query-bar', '暂无周期功率数据');
-    return;
-  }
-
-  createChart('chart-query-bar', {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: '组件功率 (kW)',
-        data: moduleData,
-        backgroundColor: CHART_COLORS.blue,
-        borderRadius: 3,
-        maxBarThickness: 40,
-      }, {
-        label: '逆变器功率 (kW)',
-        data: inverterData,
-        backgroundColor: CHART_COLORS.orange,
-        borderRadius: 3,
-        maxBarThickness: 40,
-      }, {
-        label: '电池容量 (kWh)',
-        data: batteryData,
-        backgroundColor: CHART_COLORS.green,
-        borderRadius: 3,
-        maxBarThickness: 40,
-      }],
-    },
-    options: makeBarOpts('时间段', '容量'),
-  });
-}
-
-/* ===================================================================
-   TAB 3: DASHBOARD CHARTS
-   =================================================================== */
-function initDashboardCharts() {
-  // ── 1. 王剑审批饼图 ──
-  const wApproved = parseFloat(KPI_DATA.wangjianApproved) || 0;
-  const wTotal    = parseFloat(KPI_DATA.wangjianTotal) || 0;
-  const wNot      = Math.max(0, wTotal - wApproved);
-  if (hasData([wApproved, wNot])) {
-    createChart('chart-wangjian-donut', {
-      type: 'doughnut',
-      data: {
-        labels: ['审批通过', '未通过'],
-        datasets: [{
-          data: [wApproved, wNot],
-          backgroundColor: [CHART_COLORS.green, CHART_COLORS.ltGray],
-          borderWidth: 2,
-          borderColor: '#fff',
-        }],
-      },
-      options: makeDonutOpts(),
+    var dailyCounts = dailyDates.map(function(d) {
+      return DAILY_DATA[d] ? DAILY_DATA[d].count : 0;
     });
-  } else {
-    showNoData('chart-wangjian-donut', '暂无审批数据');
-  }
-
-  // ── 2. 审批天数柱状图 ──
-  const daysAvg = parseFloat(KPI_DATA.daysAvg) || 0;
-  const daysMin = parseFloat(KPI_DATA.daysMin) || 0;
-  const daysMax = parseFloat(KPI_DATA.daysMax) || 0;
-  if (hasData([daysAvg, daysMin, daysMax])) {
-    createChart('chart-days-bar', {
-      type: 'bar',
-      data: {
-        labels: ['平均天数', '最短天数', '最长天数'],
-        datasets: [{
-          label: '天数',
-          data: [daysAvg, daysMin, daysMax],
-          backgroundColor: [CHART_COLORS.navy, CHART_COLORS.green, CHART_COLORS.orange],
-          borderRadius: 4,
-          maxBarThickness: 60,
-        }],
-      },
-      options: makeBarOpts('', '天数'),
+    var dailyModules = dailyDates.map(function(d) {
+      return DAILY_DATA[d] ? DAILY_DATA[d].module : 0;
     });
-  } else {
-    showNoData('chart-days-bar', '暂无天数数据');
+
+    if (!hasData(dailyCounts)) {
+      showNoData('chart-daily-trend', '近期暂无询价项目', '📈');
+    } else {
+      var datasets = [{
+        label: '项目数',
+        data: dailyCounts,
+        borderColor: CHART_COLORS.navy,
+        backgroundColor: 'rgba(29,78,216,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointBackgroundColor: CHART_COLORS.navy,
+        yAxisID: 'y',
+      }];
+      if (hasData(dailyModules)) {
+        datasets.push({
+          label: '组件功率 (kW)',
+          data: dailyModules,
+          borderColor: CHART_COLORS.orange,
+          backgroundColor: 'rgba(245,158,11,0.06)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: CHART_COLORS.orange,
+          yAxisID: 'y1',
+        });
+      }
+
+      createChart('chart-daily-trend', {
+        type: 'line',
+        data: { labels: dailyDates, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 2.2,
+          animation: { duration: 600, easing: 'easeOutQuart' },
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, font: { size: 11 } } },
+            tooltip: {
+              backgroundColor: '#2C3E50',
+              padding: 10,
+              cornerRadius: 5,
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 10 }, maxRotation: 45 },
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.06)' },
+              ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+              title: { display: true, text: '项目数', font: { size: 11 } },
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              beginAtZero: true,
+              grid: { drawOnChartArea: false },
+              ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v) + ' kW'; } },
+              title: { display: true, text: '功率 (kW)', font: { size: 11 } },
+            },
+          },
+        },
+      });
+    }
   }
 
-  // ── 3. 省公司排名横向条形图 ──
+  // ── 4. 省公司排名横向条形图 ──
   var provLabels = [];
   var provCounts = [];
   var provModules = [];
@@ -1288,56 +1308,390 @@ function initDashboardCharts() {
 
   if (hasData(provCounts)) {
     createChart('chart-province-bar', {
+      type: 'bar',
+      data: {
+        labels: provLabels,
+        datasets: [{
+          label: '询价次数',
+          data: provCounts,
+          backgroundColor: provColors,
+          borderRadius: 3,
+          maxBarThickness: 40,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 1.8,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#2C3E50',
+            titleFont: { size: 12 },
+            bodyFont: { size: 12 },
+            padding: 10,
+            cornerRadius: 5,
+            callbacks: {
+              label: function(ctx) {
+                return '询价次数: ' + fmtNum(ctx.parsed.x);
+              },
+              afterLabel: function(ctx) {
+                var i = ctx.dataIndex;
+                if (provModules[i] != null) return '组件功率: ' + fmtNum(provModules[i]) + ' kW';
+                return '';
+              }
+            }
+          },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+          },
+          y: {
+            grid: { display: false },
+            ticks: { font: { size: 11 } },
+          },
+        },
+      },
+    });
+  } else {
+    showNoData('chart-province-bar', '暂无省公司排名数据', '🗺️');
+  }
+}
+
+/* ===================================================================
+   TAB 2: APPROVAL CHARTS
+   =================================================================== */
+function getSelectedApprover() {
+  var sel = document.getElementById('approver-select');
+  return sel ? sel.value : '王剑';
+}
+
+function getApproverStats(approverName) {
+  if (approverName === '全部') {
+    var approved = 0, total = 0;
+    ROWS_DETAIL.forEach(function(row) {
+      total++;
+      if (row.approvalStatus.indexOf('审批通过') >= 0) approved++;
+    });
+    return { approved: approved, total: total };
+  }
+  // 与默认审批人相同时使用服务端预计算值
+  if (approverName === KPI_DATA.approverName) {
+    return {
+      approved: parseFloat(KPI_DATA.approverApproved) || 0,
+      total: parseFloat(KPI_DATA.approverTotal) || 0,
+    };
+  }
+  // 其他审批人：前端遍历 ROWS_DETAIL 实时计算
+  var approved = 0, total = 0;
+  ROWS_DETAIL.forEach(function(row) {
+    if (row.procurementApprover.indexOf(approverName) >= 0) {
+      total++;
+      if (row.approvalStatus.indexOf('审批通过') >= 0) approved++;
+    }
+  });
+  return { approved: approved, total: total };
+}
+
+function onApproverChange() {
+  var stats = getApproverStats(getSelectedApprover());
+  // 更新 KPI 卡片
+  document.getElementById('approver-approved').textContent = stats.approved;
+  document.getElementById('approver-total').textContent = stats.total;
+  var rate = stats.total > 0 ? Math.round(stats.approved / stats.total * 100) + '%' : '--';
+  document.getElementById('approver-rate').textContent = rate;
+
+  // 重建审批图表
+  var chartIds = tabCharts.approval;
+  chartIds.forEach(function(id) {
+    if (chartInstances[id]) {
+      chartInstances[id].destroy();
+      delete chartInstances[id];
+    }
+  });
+  document.querySelectorAll('#tab-approval .no-data-msg').forEach(function(el) { el.remove(); });
+  document.querySelectorAll('#tab-approval canvas').forEach(function(c) { c.style.display = ''; });
+  initApprovalCharts();
+}
+
+function populateApproverSelect() {
+  var sel = document.getElementById('approver-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="全部">全部审批人</option>';
+  APPROVER_LIST.forEach(function(name) {
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name.indexOf('王剑') >= 0) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function initApprovalCharts() {
+  // ── 1. 审批通过率饼图（未通过用红色）──
+  var stats = getApproverStats(getSelectedApprover());
+  var wApproved = stats.approved;
+  var wTotal = stats.total;
+  var wNot = Math.max(0, wTotal - wApproved);
+
+  if (hasData([wApproved, wNot])) {
+    createChart('chart-approval-donut', {
+      type: 'doughnut',
+      data: {
+        labels: ['审批通过', '未通过'],
+        datasets: [{
+          data: [wApproved, wNot],
+          backgroundColor: [CHART_COLORS.green, CHART_COLORS.red],
+          borderWidth: 2,
+          borderColor: '#fff',
+        }],
+      },
+      options: makeDonutOpts(),
+    });
+  } else {
+    showNoData('chart-approval-donut', '暂无审批数据', '✅');
+  }
+
+  // ── 2. 审批耗时分组对比水平条形图 ──
+  var compareData = APPROVAL_BY_PROVINCE;
+  if (!compareData || compareData.length === 0) {
+    showNoData('chart-approval-compare', '暂无审批耗时对比数据', '⏱');
+    return;
+  }
+  var labels = compareData.map(function(d) { return d.name; });
+  var avgData = compareData.map(function(d) { return d.avg; });
+
+  createChart('chart-approval-compare', {
     type: 'bar',
     data: {
-      labels: provLabels,
+      labels: labels,
       datasets: [{
-        label: '询价次数',
-        data: provCounts,
-        backgroundColor: provColors,
+        label: '平均审批耗时 (天)',
+        data: avgData,
+        backgroundColor: labels.map(function(_, i) {
+          return CHART_COLORS.palette[i % CHART_COLORS.palette.length];
+        }),
         borderRadius: 3,
-        maxBarThickness: 40,
+        maxBarThickness: 30,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: true,
-      aspectRatio: 1.8,
+      aspectRatio: Math.max(1.2, labels.length * 0.25),
       indexAxis: 'y',
+      animation: { duration: 600, easing: 'easeOutQuart' },
       plugins: {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#2C3E50',
-          titleFont: { size: 12 },
-          bodyFont: { size: 12 },
           padding: 10,
           cornerRadius: 5,
           callbacks: {
             label: function(ctx) {
-              return '询价次数: ' + fmtNum(ctx.parsed.x);
-            },
-            afterLabel: function(ctx) {
               var i = ctx.dataIndex;
-              if (provModules[i] != null) return '组件功率: ' + fmtNum(provModules[i]) + ' kW';
-              return '';
-            }
-          }
+              var d = compareData[i];
+              return '平均: ' + d.avg + '天 | 最短: ' + d.min + '天 | 最长: ' + d.max + '天 | 样本: ' + d.count + '条';
+            },
+          },
         },
       },
       scales: {
         x: {
           beginAtZero: true,
           grid: { color: 'rgba(0,0,0,0.06)' },
-          ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+          ticks: {
+            font: { size: 11 },
+            callback: function(v) { return fmtNum(v) + '天'; },
+          },
         },
         y: {
           grid: { display: false },
           ticks: { font: { size: 11 } },
         },
       },
-    });
+    },
+  });
+}
+
+/* ===================================================================
+   TAB 3: DETAIL CHARTS & TABLE
+   =================================================================== */
+function initDetailCharts() {
+  const labels = periodNames.length ? periodNames : ['全部'];
+  const moduleData   = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.module : 0; });
+  const inverterData = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.inverter : 0; });
+  const batteryData  = labels.map(function(n) { var d = PERIOD_DATA[n]; return d ? d.battery : 0; });
+
+  if (!hasData(moduleData) && !hasData(inverterData) && !hasData(batteryData)) {
+    showNoData('chart-query-bar', '暂无周期功率数据', '📋');
   } else {
-    showNoData('chart-province-bar', '暂无省公司排名数据');
+    createChart('chart-query-bar', {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '组件功率 (kW)',
+          data: moduleData,
+          backgroundColor: CHART_COLORS.blue,
+          borderRadius: 3,
+          maxBarThickness: 40,
+        }, {
+          label: '逆变器功率 (kW)',
+          data: inverterData,
+          backgroundColor: CHART_COLORS.orange,
+          borderRadius: 3,
+          maxBarThickness: 40,
+        }, {
+          label: '电池容量 (kWh)',
+          data: batteryData,
+          backgroundColor: CHART_COLORS.green,
+          borderRadius: 3,
+          maxBarThickness: 40,
+        }],
+      },
+      options: makeBarOpts('时间段', '容量'),
+    });
+  }
+
+  // 渲染明细表格
+  renderDetailTable(currentGlobalPeriod);
+}
+
+function filterDetailByPeriod(rows, periodName) {
+  if (!rows || rows.length === 0) return [];
+  if (periodName === '全部') return rows;
+
+  var today = new Date();
+  var todayStr = today.toISOString().split('T')[0];
+  var weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay() + 1);
+
+  var monthStart = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-01';
+
+  var lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+  var lastMonthStart = today.getFullYear() + '-' +
+    String(today.getMonth() === 0 ? 12 : today.getMonth()).padStart(2, '0') + '-01';
+  var lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
+
+  var quarterStartMonth = Math.floor(today.getMonth() / 3) * 3 + 1;
+  var quarterStart = today.getFullYear() + '-' +
+    String(quarterStartMonth).padStart(2, '0') + '-01';
+
+  return rows.filter(function(item) {
+    var d = item.submitDate;
+    if (!d) return false;
+    switch (periodName) {
+      case '本周':
+        return d >= weekStart.toISOString().split('T')[0] && d <= todayStr;
+      case '本月':
+        return d >= monthStart && d <= todayStr;
+      case '上月':
+        return d >= lastMonthStart && d <= lastMonthEndStr;
+      case '本季度':
+        return d >= quarterStart && d <= todayStr;
+      default:
+        return true;
+    }
+  });
+}
+
+function renderDetailTable(periodName) {
+  var tbody = document.getElementById('detail-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  var filtered = filterDetailByPeriod(ROWS_DETAIL, periodName);
+
+  if (filtered.length === 0) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="10" style="text-align:center;padding:32px;color:#95A5A6;">该时间段暂无询价项目明细</td>';
+    tbody.appendChild(tr);
+  } else {
+    filtered.forEach(function(item) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escHtml(item.flowId) + '</td>' +
+        '<td>' + escHtml(item.projectName) + '</td>' +
+        '<td>' + escHtml(item.province) + '</td>' +
+        '<td>' + escHtml(item.salesperson) + '</td>' +
+        '<td class="number-right">' + (item.modulePower > 0 ? item.modulePower.toFixed(2) : '--') + '</td>' +
+        '<td class="number-right">' + (item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--') + '</td>' +
+        '<td class="number-right">' + (item.batteryCapacity > 0 ? item.batteryCapacity.toFixed(2) : '--') + '</td>' +
+        '<td>' + escHtml(item.ordered) + '</td>' +
+        '<td>' + escHtml(item.submitDate) + '</td>' +
+        '<td>' + escHtml(item.procurementApprover) + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  var resultEl = document.getElementById('detail-filter-result');
+  if (resultEl) {
+    resultEl.textContent = '当前：' + periodName + ' → ' + filtered.length + ' 条记录';
+  }
+}
+
+function filterByPeriod() {
+  var sel = document.getElementById('period-select');
+  if (sel) {
+    currentGlobalPeriod = sel.value;
+    // 同步全局筛选器
+    var gsel = document.getElementById('global-period-select');
+    if (gsel) gsel.value = currentGlobalPeriod;
+    renderDetailTable(currentGlobalPeriod);
+  }
+}
+
+/* ===================================================================
+   GLOBAL PERIOD FILTER
+   =================================================================== */
+var currentGlobalPeriod = '本月';
+
+function onGlobalPeriodChange() {
+  var sel = document.getElementById('global-period-select');
+  if (!sel) return;
+  currentGlobalPeriod = sel.value;
+
+  // 同步 Tab 3 内的筛选器
+  var detailSel = document.getElementById('period-select');
+  if (detailSel) {
+    detailSel.value = currentGlobalPeriod;
+  }
+
+  // 销毁所有现有图表实例
+  Object.keys(chartInstances).forEach(function(id) {
+    if (chartInstances[id]) {
+      chartInstances[id].destroy();
+      delete chartInstances[id];
+    }
+  });
+
+  // 清除所有 no-data 提示
+  document.querySelectorAll('.no-data-msg').forEach(function(el) {
+    el.remove();
+  });
+  document.querySelectorAll('canvas').forEach(function(c) {
+    c.style.display = '';
+  });
+
+  // 重置初始化状态
+  tabInitialized.overview = false;
+  tabInitialized.approval = false;
+  tabInitialized.detail = false;
+
+  // 重新渲染当前激活的 Tab
+  var activeTab = document.querySelector('.tab-content.active');
+  if (activeTab) {
+    var tabName = activeTab.id.replace('tab-', '');
+    initTabCharts(tabName);
+    if (tabName === 'detail') {
+      renderDetailTable(currentGlobalPeriod);
+    }
   }
 }
 
@@ -1350,44 +1704,15 @@ function switchTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   document.querySelector('[data-tab="' + name + '"]').classList.add('active');
 
-  // 延迟初始化该 tab 的图表（确保容器 display:block 后）
-  setTimeout(function() { initTabCharts(name); }, 80);
-}
-
-/* ===================================================================
-   PERIOD TABLE
-   =================================================================== */
-function renderPeriodTable() {
-  var tbody = document.getElementById('period-table-body');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  periodNames.forEach(function(name) {
-    var d = PERIOD_DATA[name];
-    if (!d) return;
-    var tr = document.createElement('tr');
-    tr.innerHTML = '<td><strong>' + escHtml(name) + '</strong></td>' +
-      '<td class="number-format">' + escHtml(d.count) + '</td>' +
-      '<td class="number-format">' + escHtml(d.module.toFixed(2)) + '</td>' +
-      '<td class="number-format">' + escHtml(d.inverter.toFixed(2)) + '</td>' +
-      '<td class="number-format">' + escHtml(d.battery.toFixed(2)) + '</td>' +
-      '<td class="number-format">' + escHtml(d.ratio.toFixed(2)) + '</td>';
-    tbody.appendChild(tr);
-  });
-}
-
-/* ===================================================================
-   PERIOD FILTER
-   =================================================================== */
-function filterByPeriod() {
-  var name = document.getElementById('period-select').value;
-  var d = PERIOD_DATA[name];
-  if (!d) return;
-  document.getElementById('filter-result').textContent = '当前：' + name + ' → ' + d.count + ' 个项目';
-  document.getElementById('result-count').textContent    = d.count;
-  document.getElementById('result-module').textContent   = d.module.toFixed(2);
-  document.getElementById('result-inverter').textContent = d.inverter.toFixed(2);
-  document.getElementById('result-battery').textContent  = d.battery.toFixed(2);
-  document.getElementById('result-ratio').textContent    = d.ratio.toFixed(2);
+  setTimeout(function() {
+    initTabCharts(name);
+    if (name === 'approval') {
+      populateApproverSelect();
+    }
+    if (name === 'detail') {
+      renderDetailTable(currentGlobalPeriod);
+    }
+  }, 80);
 }
 
 /* ===================================================================
@@ -1404,14 +1729,11 @@ function renderProvinceTable() {
     tr.innerHTML = '<td>' + medal + '<span class="rank-medal">' + escHtml(item.rank) + '</span></td>' +
       '<td>' + escHtml(item.province) + '</td>' +
       '<td class="number-format">' + escHtml(item.count) + '</td>' +
-      '<td class="number-format">' + escHtml(item.module.toFixed(2)) + '</td>';
+      '<td class="number-right">' + escHtml(item.module.toFixed(2)) + '</td>';
     tbody.appendChild(tr);
   });
 }
 
-/* ===================================================================
-   INITIALIZE
-   =================================================================== */
 /* ===================================================================
    TAB NAV SCROLL SHADOW
    =================================================================== */
@@ -1441,18 +1763,23 @@ function renderProvinceTable() {
    INITIALIZE
    =================================================================== */
 document.addEventListener('DOMContentLoaded', function() {
-  renderPeriodTable();
   renderProvinceTable();
 
-  // 初始化默认 tab（summary）的图表
+  // 初始化默认 tab（overview）的图表
   checkChartJsLoaded();
-  initTabCharts('summary');
+  initTabCharts('overview');
 
-  // 设置默认筛选
-  var sel = document.getElementById('period-select');
-  if (sel) {
-    sel.value = periodNames.length > 2 ? periodNames[2] : '本月';
-    filterByPeriod();
+  // 设置全局筛选器默认值
+  var gsel = document.getElementById('global-period-select');
+  if (gsel && periodNames.length > 2) {
+    gsel.value = periodNames[2] || '本月';
+    currentGlobalPeriod = gsel.value;
+  }
+
+  // 同步 Tab 3 内部筛选器
+  var dsel = document.getElementById('period-select');
+  if (dsel) {
+    dsel.value = currentGlobalPeriod;
   }
 });
 </script>
