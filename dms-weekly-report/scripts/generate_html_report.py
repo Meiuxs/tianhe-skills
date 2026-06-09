@@ -174,6 +174,45 @@ def compute_period_data(rows: list[list[Any]]) -> dict[str, dict[str, float | in
     return result
 
 
+def compute_daily_data(rows: list[list[Any]]) -> dict[str, dict[str, int | float]]:
+    """按日期统计每日询价项目数和容量，用于每日趋势折线图。"""
+    from collections import defaultdict
+
+    daily: dict[str, dict[str, int | float]] = defaultdict(
+        lambda: {"count": 0, "module": 0.0, "inverter": 0.0, "battery": 0.0}
+    )
+    for row in rows:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        submit_time = str(row[11] if len(row) > 11 and row[11] else "")
+        m = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
+        if m:
+            date_str = m.group(1)
+        else:
+            continue
+
+        daily[date_str]["count"] += 1
+        if len(row) > 6 and isinstance(row[6], (int, float)):
+            daily[date_str]["module"] += float(row[6])
+        if len(row) > 7 and isinstance(row[7], (int, float)):
+            daily[date_str]["inverter"] += float(row[7])
+        if len(row) > 8 and isinstance(row[8], (int, float)):
+            daily[date_str]["battery"] += float(row[8])
+
+    sorted_dates = sorted(daily.keys())
+    result: dict[str, dict[str, int | float]] = {}
+    for date_str in sorted_dates:
+        d = daily[date_str]
+        result[date_str] = {
+            "count": d["count"],
+            "module": round(d["module"], 2),
+            "inverter": round(d["inverter"], 2),
+            "battery": round(d["battery"], 2),
+        }
+    return result
+
+
 def compute_wangjian_stats(rows: list[list[Any]]) -> dict[str, Any]:
     """统计王剑采购审批情况。"""
     approved = 0
@@ -252,6 +291,110 @@ def compute_approval_days(rows: list[list[Any]]) -> dict[str, Any]:
     }
 
 
+def compute_approval_by_dimension(
+    rows: list[list[Any]], dimension_col: int
+) -> list[dict[str, Any]]:
+    """按指定维度（省公司=4 或 业务员=5）统计审批耗时对比数据。"""
+    from datetime import datetime as dt_dt
+
+    stats: dict[str, list[int]] = {}
+    for row in rows:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        key = str(row[dimension_col] if len(row) > dimension_col and row[dimension_col] else "")
+        if key in ("--", "无", ""):
+            continue
+        submit_time = str(row[11] if len(row) > 11 and row[11] else "")
+        final_time = str(row[18] if len(row) > 18 and row[18] else "")
+        if submit_time in ("--", "") or final_time in ("--", ""):
+            continue
+        sm = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
+        fm = re.match(r"(\d{4}-\d{2}-\d{2})", final_time)
+        if sm and fm:
+            try:
+                sd = dt_dt.strptime(sm.group(1), "%Y-%m-%d")
+                fd = dt_dt.strptime(fm.group(1), "%Y-%m-%d")
+                delta = (fd - sd).days
+                if delta >= 0:
+                    if key not in stats:
+                        stats[key] = []
+                    stats[key].append(delta)
+            except ValueError:
+                pass
+
+    result: list[dict[str, Any]] = []
+    for key, days in stats.items():
+        result.append({
+            "name": key,
+            "avg": round(sum(days) / len(days), 1),
+            "min": min(days),
+            "max": max(days),
+            "count": len(days),
+        })
+    result.sort(key=lambda x: -x["avg"])
+    return result
+
+
+def compute_approver_list(rows: list[list[Any]]) -> list[str]:
+    """提取所有唯一的采购审批人列表。"""
+    approvers: set[str] = set()
+    for row in rows:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        proc = str(row[16] if len(row) > 16 and row[16] else "")
+        if proc and proc not in ("--", "无", ""):
+            approvers.add(proc)
+    return sorted(approvers)
+
+
+def compute_rows_detail(rows: list[list[Any]]) -> list[dict[str, Any]]:
+    """将原始数据行转为可供前端表格展示的字典列表（明细下钻用）。"""
+    detail: list[dict[str, Any]] = []
+    for row in rows:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        submit_time = str(row[11] if len(row) > 11 and row[11] else "")
+        detail.append({
+            "flowId": fid,
+            "projectName": str(row[1]) if row[1] else "",
+            "province": str(row[4]) if row[4] else "",
+            "salesperson": str(row[5]) if row[5] else "",
+            "modulePower": float(row[6]) if len(row) > 6 and isinstance(row[6], (int, float)) else 0,
+            "inverterPower": float(row[7]) if len(row) > 7 and isinstance(row[7], (int, float)) else 0,
+            "batteryCapacity": float(row[8]) if len(row) > 8 and isinstance(row[8], (int, float)) else 0,
+            "ordered": str(row[13]) if row[13] else "否",
+            "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
+            "provinceApprover": str(row[14]) if len(row) > 14 and row[14] and row[14] != "--" else "",
+            "procurementApprover": str(row[16]) if len(row) > 16 and row[16] and row[16] != "--" else "",
+            "approvalStatus": str(row[17]) if len(row) > 17 and row[17] and row[17] != "--" else "",
+        })
+    return detail
+
+
+def compute_approver_stats(
+    rows: list[list[Any]], approver_name: str | None = None
+) -> dict[str, Any]:
+    """统计指定审批人的采购审批情况。approver_name 为 None 时统计全部。"""
+    approved = 0
+    total = 0
+    for row in rows:
+        fid = str(row[0]) if row[0] else ""
+        if not re.match(r"^\d{15,}$", fid):
+            continue
+        proc = str(row[16] if len(row) > 16 and row[16] else "")
+        status_val = str(row[17] if len(row) > 17 and row[17] else "")
+        if approver_name and approver_name not in proc:
+            continue
+        total += 1
+        if "审批通过" in status_val:
+            approved += 1
+    rate = f"{int(approved / total * 100)}%" if total > 0 else "--"
+    return {"approved": approved, "total": total, "rate": rate, "name": approver_name or "全部"}
+
+
 # ==================== 主函数 ====================
 
 
@@ -286,6 +429,13 @@ def generate_html_report(
     wangjian = compute_wangjian_stats(rows_data)
     province_ranking = compute_province_ranking(rows_data)
     approval_days = compute_approval_days(rows_data)
+    daily_data = compute_daily_data(rows_data)
+    approval_by_province = compute_approval_by_dimension(rows_data, 4)
+    approval_by_salesperson = compute_approval_by_dimension(rows_data, 5)
+    approver_list = compute_approver_list(rows_data)
+    rows_detail = compute_rows_detail(rows_data)
+    default_approver = "王剑"
+    default_approver_stats = compute_approver_stats(rows_data, default_approver)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # 构建替换映射
@@ -315,6 +465,11 @@ def generate_html_report(
     html = _simple_replace(template, replacements)
     html = _replace_json_field(html, "PERIOD_DATA", period_data)
     html = _replace_json_field(html, "PROVINCE_DATA", province_ranking)
+    html = _replace_json_field(html, "DAILY_DATA", daily_data)
+    html = _replace_json_field(html, "APPROVAL_BY_PROVINCE", approval_by_province)
+    html = _replace_json_field(html, "APPROVAL_BY_SALESPERSON", approval_by_salesperson)
+    html = _replace_json_field(html, "APPROVER_LIST", approver_list)
+    html = _replace_json_field(html, "ROWS_DETAIL", rows_detail)
 
     # 构造图表需要的 KPI 原始数值（不含千分位，JS 端做格式化）
     kpi_data = {
@@ -323,8 +478,12 @@ def generate_html_report(
         "modulePower": float(kpis["module_power"].replace(",", "")) if isinstance(kpis["module_power"], str) and kpis["module_power"] != "0" else 0,
         "inverterPower": float(kpis["inverter_power"].replace(",", "")) if isinstance(kpis["inverter_power"], str) and kpis["inverter_power"] != "0" else 0,
         "batteryCapacity": float(kpis["battery_capacity"].replace(",", "")) if isinstance(kpis["battery_capacity"], str) and kpis["battery_capacity"] != "0" else 0,
-        "wangjianApproved": wangjian["approved"],
+        "wangjianApproved": wangjian["approved"],  # 保留旧 key 兼容
         "wangjianTotal": wangjian["total"],
+        "approverApproved": default_approver_stats["approved"],
+        "approverTotal": default_approver_stats["total"],
+        "approverRate": default_approver_stats["rate"],
+        "approverName": default_approver_stats["name"],
         "daysAvg": approval_days["avg"],
         "daysMin": approval_days["min"],
         "daysMax": approval_days["max"],
@@ -348,12 +507,15 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="从 xlsx 生成 HTML 周报报表")
     parser.add_argument("--xlsx", required=True, help="输入的 xlsx 文件路径")
-    parser.add_argument("--output", default="./询价周报报表.html", help="输出的 html 文件路径")
+    parser.add_argument("--output", default="", help="输出的 html 文件路径（默认自动带时间戳）")
     parser.add_argument("--range", default="", help="查询范围文本，如 '2026-06-01 ~ 2026-06-07'")
     args = parser.parse_args()
 
     rows = read_rows_from_xlsx(args.xlsx)
     query_range = args.range or f"{datetime.now().strftime('%Y-%m-%d')} 数据"
+    if not args.output:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.output = f"./询价周报报表_{ts}.html"
     output = generate_html_report(rows, query_range, args.output)
     print(f"HTML 报表已生成：{output}")
 
