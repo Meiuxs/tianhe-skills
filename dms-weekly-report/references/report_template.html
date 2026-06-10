@@ -173,6 +173,27 @@ body {
   color: var(--text-primary);
   background: white;
 }
+.global-filter .quick-btns {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  flex-wrap: wrap;
+}
+.quick-btn {
+  padding: 3px 10px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: background .15s;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.quick-btn:hover { background: rgba(255,255,255,0.25); }
+.quick-btn:active { background: rgba(255,255,255,0.35); }
 /* ===================================================================
    TAB NAVIGATION
    =================================================================== */
@@ -239,7 +260,7 @@ body {
   display: none;
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
 }
 .tab-content.active {
   display: block;
@@ -411,7 +432,7 @@ body {
   top: 0; left: 0; right: 0; bottom: 0;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  animation: shimmer 0.8s infinite;
   border-radius: var(--radius-sm);
   z-index: 10;
 }
@@ -707,14 +728,18 @@ th.number-right {
         <span>⏱ {{REPORT_GENERATED_AT}}</span>
       </div>
       <div class="global-filter">
-        <label for="global-period-select">📅 时间段：</label>
-        <select id="global-period-select" class="form-control">
-          <option value="全部">全部</option>
-          <option value="本周">本周</option>
-          <option value="本月" selected>本月</option>
-          <option value="上月">上月</option>
-          <option value="本季度">本季度</option>
-        </select>
+        <label>📅 时间段：</label>
+        <input type="date" id="date-start" class="form-control" style="width:140px;">
+        <span style="color:rgba(255,255,255,0.5);margin:0 4px;">~</span>
+        <input type="date" id="date-end" class="form-control" style="width:140px;">
+        <span class="quick-btns">
+          <button class="quick-btn" data-quick="today">今日</button>
+          <button class="quick-btn" data-quick="last7">近7天</button>
+          <button class="quick-btn" data-quick="thisweek">本周</button>
+          <button class="quick-btn" data-quick="thismonth">本月</button>
+          <button class="quick-btn" data-quick="lastquarter">上季</button>
+          <button class="quick-btn" data-quick="all">全部</button>
+        </span>
       </div>
       </div>
     </div>
@@ -1019,7 +1044,6 @@ th.number-right {
    DATA — 由后端注入，唯一数据源
    =================================================================== */
 const ROWS_DETAIL = {{ROWS_DETAIL_JSON}} || [];
-let currentGlobalPeriod = '本月';
 const SERVER_NOW = '{{SERVER_TIMESTAMP}}' || null; // 后端注入 ISO 8601 格式时间戳
 
 /* ── 明细表格分页状态 ── */
@@ -1028,6 +1052,25 @@ let detailPageState = {
   pageSize: 20,
   totalRows: 0,
 };
+
+/* ── 缓存当前过滤结果（避免重复 filterRowsByPeriod）── */
+var _cachedFilteredRows = null;
+
+function _invalidateFilterCache() {
+  _cachedFilteredRows = null;
+}
+
+function getFilteredRows() {
+  if (!_cachedFilteredRows) {
+    var start = document.getElementById('date-start').value;
+    var end = document.getElementById('date-end').value;
+    if (!start || !end) return ROWS_DETAIL;
+    _cachedFilteredRows = ROWS_DETAIL.filter(function(row) {
+      return row.submitDate >= start && row.submitDate <= end;
+    });
+  }
+  return _cachedFilteredRows;
+}
 
 /* ===================================================================
    CHART.JS 加载检查
@@ -1154,9 +1197,59 @@ var donutCenterPlugin = {
   },
 };
 
-// 注册插件（必须在定义之后）
+/* ──────────── 通用数据标签插件（柱状/条形图顶部显示数值）──────────── */
+var dataLabelPlugin = {
+  id: 'dataLabel',
+  afterDraw: function(chart) {
+    // 仅在柱状/条形图（包含 indexAxis）上生效
+    if (!chart.isDatasetVisible || !chart.getDatasetMeta) return;
+    var ctx = chart.ctx;
+    ctx.save();
+    // 默认字体：按 canvas 高度自适应
+    var fontSize = Math.max(10, Math.min(13, chart.height * 0.025));
+    ctx.font = '500 ' + fontSize + 'px ' + Chart.defaults.font.family;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    var isHorizontal = chart.options.indexAxis === 'y';
+    for (var i = 0; i < chart.data.datasets.length; i++) {
+      var meta = chart.getDatasetMeta(i);
+      if (!meta.visible) continue;
+      var dataset = chart.data.datasets[i];
+      for (var j = 0; j < meta.data.length; j++) {
+        var elem = meta.data[j];
+        if (!elem || elem.hidden) continue;
+        var value = dataset.data[j];
+        // 跳过极小的 hack 值（pie 图表会用到 <0.1 占位）
+        if (Math.abs(value) < 0.1) continue;
+
+        var x, y;
+        if (isHorizontal) {
+          // 水平条形图：标签在条右端
+          x = elem.x + 4;
+          y = elem.y + fontSize * 0.35;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+        } else {
+          // 垂直柱状图：标签在柱顶上方
+          x = elem.x;
+          y = elem.y - 3;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+        }
+        ctx.fillStyle = '#475569';
+        var displayVal = typeof value === 'number' ? fmtNum(value) : String(value);
+        ctx.fillText(displayVal, x, y);
+      }
+    }
+    ctx.restore();
+  },
+};
+
+// 注册插件
 if (typeof Chart !== 'undefined') {
   Chart.register(donutCenterPlugin);
+  Chart.register(dataLabelPlugin);
 }
 
 /* ──────────── 通用图表配置 ──────────── */
@@ -1165,7 +1258,7 @@ function makeBarOpts(xLabel, yLabel) {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 2.2,
-    animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
+    animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
     plugins: {
       legend: {
         position: 'bottom',
@@ -1200,7 +1293,7 @@ function makeDonutOpts() {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 1.2,
-    animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
+    animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
     plugins: {
       legend: {
         position: 'bottom',
@@ -1233,12 +1326,13 @@ function createChart(canvasId, config) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return null;
 
-  // 显示 skeleton loader
+  // 显示 skeleton loader 并保存引用到 canvas
   let wrap = canvas.parentNode;
   if (wrap && !wrap.querySelector('.chart-skeleton')) {
     let skeleton = document.createElement('div');
     skeleton.className = 'chart-skeleton';
     wrap.insertBefore(skeleton, canvas);
+    canvas._skeleton = skeleton;
   }
 
   if (chartInstances[canvasId]) {
@@ -1255,51 +1349,63 @@ function createChart(canvasId, config) {
    =================================================================== */
 
 /**
- * 获取时间段对应的日期范围 [start, end] 字符串。
- * 返回 null 表示「全部」（不过滤）。
+ * 获取快捷按钮对应的日期范围 {start, end}。
+ * start/end 为空字符串表示全部。
  */
-function getPeriodDateRange(periodName) {
-  let today;
-  if (SERVER_NOW) {
-    today = new Date(SERVER_NOW);
-  } else {
-    today = new Date();
-  }
-  let y = today.getFullYear();
-  let m = today.getMonth(); // 0-based
-  let todayStr = y + '-' + ('0' + (m + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
+function getQuickRange(quick) {
+  var today = SERVER_NOW ? new Date(SERVER_NOW) : new Date();
+  var y = today.getFullYear();
+  var m = today.getMonth();
+  var todayStr = fmtLocalDate(today);
 
-  switch (periodName) {
-    case '全部':
-      return null;
-    case '本周': {
-      let ws = new Date(today);
-      ws.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // 周一
-      return [fmtLocalDate(ws), todayStr];
+  switch (quick) {
+    case 'today':
+      return { start: todayStr, end: todayStr };
+    case 'last7': {
+      var d = new Date(today);
+      d.setDate(d.getDate() - 6);
+      return { start: fmtLocalDate(d), end: todayStr };
     }
-    case '本月': {
-      let ms = y + '-' + ('0' + (m + 1)).slice(-2) + '-01';
-      return [ms, todayStr];
+    case 'thisweek': {
+      var ws = new Date(today);
+      ws.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+      return { start: fmtLocalDate(ws), end: todayStr };
     }
-    case '上月': {
-      let lmEnd = new Date(y, m, 0); // 上月最后一天
-      let lmStart = (m === 0 ? (y - 1) : y) + '-' + (m === 0 ? '12' : ('0' + m).slice(-2)) + '-01';
-      return [lmStart, fmtLocalDate(lmEnd)];
+    case 'thismonth':
+      return { start: y + '-' + ('0' + (m + 1)).slice(-2) + '-01', end: todayStr };
+    case 'lastquarter': {
+      var qs = Math.floor(m / 3) * 3;
+      var qStart = new Date(y, qs - 3, 1);
+      var qEnd = new Date(y, qs, 0);
+      return { start: fmtLocalDate(qStart), end: fmtLocalDate(qEnd) };
     }
-    case '本季度': {
-      let qs = Math.floor(m / 3) * 3;
-      let qStart = y + '-' + ('0' + (qs + 1)).slice(-2) + '-01';
-      return [qStart, todayStr];
-    }
+    case 'all':
+      return { start: '', end: '' };
     default:
       return null;
   }
 }
 
-function filterRowsByPeriod(rows, periodName) {
-  let range = getPeriodDateRange(periodName);
-  if (!range) return rows; // '全部'
-  let start = range[0], end = range[1];
+/**
+ * 根据日期范围自动检测子时段粒度。
+ */
+function _detectGranularityFromRange() {
+  var start = document.getElementById('date-start').value;
+  var end = document.getElementById('date-end').value;
+  if (!start || !end) return '全部';
+
+  var s = new Date(start);
+  var e = new Date(end);
+  var diffDays = Math.round((e - s) / 86400000);
+
+  if (diffDays > 180) return '全部';
+  if (diffDays > 60) return '本季度';
+  if (diffDays > 14) return '本月';
+  return '本周';
+}
+
+function filterRowsByPeriod(rows, start, end) {
+  if (!start || !end) return rows; // '全部'
   return rows.filter(function(row) {
     return row.submitDate >= start && row.submitDate <= end;
   });
@@ -1452,6 +1558,10 @@ function getSubPeriods(periodName) {
   let y = today.getFullYear();
   let m = today.getMonth();
 
+  // 从实际 date input 获取起止范围
+  var inputStart = document.getElementById('date-start').value;
+  var inputEnd = document.getElementById('date-end').value;
+
   switch (periodName) {
     case '全部': {
       // 从数据中提取最早的年份到当前年份，按年划分
@@ -1498,11 +1608,10 @@ function getSubPeriods(periodName) {
     }
     case '本月':
     case '上月': {
-      // 按周划分
-      var range = getPeriodDateRange(periodName);
-      if (!range) return [{ label: periodName, start: '', end: '' }];
-      var startDate = new Date(range[0]);
-      var endDate = new Date(range[1]);
+      // 按周划分，基于实际输入日期范围
+      if (!inputStart || !inputEnd) return [{ label: periodName, start: '', end: '' }];
+      var startDate = new Date(inputStart);
+      var endDate = new Date(inputEnd);
       var sub = [];
       var cursor = new Date(startDate);
       var weekIndex = 1;
@@ -1510,7 +1619,7 @@ function getSubPeriods(periodName) {
         var weekStart = fmtLocalDate(cursor);
         var weekEndCursor = new Date(cursor);
         weekEndCursor.setDate(weekEndCursor.getDate() + 6);
-        var weekEnd = weekEndCursor > endDate ? fmtLocalDate(endDate) : fmtLocalDate(weekEndCursor);
+        var weekEnd = weekEndCursor > endDate ? inputEnd : fmtLocalDate(weekEndCursor);
         sub.push({
           label: '第' + weekIndex + '周',
           start: weekStart,
@@ -1522,11 +1631,10 @@ function getSubPeriods(periodName) {
       return sub;
     }
     case '本周': {
-      // 按天划分
-      var range = getPeriodDateRange(periodName);
-      if (!range) return [{ label: periodName, start: '', end: '' }];
-      var startDate = new Date(range[0]);
-      var endDate = new Date(range[1]);
+      // 按天划分，基于实际输入日期范围
+      if (!inputStart || !inputEnd) return [{ label: periodName, start: '', end: '' }];
+      var startDate = new Date(inputStart);
+      var endDate = new Date(inputEnd);
       var weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
       var sub = [];
       var cursor = new Date(startDate);
@@ -1547,16 +1655,49 @@ function getSubPeriods(periodName) {
   }
 }
 
-/** 计算动态子时段的汇总数据（用于周期对比图）。 */
+/** 计算动态子时段的汇总数据（单 pass 分组，避免多遍 filter）。 */
 function computePeriodSummaries(rows) {
-  // 不再缓存，因为数据可能随全局筛选变化
-  let subPeriods = getSubPeriods(currentGlobalPeriod);
-  let allStats = {};
+  let subPeriods = getSubPeriods(_detectGranularityFromRange());
+  // 初始化每个子时段的统计桶
+  var buckets = {};
   subPeriods.forEach(function(sp) {
-    let filtered = rows.filter(function(row) {
-      return row.submitDate >= sp.start && row.submitDate <= sp.end;
-    });
-    allStats[sp.label] = computeAggregates(filtered);
+    buckets[sp.label] = { total: 0, ordered: 0, modulePower: 0, inverterPower: 0, batteryCapacity: 0, spSet: {} };
+  });
+
+  // 单次遍历，按日期归属放入对应桶
+  rows.forEach(function(row) {
+    if (!row.submitDate) return;
+    for (var i = 0; i < subPeriods.length; i++) {
+      var sp = subPeriods[i];
+      if (row.submitDate >= sp.start && row.submitDate <= sp.end) {
+        var b = buckets[sp.label];
+        b.total++;
+        if (row.ordered === '是') b.ordered++;
+        b.modulePower += row.modulePower || 0;
+        b.inverterPower += row.inverterPower || 0;
+        b.batteryCapacity += row.batteryCapacity || 0;
+        if (row.salesperson && row.salesperson !== '--' && row.salesperson !== '无') {
+          b.spSet[row.salesperson] = true;
+        }
+        break; // 一行只归属一个时段
+      }
+    }
+  });
+
+  // 将桶转为 computeAggregates 兼容格式
+  var allStats = {};
+  subPeriods.forEach(function(sp) {
+    var b = buckets[sp.label];
+    allStats[sp.label] = {
+      totalProjects: b.total,
+      orderedCount: b.ordered,
+      notOrderedCount: b.total - b.ordered,
+      salespersons: Object.keys(b.spSet).length,
+      modulePower: b.modulePower,
+      inverterPower: b.inverterPower,
+      batteryCapacity: b.batteryCapacity,
+      ratio: b.inverterPower > 0 ? Math.round(b.modulePower / b.inverterPower * 100) / 100 : 0,
+    };
   });
   return allStats;
 }
@@ -1601,7 +1742,7 @@ function setText(id, val) {
 
 /* ──────────── Tab 1 图表：概览 ──────────── */
 function initOverviewCharts() {
-  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let filtered = getFilteredRows();
   let stats = computeAggregates(filtered);
   let ranking = computeProvinceRanking(filtered);
 
@@ -1655,7 +1796,7 @@ function initOverviewCharts() {
         responsive: true,
         maintainAspectRatio: true,
         aspectRatio: 1.6,
-        animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
+        animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
         plugins: {
           legend: {
             position: 'bottom',
@@ -1709,7 +1850,7 @@ function initOverviewCharts() {
         maintainAspectRatio: true,
         aspectRatio: 1.8,
         indexAxis: 'y',
-        animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
+        animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -1750,7 +1891,7 @@ function initOverviewCharts() {
 
 /* ──────────── Tab 2 图表：审批 ──────────── */
 function initApprovalCharts() {
-  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let filtered = getFilteredRows();
   let approverName = getSelectedApprover();
   let approverStats = computeApproverStats(filtered, approverName);
   let compareData = computeApprovalByDimension(filtered, 'province');
@@ -1806,7 +1947,7 @@ function initApprovalCharts() {
       maintainAspectRatio: true,
       aspectRatio: Math.max(1.2, compareData.length * 0.25),
       indexAxis: 'y',
-      animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
+      animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -1855,7 +1996,7 @@ function initApprovalCharts() {
 function initDetailCharts() {
   let summaries = computePeriodSummaries(ROWS_DETAIL);
   let periodNames = Object.keys(summaries);
-  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let filtered = getFilteredRows();
 
   // 周期功率趋势柱状图
   let moduleData = periodNames.map(function(n) { return summaries[n].modulePower; });
@@ -1888,7 +2029,7 @@ function initDetailCharts() {
         responsive: true,
         maintainAspectRatio: true,
         aspectRatio: periodNames.length > 8 ? 3.0 : 2.4,
-        animation: { duration: 600, easing: 'easeOutQuart', onComplete: function() { var skel = this.canvas.parentNode.querySelector('.chart-skeleton'); if (skel) skel.remove(); } },
+        animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
         plugins: {
           legend: {
             position: 'bottom',
@@ -1912,8 +2053,8 @@ function initDetailCharts() {
             grid: { display: false },
             ticks: { font: { size: 11 }, maxRotation: periodNames.length > 6 ? 30 : 0 },
             // 紧凑分组：同一时段三种柱子紧靠，不同时段之间留空
-            barPercentage: 0.9,
-            categoryPercentage: 0.55,
+            barPercentage: 0.8,
+            categoryPercentage: 0.25,
           },
           y: {
             beginAtZero: true,
@@ -1928,7 +2069,7 @@ function initDetailCharts() {
     if (captionQuery) {
       var capEl = captionQuery.closest('.chart-card').querySelector('.chart-caption');
       if (capEl) {
-        capEl.textContent = '按 ' + currentGlobalPeriod + ' 细化 · 共 ' + periodNames.length + ' 个时段 · 蓝色=组件 · 橙色=逆变器 · 绿色=电池';
+        capEl.textContent = '按 ' + _detectGranularityFromRange() + ' 细化 · 共 ' + periodNames.length + ' 个时段 · 蓝色=组件 · 橙色=逆变器 · 绿色=电池';
       }
     }
   } else {
@@ -1953,7 +2094,15 @@ function renderDetailTable(rows) {
   tbody.innerHTML = '';
 
   let label = document.getElementById('detail-period-label');
-  if (label) label.textContent = currentGlobalPeriod;
+  if (label) {
+    var startVal = document.getElementById('date-start').value;
+    var endVal = document.getElementById('date-end').value;
+    if (startVal && endVal) {
+      label.textContent = startVal + ' ~ ' + endVal;
+    } else {
+      label.textContent = '全部';
+    }
+  }
 
   if (rows.length === 0) {
     let tr = document.createElement('tr');
@@ -2024,13 +2173,13 @@ function renderPaginationControls(totalPages, startRow, endRow, totalRows) {
   document.getElementById('prev-page-btn').addEventListener('click', function() {
     if (detailPageState.currentPage > 1) {
       detailPageState.currentPage--;
-      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+      renderDetailTable(getFilteredRows());
     }
   });
   document.getElementById('next-page-btn').addEventListener('click', function() {
     if (detailPageState.currentPage < totalPages) {
       detailPageState.currentPage++;
-      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+      renderDetailTable(getFilteredRows());
     }
   });
 }
@@ -2047,7 +2196,7 @@ function renderProvinceTable() {
   let tbody = document.getElementById('province-table-body');
   if (!tbody) return;
   tbody.innerHTML = '';
-  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let filtered = getFilteredRows();
   let ranking = computeProvinceRanking(filtered);
   ranking.forEach(function(item, i) {
     let tr = document.createElement('tr');
@@ -2069,7 +2218,7 @@ function populateApproverList() {
   // 保存当前选中值
   let currentVal = select.value;
 
-  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let filtered = getFilteredRows();
   let approvers = extractApproverList(filtered);
 
   // 保留第一个「全部审批人」选项，清空后续
@@ -2139,14 +2288,13 @@ function destroyAllCharts() {
   document.querySelectorAll('canvas').forEach(function(c) { c.style.display = ''; });
 }
 
-/* 全局时间段切换 — 所有数据联动 */
-function onGlobalPeriodChange() {
-  let sel = document.getElementById('global-period-select');
-  if (!sel) return;
-  currentGlobalPeriod = sel.value;
-
+/* 日期范围或快捷按钮变化 */
+function onDateRangeChange() {
   // 重置分页状态
   detailPageState.currentPage = 1;
+
+  // 清除过滤缓存
+  _invalidateFilterCache();
 
   // 销毁所有图表
   destroyAllCharts();
@@ -2155,9 +2303,10 @@ function onGlobalPeriodChange() {
   tabInitialized.detail = false;
 
   // 更新静态元素
-  updateOverviewKPIs(computeAggregates(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod)));
+  var currentFiltered = getFilteredRows();
+  updateOverviewKPIs(computeAggregates(currentFiltered));
   renderProvinceTable();
-  populateApproverList(); // 同步刷新审批人搜索列表
+  populateApproverList();
 
   // 重建当前 Tab 的图表
   let tabName = getActiveTab();
@@ -2165,7 +2314,7 @@ function onGlobalPeriodChange() {
 
   // Tab 3 表格单独刷新
   if (tabName === 'detail') {
-    renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+    renderDetailTable(currentFiltered);
   }
 }
 
@@ -2193,10 +2342,10 @@ function switchTab(name) {
   let currentActive = document.querySelector('.tab-content.active');
   if (currentActive) {
     currentActive.style.opacity = '0';
-    currentActive.style.transform = 'translateY(-8px)';
+    currentActive.style.transform = 'translateY(-4px)';
   }
 
-  // 等待淡出完成后切换
+  // 快速淡出后切换（缩短为 150ms）
   setTimeout(function() {
     document.querySelectorAll('.tab-content').forEach(function(el) {
       el.classList.remove('active');
@@ -2207,16 +2356,17 @@ function switchTab(name) {
     document.getElementById('tab-' + name).classList.add('active');
     document.querySelector('[data-tab="' + name + '"]').classList.add('active');
 
+    // 初始化（无需额外延时，requestAnimationFrame 足以保证 DOM 更新）
     setTimeout(function() {
       if (name === 'approval') {
         populateApproverList();
       }
       initTabCharts(name);
       if (name === 'detail') {
-        renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+        renderDetailTable(getFilteredRows());
       }
-    }, 80);
-  }, 250); // 与 CSS transition 时长一致
+    }, 30);
+  }, 150);
 }
 
 /* ===================================================================
@@ -2229,7 +2379,7 @@ function exportToExcel() {
     alert('Excel 导出库加载失败，请检查网络连接后刷新页面');
     return;
   }
-  var filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  var filtered = getFilteredRows();
   var ws = XLSX.utils.json_to_sheet(filtered.map(function(row) {
     return {
       '流程编号': row.flowId,
@@ -2276,7 +2426,16 @@ function refreshData() {
    EVENT LISTENERS — 替代内联 onclick/onchange
    =================================================================== */
 function initEventListeners() {
-  document.getElementById('global-period-select').addEventListener('change', onGlobalPeriodChange);
+  document.getElementById('date-start').addEventListener('change', onDateRangeChange);
+  document.getElementById('date-end').addEventListener('change', onDateRangeChange);
+  document.querySelector('.quick-btns').addEventListener('click', function(e) {
+    if (e.target.classList.contains('quick-btn')) {
+      var range = getQuickRange(e.target.dataset.quick);
+      document.getElementById('date-start').value = range.start;
+      document.getElementById('date-end').value = range.end;
+      onDateRangeChange();
+    }
+  });
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       switchTab(this.dataset.tab);
@@ -2351,10 +2510,14 @@ document.addEventListener('DOMContentLoaded', function() {
   initEventListeners();
   checkChartJsLoaded();
 
-  // 初始渲染
-  updateOverviewKPIs(computeAggregates(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod)));
+  // 初始渲染（Chart.js 已加载则立即渲染，否则稍后重试）
+  updateOverviewKPIs(computeAggregates(getFilteredRows()));
   renderProvinceTable();
-  waitForChartJs(5, function() { initTabCharts('overview'); });
+  if (typeof Chart !== 'undefined') {
+    initTabCharts('overview');
+  } else {
+    waitForChartJs(2, function() { initTabCharts('overview'); });
+  }
 });
 </script>
 
