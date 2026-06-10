@@ -71,7 +71,7 @@ metadata:
 | 提取待办 | `python $SKILL_DIR/scripts/run_inquiry_extract.py --output-file "$TMP_DIR/inquiry_data.json"` |
 | 库存匹配 | 调用 `Skill` 工具执行 `dms-inventory` |
 | 生成 BOM | `python $SKILL_DIR/scripts/generate_bom.py --name "张三" --components 800 --items '6B001492:800,AB001347:8' --project "项目名" --output-dir "."` |
-| 填写产品信息 | `python $SKILL_DIR/scripts/fill_product_info.py --flow-id <ID> --component-power 730 --component-count 800 --inverter-power 50 --inverter-count 8` |
+| 填写产品信息 | `python $SKILL_DIR/scripts/fill_product_info.py --flow-id <ID> --component-power 730 --component-count 800` |
 
 ## 执行步骤
 
@@ -179,17 +179,14 @@ python "$SKILL_DIR/scripts/generate_bom.py" \
 ```bash
 python "$SKILL_DIR/scripts/fill_product_info.py" \
   --flow-id <流程ID> \
-  --component-power 730 --component-count 800 \
-  --inverter-power 50 --inverter-count 8 \
-  --box-power 50 --box-count 8
+  --component-power 730 --component-count 800
 ```
 
 | 参数 | 说明 |
 |------|------|
 | `--flow-id` | 流程 ID（必需）|
-| `--component-power / --component-count` | 组件功率(W)和数量 |
-| `--inverter-power / --inverter-count` | 逆变器功率(kW)和数量（默认：无） |
-| `--box-power / --box-count` | 并网箱功率(kW)和数量（默认：无） |
+| `--component-power` | 组件功率(W)（必需）|
+| `--component-count` | 组件片数（必需） |
 | `--headless` | 无头模式，不显示浏览器窗口（默认：显示浏览器） |
 
 > ⚠️ 必须 BOM 确认后执行。填写后浏览器保持打开，供用户手动检查审批。**不会自动审批/关闭浏览器。**
