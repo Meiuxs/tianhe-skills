@@ -919,7 +919,9 @@ th.number-right {
       关键节点审批统计
     </h2>
     <div class="filter-bar">
-      <label for="approver-select">👤 审批人：</label>
+      <label for="approval-role-select">👤 审批角色：</label>
+      <select id="approval-role-select" class="form-control" style="min-width:100px;"></select>
+      <label for="approver-select">审批人：</label>
       <select id="approver-select" class="form-control" style="min-width:150px;">
         <option value="全部">全部审批人</option>
       </select>
@@ -1512,11 +1514,30 @@ function computeApprovalDays(rows) {
   };
 }
 
-/** 提取唯一的采购审批人列表 */
-function extractApproverList(rows) {
+/* ── 审批角色配置（可扩展，新增角色只需加一行）── */
+var APPROVAL_ROLES = [
+  { id: 'procurement', label: '采购审批', approverField: 'procurementApprover', statusField: 'procurementStatus' },
+  { id: 'province', label: '省总审批', approverField: 'provinceApprover', statusField: 'provinceStatus' },
+];
+
+/* ── 当前选中的角色 ID ── */
+var currentApprovalRoleId = 'procurement';
+
+/** 根据角色 ID 获取配置对象 */
+function getRoleConfig(roleId) {
+  for (var i = 0; i < APPROVAL_ROLES.length; i++) {
+    if (APPROVAL_ROLES[i].id === roleId) return APPROVAL_ROLES[i];
+  }
+  return APPROVAL_ROLES[0];
+}
+
+/** 提取指定角色的审批人列表 */
+function extractApproverList(rows, roleId) {
+  var role = getRoleConfig(roleId);
+  var field = role.approverField;
   let set = {};
   rows.forEach(function(row) {
-    let name = row.procurementApprover;
+    let name = row[field];
     if (name && name !== '--' && name !== '无' && name !== '') {
       set[name] = true;
     }
@@ -1524,8 +1545,25 @@ function extractApproverList(rows) {
   return Object.keys(set).sort();
 }
 
-/** 统计指定审批人的审批通过情况 */
-function computeApproverStats(rows, approverName) {
+/** 初始化角色下拉列表 */
+function initRoleSelect() {
+  var sel = document.getElementById('approval-role-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  APPROVAL_ROLES.forEach(function(role) {
+    var opt = document.createElement('option');
+    opt.value = role.id;
+    opt.textContent = role.label;
+    sel.appendChild(opt);
+  });
+  sel.value = currentApprovalRoleId;
+}
+
+/** 统计指定角色+审批人的审批通过情况 */
+function computeApproverStats(rows, roleId, approverName) {
+  var role = getRoleConfig(roleId);
+  var approverField = role.approverField;
+  var statusField = role.statusField;
   let approved = 0, total = 0;
   let hasApprover = function(name) {
     return name && name !== '--' && name !== '无' && name !== '';
@@ -1534,9 +1572,9 @@ function computeApproverStats(rows, approverName) {
     return approverName === '全部' ? hasApprover(name) : name === approverName;
   };
   rows.forEach(function(row) {
-    if (isMatch(row.procurementApprover)) {
+    if (isMatch(row[approverField])) {
       total++;
-      let status = row.approvalStatus || '';
+      let status = row[statusField] || '';
       if (status.indexOf('审批通过') >= 0) approved++;
     }
   });
@@ -1920,8 +1958,9 @@ function initOverviewCharts() {
 /* ──────────── Tab 2 图表：审批 ──────────── */
 function initApprovalCharts() {
   let filtered = getFilteredRows();
+  var roleId = document.getElementById('approval-role-select').value;
   let approverName = getSelectedApprover();
-  let approverStats = computeApproverStats(filtered, approverName);
+  let approverStats = computeApproverStats(filtered, roleId, approverName);
   let compareData = computeApprovalByDimension(filtered, 'province');
 
   // KPI 卡片
@@ -2246,8 +2285,9 @@ function populateApproverList() {
   // 保存当前选中值
   let currentVal = select.value;
 
+  var roleId = document.getElementById('approval-role-select').value;
   let filtered = getFilteredRows();
-  let approvers = extractApproverList(filtered);
+  let approvers = extractApproverList(filtered, roleId);
 
   // 保留第一个「全部审批人」选项，清空后续
   while (select.options.length > 1) {
@@ -2469,6 +2509,31 @@ function initEventListeners() {
       switchTab(this.dataset.tab);
     });
   });
+
+  // 初始化角色下拉
+  initRoleSelect();
+
+  /* 审批角色切换 — 联动审批人列表 */
+  var roleSelect = document.getElementById('approval-role-select');
+  if (roleSelect) {
+    roleSelect.addEventListener('change', function() {
+      currentApprovalRoleId = this.value;
+      // 切换角色时重置审批人回"全部"
+      document.getElementById('approver-select').value = '全部';
+      // 触发审批相关图表刷新
+      ['chart-approval-donut', 'chart-approval-compare'].forEach(function(id) {
+        if (chartInstances[id]) {
+          chartInstances[id].destroy();
+          delete chartInstances[id];
+        }
+      });
+      document.querySelectorAll('#tab-approval .no-data-msg').forEach(function(el) { el.remove(); });
+      document.querySelectorAll('#tab-approval canvas').forEach(function(c) { c.style.display = ''; });
+      tabInitialized.approval = false;
+      populateApproverList();
+      initTabCharts('approval');
+    });
+  }
 
   /* 审批人下拉 — 选中即触发筛选 */
   var approverSelect = document.getElementById('approver-select');

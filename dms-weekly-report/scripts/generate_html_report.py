@@ -33,7 +33,8 @@ from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
     COL_SUBMIT_TIME, COL_ORDERED,
-    COL_PROVINCE_PROCESSOR, COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
+    COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
+    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
 )
 
@@ -145,22 +146,28 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[dict[str, Any]]:
             "ordered": str(row[COL_ORDERED]) if row[COL_ORDERED] else "否",
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "finalDate": final_raw[:10] if len(final_raw) >= 10 and final_raw not in ("--", "无", "") else "",
-            "provinceApprover": (
-                str(row[COL_PROVINCE_APPROVER])
-                if row[COL_PROVINCE_APPROVER]
-                and row[COL_PROVINCE_APPROVER] != "--"
-                else ""
-            ),
             "procurementApprover": (
                 str(row[COL_APPROVER])
                 if row[COL_APPROVER]
                 and row[COL_APPROVER] != "--"
                 else ""
             ),
-            "approvalStatus": (
-                str(row[COL_APPROVAL_STATUS])
-                if row[COL_APPROVAL_STATUS]
-                and row[COL_APPROVAL_STATUS] != "--"
+            "procurementStatus": (
+                str(row[COL_PURCHASE_STATUS])
+                if row[COL_PURCHASE_STATUS]
+                and row[COL_PURCHASE_STATUS] != "--"
+                else ""
+            ),
+            "provinceApprover": (
+                str(row[COL_PROVINCE_APPROVER])
+                if row[COL_PROVINCE_APPROVER]
+                and row[COL_PROVINCE_APPROVER] != "--"
+                else ""
+            ),
+            "provinceStatus": (
+                str(row[COL_PROVINCE_STATUS])
+                if row[COL_PROVINCE_STATUS]
+                and row[COL_PROVINCE_STATUS] != "--"
                 else ""
             ),
         })
