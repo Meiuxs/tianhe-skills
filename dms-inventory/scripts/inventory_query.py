@@ -169,11 +169,18 @@ def query_inverters(df: pd.DataFrame, power: int = None, brand: str = None,
     """
     result = df.copy()
 
-    # 天合原装专用筛选
-    if brand and '天合' in brand:
-        result = result[result['物料名称'].astype(str).str.contains('天合原装专用')]
+    # 品牌筛选（按厂家列或物料名称列的天合原装专用）
+    if brand:
+        # 天合品牌特殊处理：天合原装专用标识在物料名称列
+        if '天合' in brand:
+            result = result[
+                result['厂家'].astype(str).str.contains(brand, na=False, regex=False)
+                | result['物料名称'].astype(str).str.contains('天合原装专用', na=False, regex=False)
+            ]
+        else:
+            result = result[result['厂家'].astype(str).str.contains(brand, na=False, regex=False)]
 
-    # 功率筛选
+    # 功率筛选（支持给定功率或模式）
     if power is not None:
         result = result[result['功率'].astype(str).str.contains(rf'(?<!\d){power}(?!\d)')]
 
@@ -252,7 +259,8 @@ def format_inverter_by_brand(df: pd.DataFrame) -> str:
 
 def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
                     name_col: str = '物料名称', qty_col: str = '可用库存',
-                    warehouse_col: str = '仓库名称') -> pd.DataFrame:
+                    warehouse_col: str = '仓库名称',
+                    keep_zero: bool = False) -> pd.DataFrame:
     """按物料编码聚合所有仓库的库存总量。
 
     Args:
@@ -261,6 +269,7 @@ def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
         name_col: 物料名称列名
         qty_col: 可用库存列名
         warehouse_col: 仓库名称列名
+        keep_zero: 是否保留库存为 0 的物料（默认 False，仅用于 lookup 场景）
 
     Returns:
         聚合后的 DataFrame，含 物料编号、物料名称、库存总量、仓库分布
@@ -290,6 +299,8 @@ def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
                 q = pd.to_numeric(r[qty_col], errors='coerce')
                 if pd.notna(q) and q > 0:
                     parts.append(f"{r[warehouse_col]}({int(q)}台)")
+                elif keep_zero:
+                    parts.append(f"{r[warehouse_col]}({int(q) if pd.notna(q) else 0}台)")
             return ', '.join(parts)
 
         dist = result.groupby(material_col).apply(_calc_dist).reset_index()
@@ -306,8 +317,9 @@ def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
 
     # 排序：库存量降序
     agg = agg.sort_values('库存总量', ascending=False).reset_index(drop=True)
-    # 只保留库存 > 0 的
-    agg = agg[agg['库存总量'] > 0]
+    # 只保留库存 > 0 的（除非 keep_zero=True）
+    if not keep_zero:
+        agg = agg[agg['库存总量'] > 0]
 
     return agg
 
