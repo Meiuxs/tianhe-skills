@@ -30,19 +30,20 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _compat  # noqa: F401, E402
 
-# 库存文件目录
-INVENTORY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 库存文件目录（指向 dms-inventory 共享库存数据）
+# dms-inventory 是库存管理的唯一数据源，dms-inquiry-bom 仅做查询引用
+INVENTORY_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "dms-inventory",
+)
 
 
 def _find_latest_inventory_file() -> str:
-    """自动查找目录下最新的库存文件。
+    """查找 dms-inventory/assets/ 下最新的库存文件。
 
+    库存数据由 dms-inventory 统一管理，dms-inquiry-bom 从中引用。
     匹配模式: 组件、逆变器、并网箱可用库存统计*.xlsx
-    按修改时间取最新文件。
-
-    搜索顺序：
-      1. assets/ 子目录（推荐位置）
-      2. skill 根目录（兼容旧位置）
+    文件名含日期后缀，按修改时间取最新。
 
     Returns:
         库存文件完整路径
@@ -50,25 +51,21 @@ def _find_latest_inventory_file() -> str:
     Raises:
         FileNotFoundError: 未找到匹配的库存文件
     """
-    # 搜索顺序：assets/ 子目录优先
     search_dirs = [
         os.path.join(INVENTORY_DIR, "assets"),
     ]
-    # 如果 INVENTORY_DIR 不在 search_dirs 中则添加（避免重复）
-    if INVENTORY_DIR not in search_dirs:
-        search_dirs.append(INVENTORY_DIR)
 
     for directory in search_dirs:
         pattern = os.path.join(directory, "组件、逆变器、并网箱可用库存统计*.xlsx")
         files = glob.glob(pattern)
         if files:
-            latest = max(files, key=os.path.getmtime)
-            return latest
+            return max(files, key=os.path.getmtime)
 
     raise FileNotFoundError(
-        f"未找到库存文件（匹配模式: 组件、逆变器、并网箱可用库存统计*.xlsx）\n"
-        f"已在以下目录搜索: {', '.join(search_dirs)}\n"
-        f"请将库存文件放在 {os.path.join(INVENTORY_DIR, 'assets')} 或 {INVENTORY_DIR} 目录下"
+        f"未找到库存文件\n"
+        f"  搜索目录: {search_dirs[0]}\n"
+        f"  匹配模式: 组件、逆变器、并网箱可用库存统计*.xlsx\n"
+        f"  库存数据由 dms-inventory 统一管理，请将文件放入其 assets/ 目录"
     )
 
 

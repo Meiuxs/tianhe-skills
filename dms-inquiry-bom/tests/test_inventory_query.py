@@ -123,10 +123,11 @@ class TestFileDiscovery(unittest.TestCase):
     """测试 _find_latest_inventory_file 和默认文件路径"""
 
     def test_find_file_in_assets(self):
-        """能在 assets/ 中找到库存文件"""
+        """能在 dms-inventory/assets/ 中找到库存文件"""
         file_path = _find_latest_inventory_file()
         self.assertTrue(os.path.exists(file_path))
         self.assertIn("组件、逆变器、并网箱可用库存统计", file_path)
+        self.assertIn("dms-inventory", file_path)
         self.assertIn("assets", file_path)
 
     def test_default_inventory_file_not_none(self):
