@@ -1,6 +1,7 @@
-# 生成数据文件
+# 生成的数据文件（stock 文件需要跟踪）
 *.xlsx
 *.xls
+!**/组件、逆变器、并网箱可用库存统计*.xlsx
 
 # 生成 HTML 报表
 *.html
@@ -21,7 +22,3 @@ __pycache__/
 
 # GStack
 .gstack/
-
-# assets 目录数据文件
-assets/*.xlsx
-assets/*.xls
