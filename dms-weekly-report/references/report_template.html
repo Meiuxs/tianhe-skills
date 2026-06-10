@@ -1437,18 +1437,127 @@ function computeApprovalByDimension(rows, field) {
   }).sort(function(a, b) { return b.avg - a.avg; });
 }
 
-/** 计算 5 个时间段的汇总数据（用于周期对比图），结果缓存复用 */
-let _periodSummaryCache = null;
+/**
+ * 根据全局时间段返回该周期内的子时段划分。
+ * @param {string} periodName - 全局筛选的时段名
+ * @returns {Array<{label: string, start: string, end: string}>}
+ */
+function getSubPeriods(periodName) {
+  let today;
+  if (SERVER_NOW) {
+    today = new Date(SERVER_NOW);
+  } else {
+    today = new Date();
+  }
+  let y = today.getFullYear();
+  let m = today.getMonth();
 
+  switch (periodName) {
+    case '全部': {
+      // 从数据中提取最早的年份到当前年份，按年划分
+      let earliestYear = y;
+      ROWS_DETAIL.forEach(function(row) {
+        if (row.submitDate && row.submitDate.length >= 4) {
+          let yr = parseInt(row.submitDate.slice(0, 4), 10);
+          if (!isNaN(yr) && yr < earliestYear) earliestYear = yr;
+        }
+      });
+      let sub = [];
+      for (let yr = earliestYear; yr <= y; yr++) {
+        sub.push({
+          label: yr + '年',
+          start: yr + '-01-01',
+          end: (yr === y) ? fmtLocalDate(today) : yr + '-12-31',
+        });
+      }
+      return sub;
+    }
+    case '本季度': {
+      let qs = Math.floor(m / 3) * 3;
+      let sub = [];
+      for (let i = 0; i < 3; i++) {
+        let month = qs + i;
+        let monthStart = y + '-' + ('0' + (month + 1)).slice(-2) + '-01';
+        let monthEnd;
+        if (month === m) {
+          monthEnd = fmtLocalDate(today);
+        } else {
+          let lastDay = new Date(y, month + 1, 0).getDate();
+          monthEnd = y + '-' + ('0' + (month + 1)).slice(-2) + '-' + ('0' + lastDay).slice(-2);
+        }
+        sub.push({
+          label: (month + 1) + '月',
+          start: monthStart,
+          end: monthEnd,
+        });
+      }
+      return sub.filter(function(s) {
+        // 只保留在全局范围内的
+        return s.start <= s.end;
+      });
+    }
+    case '本月':
+    case '上月': {
+      // 按周划分
+      var range = getPeriodDateRange(periodName);
+      if (!range) return [{ label: periodName, start: '', end: '' }];
+      var startDate = new Date(range[0]);
+      var endDate = new Date(range[1]);
+      var sub = [];
+      var cursor = new Date(startDate);
+      var weekIndex = 1;
+      while (cursor <= endDate) {
+        var weekStart = fmtLocalDate(cursor);
+        var weekEndCursor = new Date(cursor);
+        weekEndCursor.setDate(weekEndCursor.getDate() + 6);
+        var weekEnd = weekEndCursor > endDate ? fmtLocalDate(endDate) : fmtLocalDate(weekEndCursor);
+        sub.push({
+          label: '第' + weekIndex + '周',
+          start: weekStart,
+          end: weekEnd,
+        });
+        cursor.setDate(cursor.getDate() + 7);
+        weekIndex++;
+      }
+      return sub;
+    }
+    case '本周': {
+      // 按天划分
+      var range = getPeriodDateRange(periodName);
+      if (!range) return [{ label: periodName, start: '', end: '' }];
+      var startDate = new Date(range[0]);
+      var endDate = new Date(range[1]);
+      var weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      var sub = [];
+      var cursor = new Date(startDate);
+      while (cursor <= endDate) {
+        var dayStr = fmtLocalDate(cursor);
+        var dayLabel = weekDays[(cursor.getDay() + 6) % 7]; // 周一开始
+        sub.push({
+          label: dayLabel,
+          start: dayStr,
+          end: dayStr,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return sub;
+    }
+    default:
+      return [{ label: periodName, start: '', end: '' }];
+  }
+}
+
+/** 计算动态子时段的汇总数据（用于周期对比图）。 */
 function computePeriodSummaries(rows) {
-  if (_periodSummaryCache) return _periodSummaryCache;
-  let periods = ['全部', '本周', '本月', '上月', '本季度'];
+  // 不再缓存，因为数据可能随全局筛选变化
+  let subPeriods = getSubPeriods(currentGlobalPeriod);
   let allStats = {};
-  periods.forEach(function(name) {
-    let filtered = filterRowsByPeriod(rows, name);
-    allStats[name] = computeAggregates(filtered);
+  subPeriods.forEach(function(sp) {
+    let filtered = rows.filter(function(row) {
+      return row.submitDate >= sp.start && row.submitDate <= sp.end;
+    });
+    allStats[sp.label] = computeAggregates(filtered);
   });
-  _periodSummaryCache = allStats;
   return allStats;
 }
 
@@ -1763,23 +1872,31 @@ function initDetailCharts() {
           data: moduleData,
           backgroundColor: CHART_COLORS.blue,
           borderRadius: 3,
-          maxBarThickness: 40,
+          maxBarThickness: periodNames.length > 10 ? 20 : 40,
         }, {
           label: '逆变器功率 (kW)',
           data: inverterData,
           backgroundColor: CHART_COLORS.orange,
           borderRadius: 3,
-          maxBarThickness: 40,
+          maxBarThickness: periodNames.length > 10 ? 20 : 40,
         }, {
           label: '电池容量 (kWh)',
           data: batteryData,
           backgroundColor: CHART_COLORS.green,
           borderRadius: 3,
-          maxBarThickness: 40,
+          maxBarThickness: periodNames.length > 10 ? 20 : 40,
         }],
       },
       options: makeBarOpts('时间段', '容量'),
     });
+    // 动态更新 caption：展示当前粒度的子时段数量
+    var chartCard = document.getElementById('chart-query-bar');
+    if (chartCard) {
+      var captionEl = chartCard.closest('.chart-card').querySelector('.chart-caption');
+      if (captionEl) {
+        captionEl.textContent = '按 ' + currentGlobalPeriod + ' 内子时段统计 · 共 ' + periodNames.length + ' 个时段';
+      }
+    }
   } else {
     showNoData('chart-query-bar', '暂无周期功率数据', '📋');
   }
