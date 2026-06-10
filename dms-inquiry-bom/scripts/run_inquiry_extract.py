@@ -127,13 +127,13 @@ async def extract_detail_by_url(context, flow_id, sem):
             html = await page.content()
             data = {"flow_id": flow_id}
 
-            # 基本信息
-            data["project_name"] = _extract_from_html(html, "项目名称")
+            # 基本信息 — DOM 选择器优先，降级到正则 HTML
+            data["project_name"] = await _extract_field(page, "项目名称")
             agent_raw = _extract_from_html(html, "代理商")
             data["agent_code"], data["agent_name"] = _split_agent(agent_raw)
-            data["province"] = _extract_from_html(html, "省公司")
-            data["salesperson"] = _extract_from_html(html, "业务员")
-            data["remark"] = _extract_from_html(html, "备注")
+            data["province"] = await _extract_field(page, "省公司")
+            data["salesperson"] = await _extract_field(page, "业务员")
+            data["remark"] = await _extract_field(page, "备注")
 
             # BOM清单
             bom_items = await _extract_bom(page)
@@ -177,6 +177,7 @@ async def extract_all_parallel(context, flow_ids, workers):
 # ==================== HTML提取工具 ====================
 
 def _extract_from_html(html, label):
+    """从 HTML 中提取 label 对应的值（正则兜底，用于已获取的 HTML）。"""
     pattern = rf"{label}[:\s]*</[^>]+>\s*<[^>]*>([^<]+)"
     match = re.search(pattern, html)
     if match:
@@ -186,6 +187,51 @@ def _extract_from_html(html, label):
     if match2:
         return match2.group(1).strip()
     return "--"
+
+
+def _extract_field(page, label, timeout=5000):
+    """通过 DOM 选择器从页面提取指定 label 的字段值（优先浏览器 DOM，降级到正则 HTML）。
+
+    Args:
+        page: Playwright page
+        label: 字段标签文本，如 "项目名称"
+        timeout: 等待超时（毫秒）
+
+    Returns:
+        str: 字段值，未找到时返回 "--"
+    """
+    try:
+        value = page.evaluate(f"""() => {{
+            const items = document.querySelectorAll('.el-form-item');
+            for (const item of items) {{
+                const lbl = item.querySelector('label');
+                if (lbl && lbl.textContent.includes('{label.replace("'", "\\'")}')) {{
+                    const content = item.querySelector('.el-form-item__content');
+                    if (content) {{
+                        const text = content.textContent.trim();
+                        if (text) return text;
+                    }}
+                    const input = item.querySelector('input, textarea, .el-input__inner');
+                    if (input) return input.value || input.textContent.trim();
+                }}
+            }}
+            const detailItems = document.querySelectorAll('.detail-item, .info-item, .process-detail-item');
+            for (const item of detailItems) {{
+                const lbl = item.querySelector('.label, .detail-label, .info-label');
+                if (lbl && lbl.textContent.includes('{label.replace("'", "\\'")}')) {{
+                    const val = item.querySelector('.value, .detail-value, .info-value');
+                    if (val) return val.textContent.trim();
+                }}
+            }}
+            return null;
+        }}""")
+        if value and value != "null":
+            return value.strip()
+    except Exception:
+        pass
+    # 降级到正则 HTML 解析
+    html = page.content()
+    return _extract_from_html(html, label)
 
 
 def _split_agent(agent_raw):
@@ -226,7 +272,12 @@ async def _extract_bom(page):
         print(f"[BOM] 异常: {e}", file=sys.stderr)
     # 去重
     seen = set()
-    return [x for x in items if x["code"] not in seen and not seen.add(x["code"])]
+    deduped = []
+    for x in items:
+        if x["code"] not in seen:
+            seen.add(x["code"])
+            deduped.append(x)
+    return deduped
 
 
 async def _extract_approval_history(page):

@@ -272,10 +272,41 @@ def _glob_first(pattern: str) -> str | None:
     return matches[0] if matches else None
 
 
+def _check_chromium_component(component_name: str, label: str,
+                               patterns: dict) -> bool:
+    """通用 Chromium 组件检查（filesystem glob，不启动 Playwright 引擎）。
+
+    Args:
+        component_name: 组件名称（如 "Chromium"、"Headless Shell"），用于输出
+        label: 输出标签（如 "[Chromium]"）
+        patterns: {platform: glob_pattern} 映射
+                  其中 platform 为 sys.platform 值（win32/linux/darwin）
+
+    Returns:
+        bool: 是否已安装
+    """
+    plat = sys.platform
+    pattern = patterns.get(plat, patterns.get("win32"))
+    matched = _glob_first(pattern)
+    if matched:
+        # headless shell 还需验证是文件不是目录
+        if component_name == "Chromium":
+            print(f"  {label} ✅ 已安装", file=sys.stderr)
+            return True
+        elif os.path.isfile(matched):
+            print(f"  {label} ✅ 已安装", file=sys.stderr)
+            return True
+        else:
+            print(f"  {label} ❌ 未安装（路径存在但不可用: {matched}）", file=sys.stderr)
+            return False
+
+    print(f"  {label} ❌ 未安装", file=sys.stderr)
+    return False
+
+
 def check_chromium() -> bool:
     """轻量级 Chromium 检查——filesystem glob，不启动 Playwright 引擎。"""
     home = _get_home()
-
     patterns = {
         "win32": os.path.join(
             home, "AppData", "Local", "ms-playwright",
@@ -290,20 +321,12 @@ def check_chromium() -> bool:
             "chromium-*", "chrome-mac", "Chromium",
         ),
     }
-    plat = sys.platform
-    pattern = patterns.get(plat, patterns.get("win32"))
-    if pattern and _glob_first(pattern):
-        print("  [Chromium] ✅ 已安装", file=sys.stderr)
-        return True
-
-    print("  [Chromium] ❌ 未安装", file=sys.stderr)
-    return False
+    return _check_chromium_component("Chromium", "  [Chromium]", patterns)
 
 
 def check_chromium_headless_shell() -> bool:
     """轻量级 Chromium Headless Shell 检查——确认可执行文件实际存在。"""
     home = _get_home()
-
     patterns = {
         "win32": os.path.join(
             home, "AppData", "Local", "ms-playwright",
@@ -321,18 +344,7 @@ def check_chromium_headless_shell() -> bool:
             "chrome-headless-shell",
         ),
     }
-    plat = sys.platform
-    pattern = patterns.get(plat, patterns.get("win32"))
-    matched = _glob_first(pattern)
-    if matched and os.path.isfile(matched):
-        print("  [Headless Shell] ✅ 已安装", file=sys.stderr)
-        return True
-
-    print("  [Headless Shell] ❌ 未安装（使用 --headless 时需要）", file=sys.stderr)
-    if matched:
-        print(f"     发现路径但文件不可用: {matched}", file=sys.stderr)
-        print("     请运行: playwright install chromium\n", file=sys.stderr)
-    return False
+    return _check_chromium_component("Headless Shell", "  [Headless Shell]", patterns)
 
 
 # ── CLI 入口 ──

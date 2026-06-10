@@ -137,13 +137,18 @@ def find_inverter_combinations(inverters: pd.DataFrame, target_power: float,
             for i in range(start_idx, len(sorted_powers)):
                 power = sorted_powers[i]
                 inv = power_groups[power]
-                stock = int(inv['stock']) if inv['stock'] > 0 else 0
+                # 库存：转为 float 避免 int() 精度截断，无边界的直接取整
+                raw_stock = inv.get('stock', 0)
+                if pd.notna(raw_stock):
+                    stock_val = float(raw_stock)
+                else:
+                    stock_val = 0.0
 
-                # 如果需要检查库存，且库存为0则跳过
-                if check_stock and stock <= 0:
+                # 如果需要检查库存，且库存为 0 则跳过
+                if check_stock and stock_val <= 0:
                     continue
 
-                max_qty = min(int(remaining / power) + 1, stock if check_stock else 999)
+                max_qty = min(int(remaining / power) + 1, int(stock_val) if check_stock else 999)
 
                 for qty in range(max_qty, 0, -1):
                     if qty * power <= remaining + target * tol:
@@ -229,7 +234,7 @@ def main():
                         help="最小比例（组件/逆变器），默认1.1")
     parser.add_argument("--ratio-max", type=float, default=1.2,
                         help="最大比例（组件/逆变器），默认1.2")
-    parser.add_argument("--brand", help="品牌关键词（如天合）")
+    parser.add_argument("--brand", help='品牌关键词（如天合）；默认仅筛选"天合原装专用"')
     parser.add_argument("--same-brand", action="store_true", default=True,
                         help="优先同品牌组合（默认开启）")
     parser.add_argument("--no-same-brand", dest="same_brand", action="store_false",

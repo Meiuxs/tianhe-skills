@@ -45,14 +45,14 @@ def generate_bom(name: str, components: int, items: list, output_dir: str = ".",
     today = date.today().strftime("%Y%m%d")
     # 截取项目名称的关键部分（去掉"分布式光伏发电项目"等后缀）
     if project:
-        # 提取项目简称（取前15个字符或到"分布式"/"光伏"等关键词前）
+        # 生成文件名的项目名简写（去掉已知的后缀关键词）
         project_short = project
-        for keyword in ['分布式', '光伏', '发电', '项目']:
+        for keyword in ['分布式光伏发电项目', '光伏发电项目', '分布式光伏', '光伏项目', '发电项目']:
             idx = project_short.find(keyword)
-            if idx > 0:
+            if idx >= 0:
                 project_short = project_short[:idx]
                 break
-        project_short = project_short[:15].rstrip('县市区镇村')  # 限制长度
+        project_short = project_short[:15].rstrip()
         filename = f"{name}{components}块组件{project_short}{today}.xlsx"
     else:
         filename = f"{name}{components}块组件{today}.xlsx"

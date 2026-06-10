@@ -325,7 +325,7 @@ def main():
     parser = argparse.ArgumentParser(description="库存查询工具")
     parser.add_argument("--type", choices=["组件", "逆变器", "并网箱"], help="查询类型")
     parser.add_argument("--power", type=int, help="功率（如715、50）")
-    parser.add_argument("--brand", help="品牌关键词（如天合）")
+    parser.add_argument("--brand", help='品牌关键词（如天合）；不指定时默认仅筛选"天合原装专用"')
     parser.add_argument("--box-type", help="并网箱类型关键词")
     parser.add_argument("--no-stock", action="store_true", help="显示无库存的")
     parser.add_argument("--all", action="store_true", help="显示全部（包括无库存）")

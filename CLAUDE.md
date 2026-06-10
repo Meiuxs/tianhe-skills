@@ -20,6 +20,41 @@ cp -r "d:/Code/Skills开发/tianhe-skills/dms-inventory/" "$HOME/.claude/skills/
 
 > ⚠️ 注意：`cp -r src/ dest/` 当 `dest/` 已存在时，会在 dest 内创建 `src/` 子目录（即 `dest/src/`），导致 `scripts/scripts/` 嵌套问题。必须先 `rm -rf` 再 `cp -r`。
 
+## 测试验证规则（修改代码后必须执行）
+
+修改工作区 `d:\Code\Skills开发\tianhe-skills\` 下**任意脚本**后，必须执行以下步骤，**不得跳过**：
+
+1. **查看对应 skill 下是否存在测试用例**（`tests/` 或 `scripts/tests/` 目录下的 `test_*.py`）
+2. **如果没有对应的测试用例，必须先补充测试用例**，覆盖修改的代码逻辑
+3. **运行所有相关测试用例**，确认全部通过
+4. **如果测试用例不完整**（覆盖不到修改的代码），必须补充测试用例
+5. **所有测试全部通过后，才向用户返回结果**
+6. 任何测试失败时，先修复问题再重新运行，不得跳过失败测试
+
+### 测试套件速查
+
+| Skill | 脚本文件 | 测试文件 | 运行命令 |
+|-------|---------|---------|---------|
+| dms-inquiry-bom | `scripts/dms_credentials.py` | `tests/test_dms_credentials.py` | `python dms-inquiry-bom/tests/test_dms_credentials.py` |
+| dms-inquiry-bom | `scripts/inventory_query.py` | `tests/test_inventory_query.py` | `python dms-inquiry-bom/tests/test_inventory_query.py` |
+| dms-inquiry-bom | `scripts/inverter_config.py` | `tests/test_inverter_config.py` | `python dms-inquiry-bom/tests/test_inverter_config.py` |
+| dms-inquiry-bom | `scripts/run_inquiry_bom.py` | `tests/test_run_inquiry_bom.py` | `python dms-inquiry-bom/tests/test_run_inquiry_bom.py` |
+| dms-inquiry-bom | `scripts/browser_manager.py` | ❌ 无测试 | — |
+| dms-inquiry-bom | `scripts/fill_product_info.py` | ❌ 无测试 | — |
+| dms-inquiry-bom | `scripts/run_inquiry_extract.py` | ❌ 无测试 | — |
+| dms-weekly-report | `scripts/resolve_date_range.py` | `scripts/tests/test_resolve_date_range.py` | `python dms-weekly-report/scripts/tests/test_resolve_date_range.py` |
+| dms-weekly-report | `scripts/column_definitions.py` | `scripts/tests/test_column_definitions.py` | `python dms-weekly-report/scripts/tests/test_column_definitions.py` |
+| dms-weekly-report | `scripts/excel_styles.py` | `scripts/tests/test_excel_styles.py` | `python dms-weekly-report/scripts/tests/test_excel_styles.py` |
+| dms-weekly-report | `scripts/run_weekly_report.py` | `scripts/tests/test_run_weekly_report.py` | `python dms-weekly-report/scripts/tests/test_run_weekly_report.py` |
+| dms-weekly-report | `scripts/dms_credentials.py` | ❌ 无测试 | — |
+| dms-weekly-report | `scripts/generate_html_report.py` | ❌ 无测试 | — |
+| dms-weekly-report | `scripts/bom_parser.py` | `scripts/tests/test_bom_parser.py` | `python dms-weekly-report/scripts/tests/test_bom_parser.py` |
+| dms-weekly-report | `scripts/approval_parser.py` | `scripts/tests/test_approval_parser.py` | `python dms-weekly-report/scripts/tests/test_approval_parser.py` |
+| dms-weekly-report | `scripts/orders_checker.py` | `scripts/tests/test_orders_checker.py` | `python dms-weekly-report/scripts/tests/test_orders_checker.py` |
+| dms-inventory | `scripts/*.py` | ❌ 全部无测试 | — |
+
+> 对无测试的脚本文件，修改后至少补充覆盖修改点的基础测试用例。
+
 
 
 ## Skill 编写规范
