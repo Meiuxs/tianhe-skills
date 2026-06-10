@@ -129,12 +129,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--spacing-sm);
+  gap: 4px;
 }
 .header .meta {
   font-size: 12px;
   opacity: 0.85;
-  text-align: right;
+  white-space: nowrap;
   line-height: 1.8;
 }
 .header .meta span {
@@ -207,8 +207,7 @@ body {
   min-width: 110px;
   max-width: 150px;
   transition: border-color .2s;
-  /* 修正 date input 在深色背景上的日历图标样式 */
-  color-scheme: dark;
+  /* 修正 date input 日历图标样式 */
 }
 .global-filter input[type="date"]:focus {
   outline: 2px solid rgba(255,255,255,0.6);
@@ -757,10 +756,6 @@ th.number-right {
         <span>⏱ {{REPORT_GENERATED_AT}}</span>
       </div>
       <div class="global-filter">
-        <label>📅 时间段：</label>
-        <input type="date" id="date-start" class="form-control" style="width:140px;">
-        <span style="color:rgba(255,255,255,0.5);margin:0 4px;">~</span>
-        <input type="date" id="date-end" class="form-control" style="width:140px;">
         <span class="quick-btns">
           <button class="quick-btn" data-quick="today">今日</button>
           <button class="quick-btn" data-quick="last7">近7天</button>
@@ -769,6 +764,10 @@ th.number-right {
           <button class="quick-btn" data-quick="lastquarter">上季</button>
           <button class="quick-btn" data-quick="all">全部</button>
         </span>
+        <label>📅 自定义：</label>
+        <input type="date" id="date-start" class="form-control" style="width:140px;">
+        <span style="color:rgba(255,255,255,0.5);margin:0 4px;">~</span>
+        <input type="date" id="date-end" class="form-control" style="width:140px;">
       </div>
       </div>
     </div>
