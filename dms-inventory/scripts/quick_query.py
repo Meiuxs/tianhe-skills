@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""Role: 快捷查询 — 独立于编排器的按物料编号/名称快速定位库存工具。支持跨品类搜索和仓库聚合。
+"""Role: 快捷查询 — 独立于编排器的多维度物料搜索工具。支持跨品类搜索和仓库聚合。
 
-按物料编号或物料名称快速查询库存。
-
-支持跨品类搜索（组件/逆变器/并网箱），聚合仓库库存，JSON/文本双输出。
+支持按物料编号、物料名称、功率等多条件搜索，多条件间为 AND（交集）关系。
 
 用法：
   # 精确物料编号查询
-  python lookup_by_code.py --code 6B001492
+  python quick_query.py --code 6B001492
 
   # 物料名称/型号关键词模糊查询
-  python lookup_by_code.py --name "730W"
-  python lookup_by_code.py --name "天合原装"
+  python quick_query.py --name "730W"
+  python quick_query.py --name "天合原装"
 
-  # 限定品类
-  python lookup_by_code.py --name "天合原装" --category 逆变器
+  # 按功率列搜索
+  python quick_query.py --power "110KW"
+
+  # 多条件交集（同时满足编码 + 名称 + 功率）
+  python quick_query.py --name "天合原装" --power "110KW" --category 逆变器
 
   # 聚合仓库总量 + JSON 输出
-  python lookup_by_code.py --code AB001347 --aggregate --json
-  python lookup_by_code.py --code AB001347 --aggregate --json --output-file result.json
+  python quick_query.py --code AB001347 --aggregate --json
+  python quick_query.py --code AB001347 --aggregate --json --output-file result.json
 """
 
 import argparse
@@ -70,55 +71,75 @@ CATEGORY_META = {
 VALID_CATEGORIES = list(CATEGORY_META.keys())
 
 
-# ── 查询函数 ────────────────────────────────────────────────────
+# ── 查询函数（单维度） ──────────────────────────────────────────
 
-def lookup_by_code(df: pd.DataFrame, code: str, meta: dict) -> pd.DataFrame:
-    """按物料编号精确查询。
-
-    Args:
-        df: 该品类的 DataFrame
-        code: 物料编号（如 "6B001492"）
-        meta: 品类元信息
-
-    Returns:
-        匹配的 DataFrame（可能有多行 = 多个仓库）
-    """
+def _query_by_code(df: pd.DataFrame, code: str, meta: dict) -> pd.DataFrame:
+    """按物料编号精确查询。"""
     code_col = meta['code_col']
     if code_col not in df.columns:
         return pd.DataFrame()
     return df[df[code_col].astype(str).str.strip() == code.strip()].copy()
 
 
-def lookup_by_name(df: pd.DataFrame, keyword: str, meta: dict) -> pd.DataFrame:
-    """按物料名称关键词模糊查询。
-
-    Args:
-        df: 该品类的 DataFrame
-        keyword: 搜索关键词（如 "730W"、"天合"）
-        meta: 品类元信息
-
-    Returns:
-        匹配的 DataFrame
-    """
+def _query_by_name(df: pd.DataFrame, keyword: str, meta: dict) -> pd.DataFrame:
+    """按物料名称关键词模糊查询。"""
     name_col = meta['name_col']
     if name_col not in df.columns:
         return pd.DataFrame()
     return df[df[name_col].astype(str).str.contains(keyword, case=False, na=False)].copy()
 
 
-def lookup_by_code_or_name(df: pd.DataFrame, code: str = None,
-                           name: str = None, meta: dict = None) -> pd.DataFrame:
-    """按编码或名称查询，同时传入时取并集。"""
-    if code:
-        result = lookup_by_code(df, code, meta)
-        if name:
-            name_result = lookup_by_name(df, name, meta)
-            result = pd.concat([result, name_result]).drop_duplicates()
-    elif name:
-        result = lookup_by_name(df, name, meta)
-    else:
+def _query_by_power(df: pd.DataFrame, power_keyword: str, meta: dict) -> pd.DataFrame:
+    """按功率关键词模糊查询（在 功率 列中搜索）。"""
+    power_col = meta.get('power_col')
+    if not power_col or power_col not in df.columns:
         return pd.DataFrame()
-    return result
+    return df[df[power_col].astype(str).str.contains(power_keyword, case=False, na=False)].copy()
+
+
+# ── 多条件交集查询 ──────────────────────────────────────────────
+
+def query(df: pd.DataFrame, meta: dict,
+          code: str = None, name: str = None, power: str = None) -> pd.DataFrame:
+    """多条件交集（AND）查询。
+
+    同时传入 --code、--name、--power 时，结果必须同时满足所有条件。
+
+    Args:
+        df: 该品类的 DataFrame
+        meta: 品类元信息
+        code: 物料编号（精确匹配）
+        name: 物料名称关键词（模糊匹配）
+        power: 功率关键词（模糊匹配）
+
+    Returns:
+        满足所有条件的 DataFrame
+    """
+    if not code and not name and not power:
+        return pd.DataFrame()
+
+    masks = []
+    if code:
+        code_col = meta['code_col']
+        if code_col in df.columns:
+            masks.append(df[code_col].astype(str).str.strip() == code.strip())
+    if name:
+        name_col = meta['name_col']
+        if name_col in df.columns:
+            masks.append(df[name_col].astype(str).str.contains(name, case=False, na=False))
+    if power:
+        power_col = meta.get('power_col')
+        if power_col and power_col in df.columns:
+            masks.append(df[power_col].astype(str).str.contains(power, case=False, na=False))
+
+    if not masks:
+        return pd.DataFrame()
+
+    # 所有条件取 AND（交集）
+    combined_mask = masks[0]
+    for m in masks[1:]:
+        combined_mask = combined_mask & m
+    return df[combined_mask].copy()
 
 
 # ── 格式化输出 ──────────────────────────────────────────────────
@@ -148,9 +169,10 @@ def _build_category_result(df: pd.DataFrame, meta: dict,
     remark_col = meta['remark_col']
 
     if aggregate:
-        # 聚合各仓库库存
+        # 聚合各仓库库存（不过滤零库存 — 快捷查询应展示所有匹配物料）
         agg = aggregate_stock(df, material_col=code_col, name_col=name_col,
-                              qty_col=stock_col, warehouse_col=warehouse_col)
+                              qty_col=stock_col, warehouse_col=warehouse_col,
+                              keep_zero=True)
 
         records = []
         for _, row in agg.iterrows():
@@ -165,9 +187,8 @@ def _build_category_result(df: pd.DataFrame, meta: dict,
                     rec[str(col)] = _safe_val(row.get(col))
             if power_col in df.columns:
                 rec['功率'] = _safe_val(row.get(power_col))
-            if remark_col in df.columns:
-                vals = df[remark_col].dropna()
-                rec['备注'] = _safe_val(vals.iloc[0]) if not vals.empty else None
+            if remark_col in df.columns and remark_col in agg.columns:
+                rec['备注'] = _safe_val(row.get(remark_col))
             records.append(rec)
         return records
 
@@ -191,13 +212,16 @@ def _build_category_result(df: pd.DataFrame, meta: dict,
     return records
 
 
-def format_text(results: dict, code: str = None, name: str = None) -> str:
+def format_text(results: dict, code: str = None, name: str = None,
+                power: str = None) -> str:
     """格式化为人类可读文本。"""
     lines = []
     if code:
         lines.append(f"\n=== 按物料编号查询 [{code}] ===")
     if name:
         lines.append(f"\n=== 按物料名称查询 [{name}] ===")
+    if power:
+        lines.append(f"\n=== 按功率查询 [{power}] ===")
 
     found_any = False
     for category, records in results.items():
@@ -252,19 +276,24 @@ def format_text(results: dict, code: str = None, name: str = None) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="按物料编号或名称快速查询库存",
+        description="快捷查询 — 按物料编号/名称/功率多维度搜索库存",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
   %(prog)s --code 6B001492                  # 精确编码
   %(prog)s --name "730W"                     # 名称关键词
   %(prog)s --name "天合原装" --category 逆变器  # 限定品类
+  %(prog)s --power "110KW"                   # 按功率列搜索
   %(prog)s --code AB001347 --aggregate --json # 聚合+JSON
   %(prog)s --code AB001347 --aggregate --json --output-file result.json
+
+多条件同时使用时为 AND（交集）关系：
+  %(prog)s --name "天合原装" --power "110KW"  # 天合原装 且 功率110KW
         """,
     )
     parser.add_argument('--code', help='物料编号（精确查询）')
     parser.add_argument('--name', help='物料名称/型号关键词（模糊查询）')
+    parser.add_argument('--power', help='功率关键词（如 "110KW"、"730W"、"50"，在功率列中搜索）')
     parser.add_argument('--category', choices=VALID_CATEGORIES,
                         help='限定查询品类（不传则查全部）')
     parser.add_argument('--aggregate', action='store_true',
@@ -275,18 +304,18 @@ def main():
     parser.add_argument('--file', help='库存文件路径（不传则自动查找最新）')
     args = parser.parse_args()
 
-    if not args.code and not args.name:
+    if not args.code and not args.name and not args.power:
         parser.print_help()
-        print("\n[错误] 请提供 --code 或 --name", file=sys.stderr)
+        print("\n[错误] 请提供 --code、--name 或 --power", file=sys.stderr)
         sys.exit(1)
 
-    # 加载数据（用 calamine 引擎，避免 openpyxl 报错）
+    # 加载数据
     data = load_inventory(args.file)
 
     # 确定查询品类
     categories = [args.category] if args.category else VALID_CATEGORIES
 
-    # 逐品类查询
+    # 逐品类查询（多条件 AND）
     results = {}
     for cat in categories:
         meta = CATEGORY_META[cat]
@@ -294,7 +323,8 @@ def main():
         if df.empty:
             continue
 
-        matched = lookup_by_code_or_name(df, args.code, args.name, meta)
+        matched = query(df, meta, args.code, args.name, args.power)
+
         if matched.empty:
             results[cat] = None
             continue
@@ -306,7 +336,7 @@ def main():
     if args.json:
         output = json.dumps(results, ensure_ascii=False, indent=2)
     else:
-        output = format_text(results, args.code, args.name)
+        output = format_text(results, args.code, args.name, args.power)
 
     if args.output_file:
         out_path = os.path.abspath(args.output_file)

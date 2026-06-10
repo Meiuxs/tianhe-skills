@@ -8,8 +8,8 @@ description: >
   Not for modifying inventory data, creating purchase orders, or managing warehouse entries.
 metadata:
   author: Meiux
-  version: 2.4.0
-  updated: 2026-06-08
+  version: 2.5.0
+  updated: 2026-06-10
 ---
 
 # DMS 库存查询 & 匹配
@@ -92,26 +92,30 @@ metadata:
 > 组件功率决定 DC 总容量 → DC 容量决定 DC/AC 比 → DC/AC 比决定编排器推荐的逆变器组合。
 > **三步必须串行，禁止并行提问。**
 
-### 阶段一：确认组件方案（确定 DC 容量）
+### 阶段一：确认物料方案（组件 + 指定逆变器）
 
-先用 `lookup_by_code.py` 查询指定组件的库存：
+先确认组件方案（确定 DC 容量），再检查用户是否指定了逆变器，最后构造 `input.json`。
+
+#### 子步骤 1：确认组件方案
+
+用 `quick_query.py` 查询指定组件的库存：
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-inventory"
 
 # 按功率关键词模糊查询组件库存（如 715W、550W）
-PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/lookup_by_code.py" \
-  --name "${功率}W" --category 组件 --aggregate
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
+  --power "${功率}W" --category 组件 --aggregate
 ```
 
 根据查询结果分支：
 
 | 结果 | 处理 |
 |:----|:-----|
-| **有库存且满足需求（`库存总量 >= qty`）** | → 保留原功率，进入**阶段二**（构建 input.json + 跑编排器） |
+| **有库存且满足需求（`库存总量 >= qty`）** | → 保留原功率，进入**子步骤 2** |
 | **无库存或不足（`库存总量 == 0` 或 `库存总量 < qty`）** | → 用 `AskUserQuestion` 确认应对策略（见下方表格） |
 
-**⚠️ 此阶段只问组件策略，不问逆变器/并网柜。DC 容量未确定前不能跑编排器。**
+**⚠️ 此阶段只问物料策略，不问容配比/组合方案。DC 容量未确定前不能跑编排器。**
 
 | 选项 | 说明 | 后续影响（DC 容量） |
 |:----|:------|:-------------------|
@@ -119,14 +123,41 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/lookup_by_code.py" \
 | **用户自筹** | 组件自行解决 | DC = 原需求功率 × 数量，**仍要跑编排器**匹配逆变器 |
 | **仅精确匹配** | 指定功率无库存则终止 | 流程终止 |
 
-> **⚠️ DC/AC 容配比由编排器自动处理，禁止提前问用户：**
-> 组件确认后直接构造 `input.json` 运行编排器，不要在阶段一问用户"容配比选多少"或"逆变器总功率要多大"。
-> 编排器的 `preferences.dc_ac_ratio_range` 已预设合理范围（默认 `[1.0, 1.3]`），会自动在该范围内计算最优组合。
-> 编排器输出的 `inverters.combinations` 会展示给用户选择，无需提前预判。
+> **⚠️ 禁止提前问用户容配比：** 组件确认后直接继续，容配比由编排器自动处理。编排器的 `preferences.dc_ac_ratio_range` 已预设合理范围（默认 `[1.0, 1.3]`），会自动计算最优组合。
 
-组件确认后，DC 容量确定，构造 `input.json` 传入编排器：
+#### 子步骤 2：检查指定逆变器库存（如用户已指定）
 
-**input.json 参数说明：**
+若用户在项目描述中已指定逆变器型号/功率/数量（如"2台110KW天合逆变器"），用 `quick_query.py` 查询库存：
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/dms-inventory"
+
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
+  --power "${功率}KW" --category 逆变器 --aggregate
+```
+
+查询结果分支：
+
+| 结果 | 处理 |
+|:----|:-----|
+| **有库存且满足需求（`库存总量 >= qty`）** | → 保留原指定规格，进入**子步骤 3** |
+| **无库存或不足（`库存总量 == 0` 或 `库存总量 < qty`）** | → 用 `AskUserQuestion` 确认应对策略（见下方表格） |
+
+| 选项 | 说明 | 后续操作 |
+|:----|:------|:---------|
+| **接受替代方案** | 编排器自动从库存中推荐其他品牌/型号的可用组合 | `input.json` 中**不设** `required_new`，让编排器自由推荐 |
+| **用户自筹** | 逆变器用户自行解决，不通过 DMS 库存采购 | `input.json` 中**不设** `required_new`，仅保留 `existing` 信息（如有） |
+| **仅精确匹配** | 指定型号无库存则终止流程 | 流程终止 |
+
+> ⚠️ 子步骤 2 只问逆变器策略（接受替代/自筹/终止），不要在这里让用户选具体组合方案（那是阶段三的任务）。
+
+若用户未指定逆变器型号/功率，则跳过此子步骤。
+
+#### 子步骤 3：构造 input.json
+
+组件和逆变器方案确认后，构造 `input.json` 传入编排器：
+
+**参数说明：**
 
 | 参数路径 | 说明 | 必填 |
 |----------|------|:----:|
@@ -140,7 +171,7 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/lookup_by_code.py" \
 | `preferences.prefer_brand` | 优先品牌，匹配 `厂家` 列 | ⭕ |
 | `preferences.exclude_project_specific` | 排除项目专用物料，默认 `true` | ⭕ |
 | `preferences.exclude_unlisted` | 排除未上架物料，默认 `true` | ⭕ |
-| `preferences.dc_ac_ratio_range` | DC/AC 比范围 `[min, max]`，默认 `[1.0, 1.3]` | ⭕ |
+| `preferences.dc_ac_ratio_range` | DC/AC 比范围 `[min, max]`，默认 `[1.1, 1.2]` | ⭕ |
 
 完整 JSON 格式和示例见 `references/inventory-flow.md`。阶段一完成后进入**阶段二**。
 
@@ -276,19 +307,24 @@ print('最终结果已写入:', out)
 | 逆变器组合为空 | 提示用户调整 `dc_ac_ratio_range` 或品牌偏好后重跑 | 阶段三 |
 | 终端中文乱码 | 加 `PYTHONIOENCODING=utf-8` | `references/error-handling.md` |
 
-## 快捷查询（按物料编号/名称）
+## 快捷查询（按物料编号/名称/功率）
 
 ```bash
 SKILL_DIR="$HOME/.claude/skills/dms-inventory"
 # 按物料编号查询
-PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/lookup_by_code.py" --code 6B001492 --aggregate
-# 按关键词模糊查询
-PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/lookup_by_code.py" --name "715W" --category 组件 --aggregate
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --code 6B001492 --aggregate
+# 按物料名称模糊查询（搜物料名称列）
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --name "天合原装" --category 逆变器 --aggregate
+# 按功率列搜索（组件或逆变器功率）
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --power "730W" --category 组件 --aggregate
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --power "110KW" --category 逆变器 --aggregate
+# 多条件交集：天合原装 且 功率110KW
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --name "天合原装" --power "110KW" --category 逆变器 --aggregate
 # JSON 输出到文件
-PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/lookup_by_code.py" --code AB001347 --aggregate --json --output-file /tmp/dms_inventory/lookup_result.json
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --code AB001347 --aggregate --json --output-file /tmp/dms_inventory/lookup_result.json
 ```
 
-> 完整参数说明见 `references/quick-query.md`
+> `--name` 搜物料名称列，`--power` 搜功率列，语义隔离。同时使用为 **AND（交集）**。完整参数说明见 `references/quick-query.md`
 
 ## 参考文档
 
