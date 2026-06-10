@@ -189,7 +189,7 @@ def _extract_from_html(html, label):
     return "--"
 
 
-def _extract_field(page, label, timeout=5000):
+async def _extract_field(page, label, timeout=5000):
     """通过 DOM 选择器从页面提取指定 label 的字段值（优先浏览器 DOM，降级到正则 HTML）。
 
     Args:
@@ -202,7 +202,7 @@ def _extract_field(page, label, timeout=5000):
     """
     try:
         safe_label = label.replace("'", "\\'")
-        value = page.evaluate(f"""() => {{
+        value = await page.evaluate(f"""() => {{
             const items = document.querySelectorAll('.el-form-item');
             for (const item of items) {{
                 const lbl = item.querySelector('label');
@@ -231,7 +231,10 @@ def _extract_field(page, label, timeout=5000):
     except Exception:
         pass
     # 降级到正则 HTML 解析
-    html = page.content()
+    try:
+        html = await page.content()
+    except Exception:
+        return "--"
     return _extract_from_html(html, label)
 
 

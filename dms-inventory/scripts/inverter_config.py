@@ -112,13 +112,20 @@ def find_inverter_combinations(inverters: pd.DataFrame, target_power: float,
             brand_groups[brand] = []
         brand_groups[brand].append(inv)
 
-    # 按功率分组，取价格排序最低的
+    # 按功率分组，取价格排序最低的（同功率时取库存最充足的）
     def get_power_groups(inv_list):
         power_groups = {}
         for inv in inv_list:
             p = inv['power']
-            if p not in power_groups or inv['price_rank'] < power_groups[p]['price_rank']:
+            if p not in power_groups:
                 power_groups[p] = inv
+            else:
+                # 同功率：保留价格更低或库存更充足的
+                existing = power_groups[p]
+                if inv['price_rank'] < existing['price_rank']:
+                    power_groups[p] = inv
+                elif inv['stock'] > existing['stock']:
+                    power_groups[p] = inv
         return power_groups
 
     # 贪心算法：从大功率开始组合
