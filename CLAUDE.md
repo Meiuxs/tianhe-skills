@@ -51,7 +51,10 @@ cp -r "d:/Code/Skills开发/tianhe-skills/dms-inventory/" "$HOME/.claude/skills/
 | dms-weekly-report | `scripts/bom_parser.py` | `scripts/tests/test_bom_parser.py` | `python dms-weekly-report/scripts/tests/test_bom_parser.py` |
 | dms-weekly-report | `scripts/approval_parser.py` | `scripts/tests/test_approval_parser.py` | `python dms-weekly-report/scripts/tests/test_approval_parser.py` |
 | dms-weekly-report | `scripts/orders_checker.py` | `scripts/tests/test_orders_checker.py` | `python dms-weekly-report/scripts/tests/test_orders_checker.py` |
-| dms-inventory | `scripts/*.py` | ❌ 全部无测试 | — |
+| dms-inventory | `scripts/inventory_query.py` | `tests/test_inventory_query.py` | `python dms-inventory/tests/test_inventory_query.py` |
+| dms-inventory | `scripts/inverter_config.py` | `tests/test_inverter_config.py` | `python dms-inventory/tests/test_inverter_config.py` |
+| dms-inventory | `scripts/inventory_orchestrator.py` | `tests/test_inventory_orchestrator.py` | `python dms-inventory/tests/test_inventory_orchestrator.py` |
+| dms-inventory | `scripts/lookup_by_code.py` | `tests/test_lookup_by_code.py` | `python dms-inventory/tests/test_lookup_by_code.py` |
 
 > 对无测试的脚本文件，修改后至少补充覆盖修改点的基础测试用例。
 
