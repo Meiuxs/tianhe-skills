@@ -188,12 +188,41 @@ body {
   font-size: 12px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: background .15s;
+  transition: background .15s, border-color .15s;
   white-space: nowrap;
   line-height: 1.5;
 }
 .quick-btn:hover { background: rgba(255,255,255,0.25); }
 .quick-btn:active { background: rgba(255,255,255,0.35); }
+
+/* ── date input 在深色 header 上的适配 ── */
+.global-filter input[type="date"] {
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-family);
+  background: rgba(255,255,255,0.15);
+  color: white;
+  min-width: 110px;
+  max-width: 150px;
+  transition: border-color .2s;
+  /* 修正 date input 在深色背景上的日历图标样式 */
+  color-scheme: dark;
+}
+.global-filter input[type="date"]:focus {
+  outline: 2px solid rgba(255,255,255,0.6);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.global-filter input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.global-filter input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
 /* ===================================================================
    TAB NAVIGATION
    =================================================================== */
