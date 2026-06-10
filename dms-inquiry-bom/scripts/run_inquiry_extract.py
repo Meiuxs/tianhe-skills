@@ -201,11 +201,12 @@ def _extract_field(page, label, timeout=5000):
         str: 字段值，未找到时返回 "--"
     """
     try:
+        safe_label = label.replace("'", "\\'")
         value = page.evaluate(f"""() => {{
             const items = document.querySelectorAll('.el-form-item');
             for (const item of items) {{
                 const lbl = item.querySelector('label');
-                if (lbl && lbl.textContent.includes('{label.replace("'", "\\'")}')) {{
+                if (lbl && lbl.textContent.includes('{safe_label}')) {{
                     const content = item.querySelector('.el-form-item__content');
                     if (content) {{
                         const text = content.textContent.trim();
@@ -218,7 +219,7 @@ def _extract_field(page, label, timeout=5000):
             const detailItems = document.querySelectorAll('.detail-item, .info-item, .process-detail-item');
             for (const item of detailItems) {{
                 const lbl = item.querySelector('.label, .detail-label, .info-label');
-                if (lbl && lbl.textContent.includes('{label.replace("'", "\\'")}')) {{
+                if (lbl && lbl.textContent.includes('{safe_label}')) {{
                     const val = item.querySelector('.value, .detail-value, .info-value');
                     if (val) return val.textContent.trim();
                 }}

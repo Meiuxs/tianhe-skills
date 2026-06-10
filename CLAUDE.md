@@ -39,9 +39,9 @@ cp -r "d:/Code/Skills开发/tianhe-skills/dms-inventory/" "$HOME/.claude/skills/
 | dms-inquiry-bom | `scripts/inventory_query.py` | `tests/test_inventory_query.py` | `python dms-inquiry-bom/tests/test_inventory_query.py` |
 | dms-inquiry-bom | `scripts/inverter_config.py` | `tests/test_inverter_config.py` | `python dms-inquiry-bom/tests/test_inverter_config.py` |
 | dms-inquiry-bom | `scripts/run_inquiry_bom.py` | `tests/test_run_inquiry_bom.py` | `python dms-inquiry-bom/tests/test_run_inquiry_bom.py` |
-| dms-inquiry-bom | `scripts/browser_manager.py` | ❌ 无测试 | — |
-| dms-inquiry-bom | `scripts/fill_product_info.py` | ❌ 无测试 | — |
-| dms-inquiry-bom | `scripts/run_inquiry_extract.py` | ❌ 无测试 | — |
+| dms-inquiry-bom | `scripts/browser_manager.py` | `tests/test_browser_manager.py` | `python dms-inquiry-bom/tests/test_browser_manager.py` |
+| dms-inquiry-bom | `scripts/fill_product_info.py` | `tests/test_fill_product_info.py` | `python dms-inquiry-bom/tests/test_fill_product_info.py` |
+| dms-inquiry-bom | `scripts/run_inquiry_extract.py` | `tests/test_run_inquiry_extract.py` | `python dms-inquiry-bom/tests/test_run_inquiry_extract.py` |
 | dms-weekly-report | `scripts/resolve_date_range.py` | `scripts/tests/test_resolve_date_range.py` | `python dms-weekly-report/scripts/tests/test_resolve_date_range.py` |
 | dms-weekly-report | `scripts/column_definitions.py` | `scripts/tests/test_column_definitions.py` | `python dms-weekly-report/scripts/tests/test_column_definitions.py` |
 | dms-weekly-report | `scripts/excel_styles.py` | `scripts/tests/test_excel_styles.py` | `python dms-weekly-report/scripts/tests/test_excel_styles.py` |
