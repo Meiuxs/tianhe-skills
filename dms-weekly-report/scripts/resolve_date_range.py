@@ -153,14 +153,30 @@ def resolve_date_range(label: str) -> dict[str, str]:
         if m3:
             m1, d1, _, m2, d2 = m3.groups()
             y = today.year
-            sd = date(y, int(m1), int(d1))
-            ed = date(y, int(m2), int(d2))
-            return {
-                "start": sd.strftime("%Y-%m-%d"),
-                "end": ed.strftime("%Y-%m-%d"),
-                "label": f"{int(m1)}月{int(d1)}日~{int(m2)}月{int(d2)}日",
-                "range_str": f"{sd.strftime('%Y-%m-%d')} ~ {ed.strftime('%Y-%m-%d')}",
-            }
+            try:
+                sd = date(y, int(m1), int(d1))
+                ed = date(y, int(m2), int(d2))
+                # 验证日期顺序
+                if sd > ed:
+                    return {
+                        "start": "",
+                        "end": "",
+                        "label": raw,
+                        "range_str": f"❌ 日期范围错误：起始日期 {sd} > 结束日期 {ed}",
+                    }
+                return {
+                    "start": sd.strftime("%Y-%m-%d"),
+                    "end": ed.strftime("%Y-%m-%d"),
+                    "label": f"{int(m1)}月{int(d1)}日~{int(m2)}月{int(d2)}日",
+                    "range_str": f"{sd.strftime('%Y-%m-%d')} ~ {ed.strftime('%Y-%m-%d')}",
+                }
+            except ValueError as e:
+                return {
+                    "start": "",
+                    "end": "",
+                    "label": raw,
+                    "range_str": f"❌ 日期无效：{e}（如 6月31号 不存在）",
+                }
         # fallback: 无法解析
         return {
             "start": "",

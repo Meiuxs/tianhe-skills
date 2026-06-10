@@ -28,23 +28,24 @@ import sys
 from datetime import datetime
 from typing import Any
 
+# 导入共享的列定义
+from column_definitions import (
+    COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
+    COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
+    COL_SUBMIT_TIME, COL_ORDERED,
+    COL_PROVINCE_PROCESSOR, COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
+    COL_FINAL_APPROVAL_TIME,
+)
 
-# ==================== 列索引常量（集中定义，唯一引用点）====================
-# 与 run_weekly_report.py 的 HEADERS 一一对应，
-# 新增列时只需在此处和 HEADERS 同步添加。
-COL_FLOW_ID = 0            # 流程编号
-COL_PROJECT_NAME = 1       # 项目名称
-COL_PROVINCE = 4           # 省公司
-COL_SALESPERSON = 5        # 业务员
-COL_MODULE_POWER = 6       # 组件功率
-COL_INVERTER_POWER = 7     # 逆变器功率
-COL_BATTERY_CAPACITY = 8   # 电池容量
-COL_SUBMIT_DATE = 11       # 提交日期
-COL_ORDERED = 13           # 是否下单
-COL_PROVINCE_APPROVER = 14 # 省公司审批人
-COL_APPROVER = 16          # 采购审批人
-COL_APPROVAL_STATUS = 17   # 审批状态
-COL_FINAL_DATE = 18        # 最终审批日期
+# 向后兼容的别名
+COL_MODULE_POWER = COL_MODULE_KW
+COL_INVERTER_POWER = COL_INVERTER_KW
+COL_BATTERY_CAPACITY = COL_BATTERY_KWH
+COL_SUBMIT_DATE = COL_SUBMIT_TIME
+COL_PROVINCE_APPROVER = COL_PROVINCE_PROCESSOR
+COL_APPROVER = COL_PURCHASE_PROCESSOR
+COL_APPROVAL_STATUS = COL_PURCHASE_STATUS
+COL_FINAL_DATE = COL_FINAL_APPROVAL_TIME
 
 
 # ==================== 工具函数 ====================

@@ -19,42 +19,72 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 # ==================== 通用边框 ====================
 
 THIN_BORDER = Border(
-    left=Side("thin"), right=Side("thin"),
-    top=Side("thin"), bottom=Side("thin"),
+    left=Side("thin", color="CCCCCC"),
+    right=Side("thin", color="CCCCCC"),
+    top=Side("thin", color="CCCCCC"),
+    bottom=Side("thin", color="CCCCCC"),
+)
+
+HEADER_BORDER = Border(
+    left=Side("thin", color="FFFFFF"),
+    right=Side("thin", color="FFFFFF"),
+    top=Side("thin", color="FFFFFF"),
+    bottom=Side("medium", color="1F4E79"),
 )
 
 BOTTOM_BORDER = Border(
-    bottom=Side("medium", color="1F4E79"),
-    left=Side("thin"), right=Side("thin"),
-    top=Side("thin"),
+    bottom=Side("medium", color="2E5C99"),
+    left=Side("thin", color="CCCCCC"),
+    right=Side("thin", color="CCCCCC"),
+    top=Side("thin", color="CCCCCC"),
+)
+
+CARD_BORDER = Border(
+    left=Side("thin", color="E8EAED"),
+    right=Side("thin", color="E8EAED"),
+    top=Side("thin", color="E8EAED"),
+    bottom=Side("thin", color="E8EAED"),
 )
 
 # ==================== 调色板 ====================
 
 class Colors:
-    TITLE_BLUE = "1F4E79"       # 主标题
-    ACCENT_BLUE = "4472C4"      # 强调蓝
+    # 主色系
+    DARK_BLUE = "1F4E79"        # 深蓝主色（标题、表头）
+    PRIMARY_BLUE = "2E5C99"     # 稍浅的深蓝（二级标题）
+    ACCENT_BLUE = "4472C4"      # 亮蓝（强调数据）
+
+    # 中性灰
+    DARK_GRAY = "2D3436"        # 深灰（正文）
+    MID_GRAY = "636E72"         # 中灰（辅助文字）
+    LIGHT_GRAY = "E8EAED"       # 浅灰（分割线、底色）
+    BG_GRAY = "F8F9FA"          # 背景灰（卡片底）
+    WHITE = "FFFFFF"            # 纯白
+
+    # 功能色
+    RED_ACCENT = "D73026"       # 警告红（更深的红）
+    RED_LIGHT = "FADAD5"        # 浅红（背景）
+    GREEN_ACCENT = "27A745"     # 成功绿
+    ORANGE_ACCENT = "FFA500"    # 提示橙
+
+    # 表头和填充
     HEADER_FILL = "1F4E79"      # 表头背景（深蓝）
-    LIGHT_FILL = "D6E4F0"       # 浅蓝底
-    VERY_LIGHT_FILL = "F2F7FB"  # 极浅蓝底（交替行）
-    WHITE = "FFFFFF"            # 白色
-    RED_ACCENT = "C00000"       # KPI 红色强调
-    GRAY_TEXT = "808080"        # 辅助文字
-    DARK_TEXT = "333333"        # 正文文字
-    CARD_FILL = "F5F5F5"        # 卡片底色
+    LIGHT_FILL = "EEF2F5"       # 浅蓝底（数据行）
+    VERY_LIGHT_FILL = "F5F7FA"  # 极浅蓝（交替行）
+    CARD_FILL = "F8F9FA"        # 卡片底色（纯灰）
 
 # ==================== 字体 ====================
 
-FONT_TITLE = Font(bold=True, size=16, color=Colors.TITLE_BLUE)
-FONT_SECTION = Font(bold=True, size=12, color=Colors.ACCENT_BLUE)
-FONT_SUBSECTION = Font(bold=True, size=11, color=Colors.ACCENT_BLUE)
-FONT_HEADER = Font(bold=True, size=11, color=Colors.WHITE)
-FONT_DATA = Font(size=11, color=Colors.DARK_TEXT)
-FONT_LABEL = Font(bold=True, size=11, color=Colors.DARK_TEXT)
-FONT_KPI_BIG = Font(bold=True, size=20, color=Colors.RED_ACCENT)
-FONT_KPI_MED = Font(bold=True, size=14, color=Colors.RED_ACCENT)
-FONT_HINT = Font(size=9, color=Colors.GRAY_TEXT)
-FONT_VALUE = Font(size=11, color=Colors.ACCENT_BLUE)
+FONT_TITLE = Font(bold=True, size=16, color=Colors.DARK_BLUE, name="微软雅黑")
+FONT_SECTION = Font(bold=True, size=13, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+FONT_SUBSECTION = Font(bold=True, size=11, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+FONT_HEADER = Font(bold=True, size=11, color=Colors.WHITE, name="微软雅黑")
+FONT_DATA = Font(size=11, color=Colors.DARK_GRAY, name="Calibri")
+FONT_LABEL = Font(bold=True, size=11, color=Colors.DARK_GRAY, name="微软雅黑")
+FONT_KPI_BIG = Font(bold=True, size=22, color=Colors.RED_ACCENT, name="微软雅黑")
+FONT_KPI_MED = Font(bold=True, size=16, color=Colors.RED_ACCENT, name="微软雅黑")
+FONT_HINT = Font(size=9, color=Colors.MID_GRAY, name="Calibri")
+FONT_VALUE = Font(bold=True, size=12, color=Colors.ACCENT_BLUE, name="Calibri")
 
 # ==================== 填充 ====================
 
@@ -62,20 +92,24 @@ FILL_HEADER = PatternFill(start_color=Colors.HEADER_FILL, end_color=Colors.HEADE
 FILL_LIGHT = PatternFill(start_color=Colors.LIGHT_FILL, end_color=Colors.LIGHT_FILL, fill_type="solid")
 FILL_VERY_LIGHT = PatternFill(start_color=Colors.VERY_LIGHT_FILL, end_color=Colors.VERY_LIGHT_FILL, fill_type="solid")
 FILL_CARD = PatternFill(start_color=Colors.CARD_FILL, end_color=Colors.CARD_FILL, fill_type="solid")
+FILL_RED_LIGHT = PatternFill(start_color=Colors.RED_LIGHT, end_color=Colors.RED_LIGHT, fill_type="solid")
+FILL_WHITE = PatternFill(start_color=Colors.WHITE, end_color=Colors.WHITE, fill_type="solid")
 
 # ==================== 对齐 ====================
 
-ALIGN_CENTER = Alignment(vertical="center", horizontal="center")
-ALIGN_LEFT = Alignment(vertical="center", horizontal="left")
+ALIGN_CENTER = Alignment(vertical="center", horizontal="center", wrap_text=False)
+ALIGN_LEFT = Alignment(vertical="center", horizontal="left", wrap_text=False)
+ALIGN_RIGHT = Alignment(vertical="center", horizontal="right", wrap_text=False)
 ALIGN_HEADER = Alignment(wrap_text=True, vertical="center", horizontal="center")
-ALIGN_DATA = Alignment(vertical="center", horizontal="center")
+ALIGN_DATA = Alignment(vertical="center", horizontal="center", wrap_text=False)
+ALIGN_DATA_LEFT = Alignment(vertical="center", horizontal="left", wrap_text=True)
 
 # ==================== 行高 / 列宽 ====================
 
-ROW_HEIGHT_TITLE = 40
-ROW_HEIGHT_SECTION = 30
-ROW_HEIGHT_DATA = 26
-ROW_HEIGHT_HEADER = 32
+ROW_HEIGHT_TITLE = 42
+ROW_HEIGHT_SECTION = 32
+ROW_HEIGHT_DATA = 28
+ROW_HEIGHT_HEADER = 36
 
 # 询价汇总 Sheet 列宽
 COLUMN_WIDTHS: list[int] = [
@@ -90,27 +124,27 @@ def apply_header_style(ws, row: int, headers: list[str], start_col: int = 1) -> 
         cell = ws.cell(row=row, column=col, value=h)
         cell.font = FONT_HEADER
         cell.fill = FILL_HEADER
-        cell.border = THIN_BORDER
+        cell.border = HEADER_BORDER
         cell.alignment = ALIGN_HEADER
 
 
 def apply_data_row(ws, row: int, values: list, start_col: int = 1, is_alt: bool = False) -> None:
     """给数据行应用标准样式，支持交替行色。"""
-    fill = FILL_VERY_LIGHT if is_alt else None
+    fill = FILL_VERY_LIGHT if is_alt else FILL_WHITE
     for col, val in enumerate(values, start_col):
         cell = ws.cell(row=row, column=col, value=val)
         cell.font = FONT_DATA
         cell.border = THIN_BORDER
         cell.alignment = ALIGN_CENTER
-        if fill:
-            cell.fill = fill
+        cell.fill = fill
 
 
 def write_section_title(ws, row: int, col: int, title: str, merge_end_col: int | None = None) -> int:
     """写入节标题，可选合并单元格，返回下一行号。"""
     cell = ws.cell(row=row, column=col, value=title)
     cell.font = FONT_SECTION
-    cell.alignment = ALIGN_CENTER
+    cell.alignment = ALIGN_LEFT
+    cell.border = BOTTOM_BORDER
     if merge_end_col:
         ws.merge_cells(start_row=row, start_column=col, end_row=row, end_column=merge_end_col)
     ws.row_dimensions[row].height = ROW_HEIGHT_SECTION
@@ -120,26 +154,48 @@ def write_section_title(ws, row: int, col: int, title: str, merge_end_col: int |
 def write_kpi_card(ws, row: int, col: int, label: str, value, unit: str = "",
                    value_font=None, alt_fill: bool = False) -> None:
     """写入 KPI 卡片（label + value + 可选单位）。"""
+    fill = FILL_CARD if alt_fill else FILL_WHITE
+    border = CARD_BORDER
+
     c1 = ws.cell(row=row, column=col, value=label)
     c1.font = FONT_LABEL
     c1.alignment = ALIGN_CENTER
-    c1.border = THIN_BORDER
-    if alt_fill:
-        c1.fill = FILL_LIGHT
+    c1.border = border
+    c1.fill = fill
 
     c2 = ws.cell(row=row, column=col + 1, value=value)
     c2.font = value_font or FONT_KPI_BIG
     c2.alignment = ALIGN_CENTER
-    c2.border = THIN_BORDER
-    if alt_fill:
-        c2.fill = FILL_LIGHT
+    c2.border = border
+    c2.fill = fill
 
     if unit:
         c3 = ws.cell(row=row, column=col + 2, value=unit)
-        c3.font = FONT_DATA
+        c3.font = FONT_HINT
         c3.alignment = ALIGN_CENTER
-        c3.border = THIN_BORDER
-        if alt_fill:
-            c3.fill = FILL_LIGHT
+        c3.border = border
+        c3.fill = fill
 
     ws.row_dimensions[row].height = ROW_HEIGHT_DATA
+
+
+def apply_accent_row(ws, row: int, values: list, start_col: int = 1, color="ACCENT_BLUE") -> None:
+    """给重要数据行应用强调样式。"""
+    accent_color = getattr(Colors, color, Colors.ACCENT_BLUE)
+    for col, val in enumerate(values, start_col):
+        cell = ws.cell(row=row, column=col, value=val)
+        cell.font = Font(bold=True, size=11, color=accent_color, name="微软雅黑")
+        cell.border = THIN_BORDER
+        cell.alignment = ALIGN_CENTER
+        cell.fill = FILL_LIGHT
+
+    ws.row_dimensions[row].height = ROW_HEIGHT_DATA
+
+
+def apply_status_cell(ws, row: int, col: int, status: str, bg_color: str) -> None:
+    """写入状态指示器单元格。"""
+    cell = ws.cell(row=row, column=col, value=status)
+    cell.font = Font(bold=True, size=10, color=Colors.WHITE, name="微软雅黑")
+    cell.fill = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+    cell.border = CARD_BORDER
+    cell.alignment = ALIGN_CENTER
