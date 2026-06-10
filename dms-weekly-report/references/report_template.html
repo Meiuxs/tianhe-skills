@@ -1872,19 +1872,16 @@ function initDetailCharts() {
           data: moduleData,
           backgroundColor: CHART_COLORS.blue,
           borderRadius: 2,
-          maxBarThickness: 24,
         }, {
           label: '逆变器 (kW)',
           data: inverterData,
           backgroundColor: CHART_COLORS.orange,
           borderRadius: 2,
-          maxBarThickness: 24,
         }, {
           label: '电池 (kWh)',
           data: batteryData,
           backgroundColor: CHART_COLORS.green,
           borderRadius: 2,
-          maxBarThickness: 24,
         }],
       },
       options: {
@@ -1913,7 +1910,10 @@ function initDetailCharts() {
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 11 }, maxRotation: periodNames.length > 6 ? 45 : 0 },
+            ticks: { font: { size: 11 }, maxRotation: periodNames.length > 6 ? 30 : 0 },
+            // 紧凑分组：同一时段三种柱子紧靠，不同时段之间留空
+            barPercentage: 0.9,
+            categoryPercentage: 0.55,
           },
           y: {
             beginAtZero: true,
