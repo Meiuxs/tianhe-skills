@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""run_inquiry_bom.py 的完整测试套件。
+"""generate_bom.py 的完整测试套件。
 
 覆盖范围：
   1. generate_bom 的基本功能
@@ -22,7 +22,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 import _compat  # noqa: F401, E402
 
-from run_inquiry_bom import (  # noqa: E402
+from generate_bom import (  # noqa: E402
     generate_bom,
     generate_multiple,
     parse_items,

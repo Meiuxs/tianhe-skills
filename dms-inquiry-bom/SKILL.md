@@ -59,7 +59,7 @@ metadata:
 | 0. 检查环境 | `scripts/dms_credentials.py --check-browser` | — | ~5 秒 |
 | 1. 提取待办 | `scripts/run_inquiry_extract.py` | 展示待办列表 | ~30-60 秒 |
 | 2. 库存匹配 | `Skill` 调用 `dms-inventory` | 确认匹配方案 | ~20-40 秒 |
-| 3. 生成 BOM | `scripts/run_inquiry_bom.py` | 确认 BOM 文件 | ~5 秒 |
+| 3. 生成 BOM | `scripts/generate_bom.py` | 确认 BOM 文件 | ~5 秒 |
 | 4. 填写产品信息 | `scripts/fill_product_info.py` | 保持浏览器打开 | ~30-60 秒 |
 | 5. 回顾反馈 | `AskUserQuestion` | 提出优化建议 | ~2 分钟 |
 
@@ -70,7 +70,7 @@ metadata:
 | 检查环境 | `python $SKILL_DIR/scripts/dms_credentials.py --check-browser` |
 | 提取待办 | `python $SKILL_DIR/scripts/run_inquiry_extract.py --output-file "$TMP_DIR/inquiry_data.json"` |
 | 库存匹配 | 调用 `Skill` 工具执行 `dms-inventory` |
-| 生成 BOM | `python $SKILL_DIR/scripts/run_inquiry_bom.py --name "张三" --components 800 --items '6B001492:800,AB001347:8' --project "项目名" --output-dir "."` |
+| 生成 BOM | `python $SKILL_DIR/scripts/generate_bom.py --name "张三" --components 800 --items '6B001492:800,AB001347:8' --project "项目名" --output-dir "."` |
 | 填写产品信息 | `python $SKILL_DIR/scripts/fill_product_info.py --flow-id <ID> --component-power 730 --component-count 800 --inverter-power 50 --inverter-count 8` |
 
 ## 执行步骤
@@ -148,7 +148,7 @@ Skill: dms-inventory
 ### 步骤 3：生成 BOM
 
 ```bash
-python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
+python "$SKILL_DIR/scripts/generate_bom.py" \
   --name "张三" --components 800 \
   --items '6B001492:800,AB001347:8,AA001653:8' \
   --project "项目名" --output-dir "."
@@ -158,7 +158,7 @@ python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
 
 **批量模式：** 将 `--name`/`--components`/`--items` 替换为 `--bom-list` 传入 JSON 数组，一次生成多个 BOM：
 ```bash
-python "$SKILL_DIR/scripts/run_inquiry_bom.py" \
+python "$SKILL_DIR/scripts/generate_bom.py" \
   --bom-list '[
     {"name": "张三", "components": 800, "items": [["6B001492",800],["AB001347",8]]},
     {"name": "李四", "components": 300, "items": [["6B001492",300],["AA001653",2]]}

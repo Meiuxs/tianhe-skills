@@ -5,10 +5,10 @@
 
 用法：
   # 单个BOM
-  python run_inquiry_bom.py --name "覃建发" --components 30 --items '[["6B001492",30],["AA001653",1]]'
+  python generate_bom.py --name "覃建发" --components 30 --items '[["6B001492",30],["AA001653",1]]'
 
   # 批量BOM
-  python run_inquiry_bom.py --bom-list '[
+  python generate_bom.py --bom-list '[
     {"name": "覃建发", "components": 30, "items": [["6B001492",30],["AA001653",1]]},
     {"name": "蔡敏捷", "components": 185, "items": [["6B001492",185],["AB001347",2],["AB001067",1]]}
   ]' --output-dir "."
