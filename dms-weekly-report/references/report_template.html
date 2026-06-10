@@ -758,12 +758,12 @@ th.number-right {
         <div class="value" id="kpi-total-salespersons">--</div>
         <div class="unit">人</div>
       </div>
-      <div class="kpi-card green">
+      <div class="kpi-card green" style="cursor:pointer;" onclick="navigateToTab('detail', {type:'orderedStatus', value:'是'})" title="点击查看已下单项目明细">
         <div class="label">已下单</div>
         <div class="value" id="kpi-ordered">--</div>
         <div class="unit">个</div>
       </div>
-      <div class="kpi-card warning">
+      <div class="kpi-card warning" style="cursor:pointer;" onclick="navigateToTab('detail', {type:'orderedStatus', value:'否'})" title="点击查看未下单项目明细">
         <div class="label">未下单</div>
         <div class="value" id="kpi-not-ordered">--</div>
         <div class="unit">个</div>
@@ -956,7 +956,7 @@ th.number-right {
     </h2>
 
     <p style="font-size:13px;color:var(--text-secondary);margin-bottom:var(--spacing-lg);background:var(--primary-l5);padding:10px 16px;border-radius:var(--radius);border-left:3px solid var(--primary);">
-      💡 当前正在展示 <strong id="detail-period-label">本月</strong> 的询价项目明细。如需切换，请使用右上角 <strong>全局时间筛选</strong>。
+      💡 当前展示 <strong id="detail-period-label">本月</strong> 的询价项目明细<strong id="detail-filter-label"></strong>。<button id="clear-filter-btn" style="display:none;margin-left:8px;padding:2px 8px;border:1px solid var(--border-color);border-radius:4px;background:white;cursor:pointer;font-size:12px;color:var(--text-tertiary);">✕ 清除筛选</button>如需切换，请使用右上角 <strong>全局时间筛选</strong>。
     </p>
 
     <!-- ──────────── 周期功率趋势柱状图 ──────────── -->
@@ -1022,12 +1022,47 @@ const ROWS_DETAIL = {{ROWS_DETAIL_JSON}} || [];
 let currentGlobalPeriod = '本月';
 const SERVER_NOW = '{{SERVER_TIMESTAMP}}' || null; // 后端注入 ISO 8601 格式时间戳
 
+/* ── 跨 Tab 过滤器 — 供 Tab 间跳转传递筛选条件 ── */
+var crossTabFilter = null;  // { type: 'approver'|'province'|'orderedStatus', value: string }
+
 /* ── 明细表格分页状态 ── */
 let detailPageState = {
   currentPage: 1,
   pageSize: 20,
   totalRows: 0,
 };
+
+/**
+ * 对 rows 应用跨 Tab 过滤器（如果有）。
+ */
+function applyCrossTabFilter(rows) {
+  if (!crossTabFilter) return rows;
+  var f = crossTabFilter;
+  var filtered = rows;
+
+  switch (f.type) {
+    case 'orderedStatus':
+      filtered = rows.filter(function(row) { return row.ordered === f.value; });
+      break;
+    case 'province':
+      filtered = rows.filter(function(row) { return row.province === f.value; });
+      break;
+    case 'approver':
+      filtered = rows.filter(function(row) {
+        return row.procurementApprover === f.value || row.provinceApprover === f.value;
+      });
+      break;
+  }
+  return filtered;
+}
+
+/**
+ * 携带 crossTabFilter 跳转到指定 Tab。
+ */
+function navigateToTab(tabName, filter) {
+  crossTabFilter = filter;
+  switchTab(tabName);
+}
 
 /* ===================================================================
    CHART.JS 加载检查
@@ -1585,6 +1620,20 @@ function renderApproverKPI(stats) {
   setText('approver-approved', stats.approved);
   setText('approver-total', stats.total);
   setText('approver-rate', stats.rate);
+  // 为 KPI 卡片添加跨 Tab 跳转
+  var kpiCards = document.querySelectorAll('#tab-approval .kpi-card');
+  if (kpiCards.length >= 3) {
+    kpiCards[0].style.cursor = 'pointer';
+    kpiCards[0].title = '点击查看审批通过的项目明细';
+    kpiCards[0].onclick = function() {
+      var name = getSelectedApprover();
+      if (name && name !== '全部') {
+        navigateToTab('detail', { type: 'approver', value: name });
+      } else {
+        navigateToTab('detail', null);
+      }
+    };
+  }
 }
 
 function renderApprovalDays(days) {
@@ -1853,9 +1902,14 @@ function initApprovalCharts() {
 
 /* ──────────── Tab 3 图表：明细 ──────────── */
 function initDetailCharts() {
-  let summaries = computePeriodSummaries(ROWS_DETAIL);
+  // 如果有跨 Tab 过滤器，应用到数据上
+  let baseRows = ROWS_DETAIL;
+  if (crossTabFilter) {
+    baseRows = applyCrossTabFilter(baseRows);
+  }
+  let summaries = computePeriodSummaries(baseRows);
   let periodNames = Object.keys(summaries);
-  let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
+  let filtered = filterRowsByPeriod(baseRows, currentGlobalPeriod);
 
   // 周期功率趋势柱状图
   let moduleData = periodNames.map(function(n) { return summaries[n].modulePower; });
@@ -1920,6 +1974,37 @@ function renderDetailTable(rows) {
 
   let label = document.getElementById('detail-period-label');
   if (label) label.textContent = currentGlobalPeriod;
+
+  // 更新过滤标签
+  var filterLabelEl = document.getElementById('detail-filter-label');
+  if (filterLabelEl) {
+    if (crossTabFilter) {
+      var f = crossTabFilter;
+      if (f.type === 'orderedStatus') filterLabelEl.textContent = '（' + (f.value === '是' ? '已下单' : '未下单') + '）';
+      else if (f.type === 'province') filterLabelEl.textContent = '（' + f.value + '）';
+      else if (f.type === 'approver') filterLabelEl.textContent = '（审批人:' + f.value + '）';
+      else filterLabelEl.textContent = '';
+    } else {
+      filterLabelEl.textContent = '';
+    }
+  }
+
+  // 控制清除筛选按钮
+  var clearBtn = document.getElementById('clear-filter-btn');
+  if (clearBtn) {
+    if (crossTabFilter) {
+      clearBtn.style.display = 'inline-block';
+      clearBtn.onclick = function() {
+        crossTabFilter = null;
+        renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+        // 重新初始化当前 tab 图表
+        tabInitialized.detail = false;
+        initTabCharts('detail');
+      };
+    } else {
+      clearBtn.style.display = 'none';
+    }
+  }
 
   if (rows.length === 0) {
     let tr = document.createElement('tr');
@@ -1990,13 +2075,15 @@ function renderPaginationControls(totalPages, startRow, endRow, totalRows) {
   document.getElementById('prev-page-btn').addEventListener('click', function() {
     if (detailPageState.currentPage > 1) {
       detailPageState.currentPage--;
-      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+      var data = crossTabFilter ? applyCrossTabFilter(ROWS_DETAIL) : ROWS_DETAIL;
+      renderDetailTable(filterRowsByPeriod(data, currentGlobalPeriod));
     }
   });
   document.getElementById('next-page-btn').addEventListener('click', function() {
     if (detailPageState.currentPage < totalPages) {
       detailPageState.currentPage++;
-      renderDetailTable(filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod));
+      var data = crossTabFilter ? applyCrossTabFilter(ROWS_DETAIL) : ROWS_DETAIL;
+      renderDetailTable(filterRowsByPeriod(data, currentGlobalPeriod));
     }
   });
 }
@@ -2023,6 +2110,11 @@ function renderProvinceTable() {
       '<td>' + escHtml(item.province) + '</td>' +
       '<td class="number-format">' + item.count + '</td>' +
       '<td class="number-right">' + item.module.toFixed(2) + '</td>';
+    tr.style.cursor = 'pointer';
+    tr.title = '点击查看 ' + item.province + ' 的明细项目';
+    tr.addEventListener('click', function() {
+      navigateToTab('detail', { type: 'province', value: item.province });
+    });
     tbody.appendChild(tr);
   });
 }
@@ -2107,6 +2199,8 @@ function destroyAllCharts() {
 
 /* 全局时间段切换 — 所有数据联动 */
 function onGlobalPeriodChange() {
+  // 切换全局筛选时清除跨 Tab 过滤器
+  crossTabFilter = null;
   let sel = document.getElementById('global-period-select');
   if (!sel) return;
   currentGlobalPeriod = sel.value;
