@@ -22,10 +22,10 @@
 """
 
 import argparse
+import glob
 import json
 import os
 import sys
-import glob
 
 import pandas as pd
 
@@ -63,11 +63,22 @@ def _find_latest_inventory_file() -> str:
     )
 
 
-# 默认库存文件路径（启动时自动查找）
-try:
-    DEFAULT_INVENTORY_FILE = _find_latest_inventory_file()
-except FileNotFoundError:
-    DEFAULT_INVENTORY_FILE = None
+# 默认库存文件路径（惰性初始化）
+_DEFAULT_FILE_CACHE = None
+
+def _get_default_file():
+    """惰性获取默认库存文件。"""
+    global _DEFAULT_FILE_CACHE
+    if _DEFAULT_FILE_CACHE is None:
+        try:
+            _DEFAULT_FILE_CACHE = _find_latest_inventory_file()
+        except FileNotFoundError:
+            _DEFAULT_FILE_CACHE = None
+    return _DEFAULT_FILE_CACHE
+
+# 向后兼容：DEFAULT_INVENTORY_FILE 依然可用
+DEFAULT_INVENTORY_FILE = None
+
 
 def load_inventory(file_path: str = None, sheet_name: str = None) -> dict:
     """加载库存数据。
@@ -82,7 +93,9 @@ def load_inventory(file_path: str = None, sheet_name: str = None) -> dict:
         或指定 sheet 时的 {"<sheet_name>": DataFrame}
     """
     if file_path is None:
-        file_path = _find_latest_inventory_file()
+        file_path = _get_default_file()
+        if file_path is None:
+            raise FileNotFoundError("未找到库存文件，请检查 assets/ 目录")
 
     # 如果指定了单一 sheet，直接读取
     if sheet_name:
@@ -134,7 +147,7 @@ def load_inventory(file_path: str = None, sheet_name: str = None) -> dict:
     return data
 
 
-def query_components(df: pd.DataFrame, power: int = None) -> pd.DataFrame:
+def query_components(df: pd.DataFrame, power: int = None, has_stock: bool = True) -> pd.DataFrame:
     """查询组件库存。
 
     Args:
@@ -146,10 +159,16 @@ def query_components(df: pd.DataFrame, power: int = None) -> pd.DataFrame:
     """
     result = df.copy()
     if power is not None:
+        if not isinstance(power, (int, float)):
+            raise TypeError(f"power must be int or float, got {type(power).__name__}")
         result = result[result['功率'].astype(str).str.contains(rf'(?<!\d){power}(?!\d)')]
+    if has_stock:
+        result = result[result['可用库存'].notna() & (result['可用库存'] > 0)]
     cols = ['物料编号', '物料名称', '功率', '可用库存']
     if '备注' in result.columns:
         cols.append('备注')
+    if '仓库名称' not in result.columns:
+        result['仓库名称'] = ''
     cols.append('仓库名称')
     return result[cols]
 
@@ -221,6 +240,8 @@ def query_boxes(df: pd.DataFrame, power: int = None, box_type: str = None,
     cols = ['并网箱类型', '功率', '物料编号', '物料名称', '可用库存']
     if '备注' in result.columns:
         cols.append('备注')
+    if '仓库名称' not in result.columns:
+        result['仓库名称'] = ''
     cols.append('仓库名称')
     return result[cols]
 
@@ -311,6 +332,7 @@ def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
     # 如果有多列，保留额外信息（如品牌、功率等）
     extra_cols = [c for c in df.columns if c not in [material_col, name_col, qty_col, warehouse_col]]
     extra_cols_present = [c for c in extra_cols if c in result.columns and c not in agg.columns]
+        # 注意：同一物料编码可能有多个不同的额外列值，.first() 仅取第一个
     if extra_cols_present:
         extra = result.groupby(material_col, as_index=False, dropna=False)[extra_cols_present].first()
         agg = agg.merge(extra, on=material_col, how='left')
@@ -342,54 +364,66 @@ def main():
     args = parser.parse_args()
 
     # --output-file 重定向 stdout
+    _output_file = None
     if args.output_file:
         out_path = os.path.abspath(args.output_file)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        sys.stdout = open(out_path, 'w', encoding='utf-8')
+        _output_file = open(out_path, 'w', encoding='utf-8')
+        sys.stdout = _output_file
 
-    # 加载数据
-    data = load_inventory(args.file, sheet_name=args.sheet)
+    try:
 
-    if not args.type:
-        parser.print_help()
-        return
+        # 加载数据
+        data = load_inventory(args.file, sheet_name=args.sheet)
 
-    has_stock = not args.all and not args.no_stock
+        if not args.type:
+            parser.print_help()
+            return
 
-    # 查询
-    if args.type == "组件":
-        result = query_components(data["组件"], args.power)
-    elif args.type == "逆变器":
-        result = query_inverters(data["逆变器"], args.power, args.brand, has_stock)
-    elif args.type == "并网箱":
-        result = query_boxes(data["并网箱"], args.power, args.box_type, has_stock)
+        # --all 和 --no-stock 均不过滤库存
+        has_stock = not (args.all or args.no_stock)
 
-    # 输出
-    if args.aggregate:
-        result = aggregate_stock(result)
+        # 查询
+        if args.type == "组件":
+            result = query_components(data["组件"], args.power, has_stock=has_stock)
+        elif args.type == "逆变器":
+            result = query_inverters(data["逆变器"], args.power, args.brand, has_stock)
+        elif args.type == "并网箱":
+            result = query_boxes(data["并网箱"], args.power, args.box_type, has_stock)
+
+        # 输出
+        if args.aggregate:
+            result = aggregate_stock(result)
+            if args.json:
+                print(result.to_json(orient='records', force_ascii=False))
+            else:
+                if result.empty:
+                    print(f"[结果] 未找到匹配的{args.type}库存（或库存均为0）")
+                else:
+                    print(f"\n=== {args.type}库存聚合结果（按物料编码汇总）===")
+                    print(result.to_string(index=False))
+                    print(f"\n共 {len(result)} 条记录（已聚合所有仓库）")
+            return
+
         if args.json:
             print(result.to_json(orient='records', force_ascii=False))
+        elif args.type == "逆变器" and args.group_by_brand:
+            # 逆变器按品牌分组显示
+            print(format_inverter_by_brand(result))
         else:
             if result.empty:
-                print(f"[结果] 未找到匹配的{args.type}库存（或库存均为0）")
+                print(f"[结果] 未找到匹配的{args.type}库存")
             else:
-                print(f"\n=== {args.type}库存聚合结果（按物料编码汇总）===")
+                print(f"\n=== {args.type}库存查询结果 ===")
                 print(result.to_string(index=False))
-                print(f"\n共 {len(result)} 条记录（已聚合所有仓库）")
-        return
+                print(f"\n共 {len(result)} 条记录")
 
-    if args.json:
-        print(result.to_json(orient='records', force_ascii=False))
-    elif args.type == "逆变器" and args.group_by_brand:
-        # 逆变器按品牌分组显示
-        print(format_inverter_by_brand(result))
-    else:
-        if result.empty:
-            print(f"[结果] 未找到匹配的{args.type}库存")
-        else:
-            print(f"\n=== {args.type}库存查询结果 ===")
-            print(result.to_string(index=False))
-            print(f"\n共 {len(result)} 条记录")
+
+    finally:
+        if _output_file is not None:
+            _output_file.close()
+            if sys.stdout is _output_file:
+                sys.stdout = sys.__stdout__
 
 
 if __name__ == "__main__":

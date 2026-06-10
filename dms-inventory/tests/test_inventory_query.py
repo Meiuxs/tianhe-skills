@@ -28,6 +28,7 @@ import _compat  # noqa: F401, E402
 
 from inventory_query import (
     _find_latest_inventory_file,
+    _get_default_file,
     load_inventory,
     query_components,
     query_inverters,
@@ -128,8 +129,9 @@ class TestFileDiscovery(unittest.TestCase):
 
     def test_default_inventory_file_not_none(self):
         """模块启动时能自动定位库存文件"""
-        self.assertIsNotNone(DEFAULT_INVENTORY_FILE)
-        self.assertTrue(os.path.exists(DEFAULT_INVENTORY_FILE))
+        path = _get_default_file()
+        self.assertIsNotNone(path)
+        self.assertTrue(os.path.exists(path))
 
     def test_not_found_in_root(self):
         """文件不存在于根目录（仅搜索 assets/）"""
@@ -344,12 +346,12 @@ class TestQueryWithMockData(unittest.TestCase):
 
     def test_mock_components_by_power_730(self):
         """按730W查询返回3个仓库行"""
-        result = query_components(self.components, power=730)
+        result = query_components(self.components, power=730, has_stock=False)
         self.assertEqual(len(result), 3)
 
     def test_mock_components_by_power_715(self):
         """按715W查询返回3个仓库行"""
-        result = query_components(self.components, power=715)
+        result = query_components(self.components, power=715, has_stock=False)
         self.assertEqual(len(result), 3)
 
     def test_mock_inverters_tianhe_filter(self):

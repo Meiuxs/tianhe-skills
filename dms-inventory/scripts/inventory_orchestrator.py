@@ -258,7 +258,7 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
         return result
 
     # 1. 查询指定功率的组件
-    items = query_components(df, power=target_power)
+    items = query_components(df, power=target_power, has_stock=False)
     agg = aggregate_stock(items, qty_col='可用库存')
 
     # 即使库存为0，也要记录明细（分仓库）
@@ -308,7 +308,7 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
     for pn in sorted(all_power_nums, reverse=True):
         if pn == target_power:
             continue
-        alt_items = query_components(df, power=pn)
+        alt_items = query_components(df, power=pn, has_stock=False)
         alt_agg = aggregate_stock(alt_items, qty_col='可用库存')
         alt_filtered = _filter_by_remark(alt_agg, preferences)
         alt_available = alt_filtered['available']
