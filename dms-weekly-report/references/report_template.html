@@ -866,9 +866,10 @@ th.number-right {
       关键节点审批统计
     </h2>
     <div class="filter-bar">
-      <label for="approver-input">👤 审批人：</label>
-      <input list="approver-list" id="approver-input" class="form-control" placeholder="全部审批人（输入筛选）..." style="min-width:150px;">
-      <datalist id="approver-list"></datalist>
+      <label for="approver-select">👤 审批人：</label>
+      <select id="approver-select" class="form-control" style="min-width:150px;">
+        <option value="全部">全部审批人</option>
+      </select>
       <span class="filter-result" id="approver-filter-result"></span>
     </div>
     <div class="kpi-grid">
@@ -1909,27 +1910,36 @@ function renderProvinceTable() {
   });
 }
 
-/* ──────────── 审批人搜索列表 ──────────── */
+/* ──────────── 审批人下拉列表 ──────────── */
 function populateApproverList() {
-  let input = document.getElementById('approver-input');
-  let datalist = document.getElementById('approver-list');
-  if (!input || !datalist) return;
+  let select = document.getElementById('approver-select');
+  if (!select) return;
+
+  // 保存当前选中值
+  let currentVal = select.value;
 
   let filtered = filterRowsByPeriod(ROWS_DETAIL, currentGlobalPeriod);
   let approvers = extractApproverList(filtered);
 
-  // 仅填充实际审批人姓名；空值 =「全部」由 getSelectedApprover 处理
-  datalist.innerHTML = '';
+  // 保留第一个「全部审批人」选项，清空后续
+  while (select.options.length > 1) {
+    select.remove(1);
+  }
+
   approvers.forEach(function(name) {
     let opt = document.createElement('option');
     opt.value = name;
-    datalist.appendChild(opt);
+    opt.textContent = name;
+    select.appendChild(opt);
   });
 
-  // 首次加载或清空时回退到「全部」
-  if (!input.value || input.value === '全部') {
-    input.value = '';
+  // 恢复选中值（如果名字还在列表中），否则回退「全部」
+  let stillExists = approvers.indexOf(currentVal) >= 0;
+  if (!stillExists) {
+    select.value = '全部';
   }
+  // 触发 KPI 更新以匹配当前选中
+  onApproverChange(select.value);
 }
 
 /* ===================================================================
@@ -1937,9 +1947,8 @@ function populateApproverList() {
    =================================================================== */
 
 function getSelectedApprover() {
-  let input = document.getElementById('approver-input');
-  let val = input ? input.value.trim() : '';
-  return val === '' || val === '全部' ? '全部' : val;
+  let select = document.getElementById('approver-select');
+  return select ? select.value : '全部';
 }
 
 function getActiveTab() {
@@ -2011,10 +2020,7 @@ function onGlobalPeriodChange() {
 
 /* 审批人切换 */
 function onApproverChange(selectedValue) {
-  let input = document.getElementById('approver-input');
-  if (input && selectedValue) {
-    input.value = selectedValue;
-  }
+  // select 已保有值，无需额外赋值
 
   // 销毁审批相关的图表
   ['chart-approval-donut', 'chart-approval-compare'].forEach(function(id) {
@@ -2126,10 +2132,10 @@ function initEventListeners() {
     });
   });
 
-  /* 审批人输入 — 回车或失焦时触发筛选 */
-  var approverInput = document.getElementById('approver-input');
-  if (approverInput) {
-    approverInput.addEventListener('change', function() {
+  /* 审批人下拉 — 选中即触发筛选 */
+  var approverSelect = document.getElementById('approver-select');
+  if (approverSelect) {
+    approverSelect.addEventListener('change', function() {
       onApproverChange(this.value);
     });
   }
