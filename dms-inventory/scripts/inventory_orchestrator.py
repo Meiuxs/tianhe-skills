@@ -218,12 +218,16 @@ def _serializable(obj):
     """将 pandas 类型转换为 JSON 可序列化的 Python 原生类型。"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
         return obj.to_dict(orient='records') if isinstance(obj, pd.DataFrame) else obj.to_dict()
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    if isinstance(obj, (np.floating,)):
-        return float(obj)
-    if isinstance(obj, (np.bool_,)):
-        return bool(obj)
+    try:
+        import numpy as np
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+    except ImportError:
+        pass
     return obj
 
 
@@ -586,7 +590,7 @@ def run_analysis(params: dict) -> dict:
     combiner_boxes = query_boxes_section(data, requirements, preferences)
 
     # 汇总
-    comp_spec = components.get('specified', {})
+    comp_spec = components.get('specified') or {}
     inv_existing = inverters.get('existing_total_kw', 0)
     comp_kw = comp_spec.get('total_kw', 0)
 
