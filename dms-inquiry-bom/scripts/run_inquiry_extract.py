@@ -201,31 +201,31 @@ async def _extract_field(page, label, timeout=5000):
         str: 字段值，未找到时返回 "--"
     """
     try:
-        safe_label = label.replace("'", "\\'")
-        value = await page.evaluate(f"""() => {{
+        value = await page.evaluate("""(args) => {
+            const label = args.label;
             const items = document.querySelectorAll('.el-form-item');
-            for (const item of items) {{
+            for (const item of items) {
                 const lbl = item.querySelector('label');
-                if (lbl && lbl.textContent.includes('{safe_label}')) {{
+                if (lbl && lbl.textContent.includes(label)) {
                     const content = item.querySelector('.el-form-item__content');
-                    if (content) {{
+                    if (content) {
                         const text = content.textContent.trim();
                         if (text) return text;
-                    }}
+                    }
                     const input = item.querySelector('input, textarea, .el-input__inner');
                     if (input) return input.value || input.textContent.trim();
-                }}
-            }}
+                }
+            }
             const detailItems = document.querySelectorAll('.detail-item, .info-item, .process-detail-item');
-            for (const item of detailItems) {{
+            for (const item of detailItems) {
                 const lbl = item.querySelector('.label, .detail-label, .info-label');
-                if (lbl && lbl.textContent.includes('{safe_label}')) {{
+                if (lbl && lbl.textContent.includes(label)) {
                     const val = item.querySelector('.value, .detail-value, .info-value');
                     if (val) return val.textContent.trim();
-                }}
-            }}
+                }
+            }
             return null;
-        }}""")
+        }""", {"label": label})
         if value and value != "null":
             return value.strip()
     except Exception:

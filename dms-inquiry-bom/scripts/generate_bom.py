@@ -53,7 +53,11 @@ def generate_bom(name: str, components: int, items: list, output_dir: str = ".",
                 project_short = project_short[:idx]
                 break
         project_short = project_short[:15].rstrip()
-        filename = f"{name}{components}块组件{project_short}{today}.xlsx"
+        # 当项目名和业务员姓名相同时，避免文件名重复
+        if project_short == name:
+            filename = f"{name}{components}块组件{today}.xlsx"
+        else:
+            filename = f"{name}{components}块组件{project_short}{today}.xlsx"
     else:
         filename = f"{name}{components}块组件{today}.xlsx"
     filepath = os.path.join(output_dir, filename)

@@ -32,6 +32,7 @@ from typing import Callable
 
 # 修复 Windows 中文乱码（仅 CLI 模式需要）
 import _compat  # noqa: F401
+from _compat import captured_run
 
 # ==================== 全局配置 ====================
 
@@ -177,10 +178,8 @@ def check_bash_profiles() -> tuple[str, str, str] | None:
         'echo "$DMS_USER|||$DMS_PASSWORD"'
     )
     try:
-        result = subprocess.run(
+        result = captured_run(
             ["bash", "-c", cmd],
-            capture_output=True,
-            text=True,
             timeout=2,
         )
         if result.returncode == 0:
@@ -213,7 +212,7 @@ def check_powershell() -> tuple[str, str, str] | None:
 
     # ── 兜底：PowerShell 子进程 ──
     try:
-        result = subprocess.run(
+        result = captured_run(
             [
                 "powershell",
                 "-NoProfile",
@@ -222,8 +221,6 @@ def check_powershell() -> tuple[str, str, str] | None:
                 ' + "|||" + '
                 '[System.Environment]::GetEnvironmentVariable("DMS_PASSWORD", "User")',
             ],
-            capture_output=True,
-            text=True,
             timeout=2,
         )
         if result.returncode == 0:

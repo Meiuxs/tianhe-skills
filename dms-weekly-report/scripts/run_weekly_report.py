@@ -56,12 +56,6 @@ USER_DATA_DIR = Path.home() / ".dms_browser_data"
 
 def configure_logging(verbose: bool = False) -> None:
     """根据 --verbose 标志配置日志级别。"""
-    if hasattr(sys.stdout, "reconfigure") and sys.stdout.encoding and \
-       sys.stdout.encoding.upper() not in ("UTF-8", "UTF-8-SIG"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
     level = logging.DEBUG if verbose else logging.INFO
     logger.setLevel(level)
     _handler.setLevel(level)

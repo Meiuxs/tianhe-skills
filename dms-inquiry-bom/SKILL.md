@@ -91,7 +91,9 @@ python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 
 | 规则 | 说明 |
 |:----|:------|
+| 统一编码入口 | _compat.py 集中处理所有编码问题：stdout/stderr/stdin、子进程捕获均默认 UTF-8 |
 | 输出方式 | `--output-file` 替代管道传 JSON（避免中文乱码） |
+| 终端中文展示 | 非脚本管道使用 cat | PYTHONIOENCODING=utf-8 python -c "..."；.py 文件直接依赖 _compat.py |
 | 临时目录 | `$TMP_DIR` = `python -c "import tempfile; print(tempfile.gettempdir())"` |
 | 最终交付物 | BOM Excel 存当前工作目录（**禁止用 `$PWD`**，含中文时路径被破坏） |
 | Windows bash | 复杂 Python 写成独立 `.py` 文件执行，避免 `python -c` 内联反斜杠转义问题 |
@@ -147,6 +149,8 @@ Skill: dms-inventory
 
 ### 步骤 3：生成 BOM
 
+> ⚠️ **`--project` 传完整项目名**（如"毕节王先生屋面分布式光伏"），不要传客户姓名与 `--name` 相同。`--name` 是业务员姓名，`--project` 是项目名，当两者重复时脚本会自动去重。
+
 ```bash
 python "$SKILL_DIR/scripts/generate_bom.py" \
   --name "张三" --components 800 \
@@ -172,7 +176,20 @@ python "$SKILL_DIR/scripts/generate_bom.py" \
 | A1 | 物料编号 | 6B001492 |
 | B1 | 数量 | 800 |
 
-**用 `AskUserQuestion` 展示生成的 BOM 文件给用户确认。**
+**展示生成的 BOM 给用户确认（.py 脚本依赖 _compat.py，行内 python -c 仍需 PYTHONIOENCODING=utf-8）：**
+
+```bash
+# 读取 BOM 内容展示给用户
+PYTHONIOENCODING=utf-8 python -c "
+import openpyxl, sys
+wb = openpyxl.load_workbook(r'生成的BOM.xlsx')
+ws = wb.active
+for row in ws.iter_rows(min_row=1, values_only=True):
+    print(f'{row[0]}\t{row[1]}')
+"
+```
+
+**用 `AskUserQuestion` 确认 BOM 后，再进入步骤 4。**
 
 ### 步骤 4：填写产品信息（BOM 确认后）
 
@@ -248,6 +265,8 @@ python "$SKILL_DIR/scripts/fill_product_info.py" \
 | 仅打印到终端 | 所有确认点用 `AskUserQuestion` 工具 |
 | 自动关闭浏览器 | 填写后保持打开 |
 | 忽略库存预警/停产标记 | 必须展示给用户决定 |
+| `--project` 传客户姓名（与 `--name` 相同） | 传真实项目名，姓名重复时脚本已做去重处理 |
+| 通过 cat 直接查看含中文的 JSON/输出 | 一律用 _compat.py（脚本内）或 PYTHONIOENCODING=utf-8（python -c 管道） |
 
 ## 参考文档
 
