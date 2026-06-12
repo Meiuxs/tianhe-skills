@@ -39,7 +39,7 @@ from column_definitions import DMS_URL, NAV_TIMEOUT, LOAD_TIMEOUT
 from core.dms_browser import (
     FlowRecord,
     do_login, filter_and_get_flow_ids,
-    extract_all_parallel, get_access_token, get_week_range,
+    extract_all_parallel, get_week_range,
     is_on_login_page,
 )
 
@@ -148,37 +148,25 @@ async def run(args: argparse.Namespace) -> None:
             else:
                 logger.info("会话有效（已复用缓存）")
 
-            # 登录后提取 access_token（供后续 API 调用使用）
-            access_token = await get_access_token(context)
-            if access_token:
-                logger.debug("已获取 access_token")
-            else:
-                logger.warning("未获取到 access_token，后续下单检查将跳过")
-
             # 2. 筛选
             flow_ids = await filter_and_get_flow_ids(page, start_date, end_date)
             if not flow_ids:
                 logger.info("本周无已办询价记录")
                 return
 
-            # 关闭初始 page，释放资源供并行 Tab 使用
-            await page.close()
-
             # 3. 并行提取详情
+            # 注意：不提前关闭 page。persistent_context 中关闭最后一个 page
+            # 可能导致浏览器进程退出，影响后续 context.new_page() 调用。
+            # page 会在 finally 中被 context.close() 一并清理。
             all_details = await extract_all_parallel(context, flow_ids, args.workers)
             if not all_details:
                 logger.info("未能提取到任何详情")
                 return
 
-            # 4. 下单检查（通过 API 批量拉取）
-            if access_token:
-                all_details = await check_orders_parallel(
-                    access_token, all_details, start_date, end_date,
-                )
-            else:
-                logger.warning("access_token 缺失，全部标记为未下单")
-                for r in all_details:
-                    r.ordered = "否"
+            # 4. 下单检查（通过 API 批量拉取，无需额外安装依赖）
+            all_details = await check_orders_parallel(
+                context, all_details, start_date, end_date,
+            )
             records = all_details
 
             # 5. 生成 Excel
