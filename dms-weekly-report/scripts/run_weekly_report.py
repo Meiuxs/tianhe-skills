@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -153,6 +154,12 @@ async def run(args: argparse.Namespace) -> None:
                 logger.info("本周无已办询价记录")
                 return
 
+            # 提取 access_token（供后续下单检查使用）
+            access_token_match = re.search(r"access_token=([^&]+)", page.url)
+            access_token = access_token_match.group(1) if access_token_match else None
+            if not access_token:
+                logger.warning("未获取到 access_token，后续下单检查将跳过")
+
             # 关闭初始 page，释放资源供并行 Tab 使用
             await page.close()
 
@@ -162,8 +169,15 @@ async def run(args: argparse.Namespace) -> None:
                 logger.info("未能提取到任何详情")
                 return
 
-            # 4. 并行检查下单
-            all_details = await check_orders_parallel(context, all_details, args.workers)
+            # 4. 下单检查（通过 API 批量拉取）
+            if access_token:
+                all_details = await check_orders_parallel(
+                    access_token, all_details, start_date, end_date,
+                )
+            else:
+                logger.warning("access_token 缺失，全部标记为未下单")
+                for r in all_details:
+                    r.ordered = "否"
             records = all_details
 
             # 5. 生成 Excel

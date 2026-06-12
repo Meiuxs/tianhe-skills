@@ -67,3 +67,7 @@ RETRY_BASE_DELAY = 2.0  # 秒，指数退避基数
 
 DMS_URL = "https://dms-admin.trinapower.com"
 LOGIN_CHECK_DOMAIN = "iauth.trinapower.com"
+
+# ==================== 下单检查配置 ====================
+
+ORDER_CHECK_EXTEND_DAYS = 31  # 下单检查日期范围扩展天数（覆盖审批周期）

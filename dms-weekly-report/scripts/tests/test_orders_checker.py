@@ -1,94 +1,135 @@
-"""下单检查模块的单元测试。"""
+"""下单检查模块的单元测试（API 版本）。"""
 
 import sys
 import unittest
+from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.orders_checker import (
-    search_order_for_flow,
-    check_single_order,
+    fetch_ordered_flow_ids,
     check_orders_parallel,
-    retry_async,
 )
 
 
-class TestSearchOrderForFlow(unittest.TestCase):
-    """下单搜索功能测试。"""
+@dataclass
+class MockRecord:
+    """模拟 FlowRecord，仅包含下单检查需要的字段。"""
+    flow_id: str = ""
+    ordered: str = "否"
 
-    def _make_mock_page(self) -> MagicMock:
-        """创建模拟页面。"""
-        page = AsyncMock()
-        page.goto = AsyncMock()
-        page.wait_for_load_state = AsyncMock()
-        page.wait_for_timeout = AsyncMock()
-        page.close = AsyncMock()
-        # get_by_text 返回链式 locator
-        get_by_text_result = AsyncMock()
-        locator_parent = AsyncMock()
-        input_first = AsyncMock()
-        input_first.fill = AsyncMock()
-        locator_parent.locator = MagicMock(return_value=AsyncMock())
-        locator_parent.locator.return_value.first = input_first
-        get_by_text_result.locator = MagicMock(return_value=locator_parent)
-        page.get_by_text = MagicMock(return_value=get_by_text_result)
-        page.get_by_role = MagicMock(return_value=AsyncMock())
-        page.get_by_role.return_value.first.click = AsyncMock()
-        # 模拟暂无数据逻辑 — 默认有数据
-        no_data = AsyncMock()
-        no_data.count = AsyncMock(return_value=0)
-        page.locator = MagicMock(return_value=no_data)
-        return page
 
-    def test_order_found(self):
-        """流程已下单返回 '是'。"""
-        page = self._make_mock_page()
-        context = AsyncMock()
-        context.new_page = AsyncMock(return_value=page)
-        sem = AsyncMock()
+class TestFetchOrderedFlowIds(unittest.TestCase):
+    """fetch_ordered_flow_ids 测试。"""
 
-        # 模拟暂无数据不可见
-        page.locator("text=暂无数据").count = AsyncMock(return_value=0)
+    @patch("core.orders_checker.httpx.AsyncClient")
+    def test_single_page(self, mock_client):
+        """单页数据能正确提取 bizFlowId。"""
+        mock_resp = MagicMock()
+        mock_resp.json = MagicMock(return_value={
+            "code": 1,
+            "data": {
+                "records": [
+                    {"bizFlowId": "FLOW001"},
+                    {"bizFlowId": "FLOW002"},
+                    {"bizFlowId": "FLOW003"},
+                ],
+            },
+        })
+        mock_instance = AsyncMock()
+        mock_instance.post = AsyncMock(return_value=mock_resp)
+        mock_client.return_value.__aenter__.return_value = mock_instance
 
         import asyncio
-        result = asyncio.run(search_order_for_flow(context, "FLOW-001", sem))
+        result = asyncio.run(fetch_ordered_flow_ids("fake-token", "2026-06-01", "2026-06-07"))
 
-        self.assertEqual(result, "是")
+        self.assertEqual(result, {"FLOW001", "FLOW002", "FLOW003"})
 
-    def test_order_not_found(self):
-        """流程未下单返回 '否'。"""
-        page = self._make_mock_page()
-        context = AsyncMock()
-        context.new_page = AsyncMock(return_value=page)
-        sem = AsyncMock()
-
-        # 模拟暂无数据可见
-        page.locator.return_value = AsyncMock()
-        page.locator.return_value.count = AsyncMock(return_value=1)
-        page.locator.return_value.first.is_visible = AsyncMock(return_value=True)
-
-        import asyncio
-        result = asyncio.run(search_order_for_flow(context, "FLOW-001", sem))
-
-        self.assertEqual(result, "否")
-
-
-class TestCheckSingleOrder(unittest.TestCase):
-    """下单检查错误处理测试。"""
-
-    def test_check_single_order_success(self):
-        """检查成功时返回正确值。"""
-        sem = AsyncMock()
-        context = AsyncMock()
+    @patch("core.orders_checker.httpx.AsyncClient")
+    def test_empty_response(self, mock_client):
+        """无订单数据返回空集合。"""
+        mock_resp = MagicMock()
+        mock_resp.json = MagicMock(return_value={
+            "code": 1,
+            "data": {"records": []},
+        })
+        mock_instance = AsyncMock()
+        mock_instance.post = AsyncMock(return_value=mock_resp)
+        mock_client.return_value.__aenter__.return_value = mock_instance
 
         import asyncio
+        result = asyncio.run(fetch_ordered_flow_ids("fake-token", "2026-06-01", "2026-06-07"))
 
-        with patch("core.orders_checker.search_order_for_flow", new_callable=AsyncMock) as mock_search:
-            mock_search.return_value = "是"
-            result = asyncio.run(check_single_order(context, "FLOW-001", sem))
-            self.assertEqual(result, "是")
+        self.assertEqual(result, set())
+
+    @patch("core.orders_checker.httpx.AsyncClient")
+    def test_api_error_code(self, mock_client):
+        """API 返回错误 code 时返回空集合并记录日志。"""
+        mock_resp = MagicMock()
+        mock_resp.json = MagicMock(return_value={
+            "code": -1,
+            "errMsg": "非法用户",
+        })
+        mock_instance = AsyncMock()
+        mock_instance.post = AsyncMock(return_value=mock_resp)
+        mock_client.return_value.__aenter__.return_value = mock_instance
+
+        import asyncio
+        result = asyncio.run(fetch_ordered_flow_ids("invalid-token", "2026-06-01", "2026-06-07"))
+
+        self.assertEqual(result, set())
+
+    @patch("core.orders_checker.httpx.AsyncClient")
+    def test_exception_returns_empty_set(self, mock_client):
+        """网络异常时返回空集合（不崩溃）。"""
+        mock_instance = AsyncMock()
+        mock_instance.post = AsyncMock(side_effect=Exception("Connection failed"))
+        mock_client.return_value.__aenter__.return_value = mock_instance
+
+        import asyncio
+        result = asyncio.run(fetch_ordered_flow_ids("fake-token", "2026-06-01", "2026-06-07"))
+
+        self.assertEqual(result, set())
+
+    def test_extended_end_date(self):
+        """验证日期扩展逻辑正确（集成测试级别的校验）。"""
+        from datetime import datetime, timedelta
+        from core.orders_checker import ORDER_CHECK_EXTEND_DAYS
+
+        end_date = "2026-06-07"
+        extended = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=ORDER_CHECK_EXTEND_DAYS)).strftime("%Y-%m-%d")
+        # 31 天后是 2026-07-08（6月30天）
+        self.assertIn("2026-07-", extended)
+
+
+class TestCheckOrdersParallel(unittest.TestCase):
+    """check_orders_parallel 测试。"""
+
+    @patch("core.orders_checker.fetch_ordered_flow_ids")
+    def test_matched_flow_id_found(self, mock_fetch):
+        """流程在订单集合中返回 '是'。"""
+        mock_fetch.return_value = {"FLOW001", "FLOW002"}
+        records = [MockRecord(flow_id="FLOW001"), MockRecord(flow_id="FLOW003")]
+
+        import asyncio
+        result = asyncio.run(check_orders_parallel("token", records, "2026-06-01", "2026-06-07"))
+
+        self.assertEqual(result[0].ordered, "是")
+        self.assertEqual(result[1].ordered, "否")
+
+    @patch("core.orders_checker.fetch_ordered_flow_ids")
+    def test_all_not_found(self, mock_fetch):
+        """所有流程都不在订单中时全部返回 '否'。"""
+        mock_fetch.return_value = set()
+        records = [MockRecord(flow_id="FLOW001"), MockRecord(flow_id="FLOW002")]
+
+        import asyncio
+        result = asyncio.run(check_orders_parallel("token", records, "2026-06-01", "2026-06-07"))
+
+        self.assertEqual(result[0].ordered, "否")
+        self.assertEqual(result[1].ordered, "否")
 
 
 if __name__ == "__main__":
