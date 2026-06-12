@@ -104,7 +104,13 @@ python scripts/inventory_orchestrator.py \
 | `components.specified.available_stock` | int | 可用库存（已排除备注受限物料） |
 | `components.specified.status` | str | `sufficient`(够用) / `insufficient`(不足) / `no_stock`(无库存) |
 | `components.specified.shortfall` | int | 缺口数量 |
-| `components.specified_detail` | array | 各仓库明细（含物料编号、仓库名、库存、备注） |
+| `components.specified_detail` | array | 各仓库明细（含物料编号、仓库名、库存、备注），含零库存物料 |
+| `components.zero_stock_candidates` | array | 匹配功率但库存为0的物料清单（供用户自筹选择） |
+| `components.zero_stock_candidates[].code` | str | 物料编号 |
+| `components.zero_stock_candidates[].name` | str | 物料名称 |
+| `components.zero_stock_candidates[].stock` | int | 恒为 0 |
+| `components.zero_stock_candidates[].remark` | str? | 备注 |
+| `components.zero_stock_candidates[].warehouse` | str | 所在仓库 |
 | `components.alternatives` | array | 相近功率替代规格，按功率降序排列 |
 | `components.alternatives[].power` | int | 功率（W） |
 | `components.alternatives[].total_stock` | int | 可用库存总量 |
@@ -120,6 +126,13 @@ python scripts/inventory_orchestrator.py \
 |:----|:----|:------|
 | `inverters.existing` | array | 已有逆变器（原样返回输入） |
 | `inverters.existing_total_kw` | float | 已有逆变器总功率 |
+| `inverters.zero_stock_candidates` | array | 匹配条件但库存为0的逆变器物料清单（供用户自筹选择） |
+| `inverters.zero_stock_candidates[].code` | str | 物料编号 |
+| `inverters.zero_stock_candidates[].name` | str | 物料名称 |
+| `inverters.zero_stock_candidates[].power` | str | 功率标签（如 "110KW三相"） |
+| `inverters.zero_stock_candidates[].power_num` | int | 功率数值（kW） |
+| `inverters.zero_stock_candidates[].brand` | str | 厂家 |
+| `inverters.zero_stock_candidates[].remark` | str? | 备注 |
 | `inverters.preferred_brand` | object | 首选品牌（`prefer_brand` 匹配到时） |
 | `inverters.preferred_brand.name` | str | 品牌名（厂家） |
 | `inverters.preferred_brand.models` | array | 该品牌可用型号列表 |
@@ -279,6 +292,7 @@ python scripts/inventory_orchestrator.py \
 | `inventory_result.components.spec` | str | 规格 |
 | `inventory_result.components.qty` | int | 数量 |
 | `inventory_result.components.source` | str | 来源：`stock`(库存) / `user_self`(用户自筹) |
+| `inventory_result.components.code` | str | 物料编号（自筹时必填，指向零库存匹配物料） |
 | `inventory_result.inverters` | object | 逆变器最终方案 |
 | `inventory_result.inverters.existing` | array | 已有设备 |
 | `inventory_result.inverters.new` | array | 新增设备（含物料编号、数量、品牌） |

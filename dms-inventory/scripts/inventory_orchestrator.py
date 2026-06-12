@@ -214,6 +214,21 @@ def _calc_existing_kw(existing_list: list) -> float:
     return total
 
 
+def _is_tianhe_original(name) -> bool:
+    """检查物料名称是否为天合原装专用/天原/原装专用。
+
+    物料名称可能包含 "天合原装专用"、"天原"、"原装专用" 等标识，
+    这些都在"物料名称"列中，与"厂家"列无关。
+    """
+    if pd.isna(name) or not str(name).strip():
+        return False
+    name_str = str(name)
+    for kw in ('天合原装专用', '天原', '原装专用'):
+        if kw in name_str:
+            return True
+    return False
+
+
 def _serializable(obj):
     """将 pandas 类型转换为 JSON 可序列化的 Python 原生类型。"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
@@ -238,6 +253,7 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
     result = {
         'specified': None,
         'specified_detail': [],
+        'zero_stock_candidates': [],
         'alternatives': [],
         'excluded': [],
         'warnings': []
@@ -257,20 +273,36 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
     if df.empty:
         return result
 
-    # 1. 查询指定功率的组件
-    items = query_components(df, power=target_power)
-    agg = aggregate_stock(items, qty_col='可用库存')
+    # 1. 查询指定功率的组件（含零库存，用于展示零库存候选物料）
+    all_items = query_components(df, power=target_power, has_stock=None)
+    items_with_stock = all_items[all_items['可用库存'].notna() & (all_items['可用库存'] > 0)]
 
-    # 即使库存为0，也要记录明细（分仓库）
+    agg = aggregate_stock(items_with_stock, qty_col='可用库存')
+
+    # 记录全部明细（含零库存）和零库存候选物料
+    # ⚠️ zero_stock_candidates 只包含「其他条件都满足，唯独库存为0」的物料
+    #    排除备注含「项目专用」「华电」「未上架」等不可用物料
     detail_rows = []
-    for _, row in items.iterrows():
-        detail_rows.append({
+    zero_stock_rows = []
+    for _, row in all_items.iterrows():
+        stock = _get_stock(row)
+        remark_raw = row.get('备注', None)
+        remark_str = str(remark_raw) if pd.notna(remark_raw) else None
+        parsed = _parse_remark(remark_raw) if pd.notna(remark_raw) else {'level': 'none'}
+        entry = {
             'code': row.get('物料编号', ''),
             'name': str(row.get('物料名称', '')),
-            'stock': _get_stock(row),
-            'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+            'stock': stock,
+            'remark': remark_str,
             'warehouse': str(row.get('仓库名称', ''))
-        })
+        }
+        detail_rows.append(entry)
+        # 零库存且未被备注排除 → 作为候选
+        if stock == 0 and parsed['level'] != 'excluded':
+            zero_stock_rows.append(entry)
+
+    result['specified_detail'] = detail_rows
+    result['zero_stock_candidates'] = zero_stock_rows
 
     # 过滤备注
     filtered = _filter_by_remark(agg, preferences)
@@ -296,7 +328,6 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
         'status': status,
         'shortfall': max(0, target_qty - available_stock)
     }
-    result['specified_detail'] = detail_rows
     result['excluded'] = filtered['excluded']
     result['warnings'] = filtered['warnings']
 
@@ -336,8 +367,8 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
     """查询逆变器库存、过滤、计算组合方案。"""
     result = {
         'existing': [],
-        'preferred_brand': None,
-        'other_brands': [],
+        'zero_stock_candidates': [],
+        'brands': [],
         'combinations': [],
         'excluded': [],
         'warnings': []
@@ -378,19 +409,58 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
     if items.empty:
         return result
 
-    # 如果指定了首选品牌，尝试查询该品牌项
+    # 查询零库存逆变器候选（匹配但库存为0的型号，供用户自筹选择）
+    # ⚠️ 只包含「其他条件都满足，唯独库存为0」的物料，排除备注不可用的
+    required_new = inv_req.get('required_new', [])
+    zero_stock_inverters = []
+    def _is_usable(row) -> bool:
+        """检查物料是否因备注被排除（excluded 级别不可用作候选）。"""
+        remark_raw = row.get('备注', None)
+        if pd.isna(remark_raw) or not remark_raw:
+            return True
+        parsed = _parse_remark(remark_raw)
+        return parsed['level'] != 'excluded'
+
+    if required_new:
+        for req_inv in required_new:
+            req_power = req_inv.get('power_kw', 0)
+            req_brand = req_inv.get('brand')
+            zero_items = query_inverters(df, power=req_power, brand=req_brand, has_stock=False)
+            if not zero_items.empty:
+                agg_zero = aggregate_stock(zero_items, qty_col='可用库存', keep_zero=True)
+                for _, row in agg_zero.iterrows():
+                    stock_val = _get_stock(row)
+                    if stock_val == 0 and _is_usable(row):
+                        zero_stock_inverters.append({
+                            'code': row.get('物料编号', ''),
+                            'name': str(row.get('物料名称', '')),
+                            'power': str(row.get('功率', '')),
+                            'power_num': _extract_power_num(row.get('功率', '')),
+                            'brand': str(row.get('厂家', '')) if pd.notna(row.get('厂家')) else '',
+                            'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+                        })
+    # 也查一下首选品牌型号的零库存情况（未指定 required_new 时）
+    if not zero_stock_inverters and preferred_brand_name:
+        zero_items = query_inverters(df, brand=preferred_brand_name, has_stock=False)
+        if not zero_items.empty:
+            agg_zero = aggregate_stock(zero_items, qty_col='可用库存', keep_zero=True)
+            for _, row in agg_zero.iterrows():
+                stock_val = _get_stock(row)
+                if stock_val == 0 and _is_usable(row):
+                    zero_stock_inverters.append({
+                        'code': row.get('物料编号', ''),
+                        'name': str(row.get('物料名称', '')),
+                        'power': str(row.get('功率', '')),
+                        'power_num': _extract_power_num(row.get('功率', '')),
+                        'brand': str(row.get('厂家', '')) if pd.notna(row.get('厂家')) else '',
+                        'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+                    })
+    result['zero_stock_candidates'] = zero_stock_inverters
+
+    # 如果指定了首选品牌，尝试查询该品牌项（纯品牌过滤，不混入物料属性）
     preferred_items = None
     if preferred_brand_name:
         preferred_items = query_inverters(df, has_stock=True, brand=preferred_brand_name)
-        # 也查一下物料名称含"天合原装专用"的（天合原装专用标识在物料名称列）
-        tianhe_original = df[
-            df['物料名称'].astype(str).str.contains('天合原装专用', na=False)
-            & df['可用库存'].notna() & (df['可用库存'] > 0)
-        ]
-        if not tianhe_original.empty:
-            preferred_items = pd.concat([preferred_items, tianhe_original]).drop_duplicates(
-                subset=['物料编号']
-            ) if preferred_items is not None else tianhe_original
 
     agg = aggregate_stock(items, qty_col='可用库存')
     if agg.empty:
@@ -405,51 +475,40 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
     if available.empty:
         return result
 
-    # 按厂家分组
-    preferred_brand_name = preferences.get('prefer_brand')
+    # ── 品牌分组（用原始 items DataFrame，aggregate_stock 会丢弃 厂家 等列） ──
+    prefer_material = preferences.get('prefer_material')
+    avail_codes = set(available['物料编号'].values)
+
+    # 从原始 items 反查可用物料的完整行（含 厂家/功率/备注/价格排序 等列）
+    raw_items = items[items['物料编号'].isin(avail_codes)]
+    # 从聚合数据构建库存总量查询表 {物料编号: 库存总量}
+    stock_lookup = dict(zip(available['物料编号'], available['库存总量']))
+
     brand_groups = {}
-    tianhe_original_items = []      # 天合原装专用项（物料名称列标记，非厂家列）
-    if '厂家' in available.columns:
-        for _, row in available.iterrows():
+    if '厂家' in raw_items.columns:
+        for _, row in raw_items.iterrows():
+            code = row.get('物料编号', '')
             brand = str(row.get('厂家', '未知'))
             if brand not in brand_groups:
                 brand_groups[brand] = []
             item = {
-                'code': row.get('物料编号', ''),
+                'code': code,
                 'power': _extract_power_num(row.get('功率', '')),
                 'power_label': str(row.get('功率', '')),
                 'name': str(row.get('物料名称', '')[:60]),
-                'stock': int(row['库存总量']),
+                'stock': int(stock_lookup.get(code, 0)),
                 'price_rank': row.get('价格排序', None),
-                'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None
+                'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+                'brand': brand,
             }
-            brand_groups[brand].append(item)
-            # 天合原装专用标识在"物料名称"列中，非"厂家"列，额外建立品牌组
-            full_name = str(row.get('物料名称', ''))
-            if '天合原装专用' in full_name:
-                tianhe_original_items.append(item)
+            # 同品牌同物料只保留一条（取首个仓库行）
+            existing_codes = {m['code'] for m in brand_groups[brand]}
+            if code not in existing_codes:
+                brand_groups[brand].append(item)
 
-    # 天合原装品牌组（物料名称含"天合原装专用"的项）
-    if tianhe_original_items:
-        brand_groups['天合原装'] = tianhe_original_items
-
-    # 设置首选品牌（支持天合原装匹配）
-    if preferred_brand_name:
-        if preferred_brand_name in brand_groups:
-            result['preferred_brand'] = {
-                'name': preferred_brand_name,
-                'models': brand_groups.pop(preferred_brand_name)
-            }
-        elif '天合' in preferred_brand_name and '天合原装' in brand_groups:
-            # prefer_brand="天合"时匹配"天合原装"品牌组（物料名称列标识）
-            result['preferred_brand'] = {
-                'name': preferred_brand_name,
-                'models': brand_groups.pop('天合原装')
-            }
-
-    # 其他品牌
+    # 所有品牌平等待遇（不再有 preferred_brand 特权）
     for brand, models in sorted(brand_groups.items()):
-        result['other_brands'].append({'name': brand, 'models': models})
+        result['brands'].append({'name': brand, 'models': models})
 
     # 计算逆变器组合方案
     component_kw = result.get('component_power_kw', 0)
@@ -486,7 +545,7 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
         all_combos = []
 
         # 生成单台方案的辅助函数
-        def _add_single_unit_combos(model_list, brand_tag):
+        def _add_single_unit_combos(model_list, brand_tag, *, stock_sufficient=True):
             """将库存充足的单台方案（在目标功率容差范围内）作为独立方案添加。"""
             added = 0
             target_min = target_power * (1 - tolerance)
@@ -500,7 +559,7 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
                 if target_min <= p <= target_max:
                     # 检查是否有库存
                     stock = m.get('stock', 0)
-                    if stock_sufficient_override and stock < 1:
+                    if stock_sufficient and stock < 1:
                         continue
                     combo = {
                         'total_power': p,
@@ -510,11 +569,11 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
                             'quantity': 1,
                             'subtotal': p,
                             'price_rank': m.get('price_rank', 999),
-                            'brand': brand_tag
+                            'brand': m.get('brand', brand_tag),
                         }],
                         'total_price_rank': m.get('price_rank', 999),
                         'brand': brand_tag,
-                        'is_same_brand': True
+                        'is_same_brand': True,
                     }
                     # 避免重复（检查是否已有相同code的方案）
                     existing_codes = set()
@@ -528,42 +587,46 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
 
         stock_sufficient_override = preferences.get('stock_sufficient', True)
 
-        if result['preferred_brand']:
-            preferred_models = result['preferred_brand'].get('models', [])
-            if preferred_models:
-                preferred_codes = set(m['code'] for m in preferred_models)
-                preferred_raw = raw_available[raw_available['物料编号'].isin(preferred_codes)]
-                if not preferred_raw.empty:
+        # 步骤 0：物料偏好方案（如天合原装专用）— 跨品牌优先推荐
+        if result.get('preferred_material'):
+            material_models = result['preferred_material']['models']
+            if material_models:
+                material_codes = set(m['code'] for m in material_models)
+                material_raw = raw_available[raw_available['物料编号'].isin(material_codes)]
+                if not material_raw.empty:
                     combos = find_inverter_combinations(
-                        preferred_raw, target_power, tolerance,
-                        max_combos, same_brand=True, stock_sufficient=stock_sufficient_override
+                        material_raw, target_power, tolerance,
+                        max_combos, same_brand=False,
+                        stock_sufficient=stock_sufficient_override,
                     )
                     for combo_data in combos:
                         formatted = format_combination(combo_data)
+                        formatted['is_material_preferred'] = True
                         all_combos.append(formatted)
+                # 单台方案：物料偏好的型号各自保留实际品牌
+                _add_single_unit_combos(
+                    material_models, '天合原装',
+                    stock_sufficient=stock_sufficient_override,
+                )
 
-                # 补充首选品牌的单台方案（确保库存充足的大功率型号被推荐）
-                _add_single_unit_combos(preferred_models, result['preferred_brand']['name'])
+        # 所有品牌各自 same_brand 搜索（不再有 preferred_brand 特权）
+        for brand_entry in result['brands']:
+            if len(all_combos) >= max_combos:
+                break
+            brand_name = brand_entry['name']
+            brand_raw = raw_available[raw_available['厂家'] == brand_name]
+            if not brand_raw.empty:
+                combos = find_inverter_combinations(
+                    brand_raw, target_power, tolerance,
+                    max_combos - len(all_combos),
+                    same_brand=True, stock_sufficient=stock_sufficient_override
+                )
+                for combo_data in combos:
+                    formatted = format_combination(combo_data)
+                    all_combos.append(formatted)
 
-        # 如果首选品牌方案不够，补充其他品牌同品牌方案
-        if len(all_combos) < max_combos:
-            for brand_entry in result['other_brands']:
-                brand_name = brand_entry['name']
-                if len(all_combos) >= max_combos:
-                    break
-                brand_raw = raw_available[raw_available['厂家'] == brand_name]
-                if not brand_raw.empty:
-                    combos = find_inverter_combinations(
-                        brand_raw, target_power, tolerance,
-                        max_combos - len(all_combos),
-                        same_brand=True, stock_sufficient=stock_sufficient_override
-                    )
-                    for combo_data in combos:
-                        formatted = format_combination(combo_data)
-                        all_combos.append(formatted)
-
-                # 补充其他品牌的单台方案
-                _add_single_unit_combos(brand_entry.get('models', []), brand_name)
+            # 补充品牌的单台方案
+            _add_single_unit_combos(brand_entry.get('models', []), brand_name, stock_sufficient=stock_sufficient_override)
 
         # 最后补充混合品牌方案
         if len(all_combos) < max_combos:
@@ -614,8 +677,9 @@ def query_boxes_section(data: dict, requirements: dict, preferences: dict) -> di
     if df.empty:
         return result
 
-    # 查询 50kW 并网柜
-    items = query_boxes(df, power=50, has_stock=True)
+    # 查询并网柜（默认 50kW，可通过 requirements.combiner_boxes.power 自定义）
+    box_power = box_req.get('power', 50)
+    items = query_boxes(df, power=box_power, has_stock=True)
     if items.empty:
         return result
 

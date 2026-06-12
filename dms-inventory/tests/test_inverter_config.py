@@ -97,12 +97,13 @@ class TestFindInverterCombinations(unittest.TestCase):
             self.inverters, target_power=50.0, tolerance=0.1,
             max_combinations=5, same_brand=True, stock_sufficient=True,
         )
+        # 按物料编号聚合库存总量（Mock 数据中同一编码可能存在多行）
+        agg_stock = self.inverters.groupby('物料编号')['可用库存'].sum()
         for combo_data in combos:
             for item in combo_data['combo']:
                 code, _, qty = item[0], item[1], item[2]
-                stock_row = self.inverters[self.inverters['物料编号'] == code]
-                if len(stock_row) > 0:
-                    stock = stock_row['可用库存'].values[0]
+                if code in agg_stock.index:
+                    stock = agg_stock[code]
                     self.assertGreaterEqual(stock, qty)
 
     def test_no_stock_returns_empty(self):

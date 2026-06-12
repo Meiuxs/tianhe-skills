@@ -88,6 +88,42 @@ metadata:
 
 ## 工作流
 
+> **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。Agent 执行前自动检测路径（通过 `scripts/detect_skill_dir.py` 扫描用户目录下所有 `skills/` 目录，不限 Agent 类型）：
+> ```bash
+> # 自动检测 skill 安装目录（扫描 ~/ 下所有含 skills/ 的目录）
+> SKILL_DIR=$(python << 'DETECTSKILL'
+> import os, sys, subprocess
+> 
+> skill = 'dms-inventory'
+> candidates = []
+> 
+> # 1. SKILL_TARGET 环境变量（手动覆盖）
+> if 'SKILL_TARGET' in os.environ:
+>     candidates.append(os.environ['SKILL_TARGET'])
+> 
+> # 2. 扫描 ~/ 下所有含 skills/ 子目录的目录（不限 Agent）
+> home = os.path.expanduser('~')
+> for entry in os.scandir(home):
+>     if entry.is_dir():
+>         skills_dir = os.path.join(entry.path, 'skills')
+>         if os.path.isdir(skills_dir):
+>             candidates.append(skills_dir)
+> 
+> # 3. 找 detect_skill_dir.py 并执行（自动去重）
+> for base in dict.fromkeys(candidates):
+>     sp = os.path.join(base, skill, 'scripts', 'detect_skill_dir.py')
+>     if os.path.isfile(sp):
+>         r = subprocess.run([sys.executable, sp, skill],
+>                            capture_output=True, text=True)
+>         if r.returncode == 0 and r.stdout.strip():
+>             print(r.stdout.strip())
+>             sys.exit(0)
+> sys.exit(1)
+> DETECTSKILL
+> )
+> ```
+> 设置成功后可用 `echo "$SKILL_DIR"` 确认路径。
+>
 > **核心串行规则：必须先确认组件方案（DC 容量）才能跑编排器匹配逆变器/并网柜（DC/AC 比）。**
 > 组件功率决定 DC 总容量 → DC 容量决定 DC/AC 比 → DC/AC 比决定编排器推荐的逆变器组合。
 > **三步必须串行，禁止并行提问。**
@@ -101,8 +137,6 @@ metadata:
 用 `quick_query.py` 查询指定组件的库存：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
-
 # 按功率关键词模糊查询组件库存（如 715W、550W）
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
   --power "${功率}W" --category 组件 --aggregate
@@ -115,13 +149,18 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 | **有库存且满足需求（`库存总量 >= qty`）** | → 保留原功率，进入**子步骤 2** |
 | **无库存或不足（`库存总量 == 0` 或 `库存总量 < qty`）** | → 用 `AskUserQuestion` 确认应对策略（见下方表格） |
 
+> **ℹ️ 零库存候选物料：** `quick_query.py --aggregate` 的输出**包含库存为0的物料**（聚合时 `keep_zero=True`）。当库存不足时，查看输出中是否有匹配功率但库存为0的物料编号。
+> **⚠️ 仅当其他条件都满足（功率匹配、无项目专用/未上架等排除性备注）、唯独库存为0时**，才将该物料编号作为"自筹指定编号"选项展示。有排除性备注的零库存物料不应推荐。
+
 **⚠️ 此阶段只问物料策略，不问容配比/组合方案。DC 容量未确定前不能跑编排器。**
 
 | 选项 | 说明 | 后续影响（DC 容量） |
 |:----|:------|:-------------------|
 | **接受替代功率** | 推荐库存最足的相近功率 | DC = 替代功率 × 数量，需重跑编排器 |
-| **用户自筹** | 组件自行解决 | DC = 原需求功率 × 数量，**仍要跑编排器**匹配逆变器 |
+| **自筹指定编号（推荐）** | 使用 quick_query 输出中匹配但库存为0的 `物料编号`，由用户自行采购该型号。例如："此规格有物料 `6B001440`（715W）但库存为0，您是否自筹该编号？" | DC = 原需求功率 × 数量，**仍要跑编排器**匹配逆变器 |
 | **仅精确匹配** | 指定功率无库存则终止 | 流程终止 |
+
+> ✅ **重要：** 用户选择"自筹指定编号"后，必须记录该物料编号和数量，在**阶段四**写入 `inventory_result.json` 的 `inventory_result.components.code` 字段。
 
 > **⚠️ 禁止提前问用户容配比：** 组件确认后直接继续，容配比由编排器自动处理。编排器的 `preferences.dc_ac_ratio_range` 固定为 `[1.1, 1.2]`，构造 input.json 时必须照写此值。
 
@@ -130,8 +169,6 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 若用户在项目描述中已指定逆变器型号/功率/数量（如"2台110KW天合逆变器"），用 `quick_query.py` 查询库存：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
-
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
   --power "${功率}KW" --category 逆变器 --aggregate
 ```
@@ -146,9 +183,11 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 | 选项 | 说明 | 后续操作 |
 |:----|:------|:---------|
 | **接受替代方案** | 编排器自动从库存中推荐其他品牌/型号的可用组合 | `input.json` 中**不设** `required_new`，让编排器自由推荐 |
-| **用户自筹** | 逆变器用户自行解决，不通过 DMS 库存采购 | `input.json` 中**不设** `required_new`，仅保留 `existing` 信息（如有） |
+| **自筹指定编号** | 使用 quick_query 输出中匹配但库存为0的物料编号，由用户自行采购该型号 | `input.json` 中**不设** `required_new`，仅保留 `existing` 信息；记录物料编号到最终结果 |
 | **仅精确匹配** | 指定型号无库存则终止流程 | 流程终止 |
 
+> **ℹ️ 零库存候选：** `quick_query.py --aggregate` 输出同样包含库存为0的逆变器物料。仅当匹配条件（功率/品牌）的物料满足「其他条件都满足、仅库存为0、无排除性备注」时，展示其物料编号供自筹选择。
+>
 > ⚠️ 子步骤 2 只问逆变器策略（接受替代/自筹/终止），不要在这里让用户选具体组合方案（那是阶段三的任务）。
 
 若用户未指定逆变器型号/功率，则跳过此子步骤。
@@ -164,6 +203,7 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 | `requirements.components.power` | 组件功率（W） | ✅ |
 | `requirements.components.qty` | 组件需求数量 | ✅ |
 | `requirements.components.source` | `dms_stock`（库存采购）或 `user_self`（用户自筹） | ✅ |
+| `requirements.components.code` | 自筹时指定物料编号（如 `"6B001440"`），非自筹不填 | ⭕ |
 | `requirements.inverters.existing` | 已有逆变器 `[{model, power, qty}]` | ⭕ |
 | `requirements.inverters.required_new` | 指定新增逆变器 `[{model, power, qty}]`，不指定则由编排器推荐 | ⭕ |
 | `requirements.combiner_boxes.existing` | 已有并网柜 `[{power, qty}]` | ⭕ |
@@ -183,7 +223,6 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 **组件确认后、DC 容量确定后，才能运行编排器。**
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
 TMP_DIR="/tmp/dms_inventory"
 mkdir -p "$TMP_DIR"
 
@@ -244,6 +283,11 @@ print(json.dumps(d, ensure_ascii=False, indent=2))
 
 ### 阶段四：用户确认 → 输出最终结果
 
+根据用户最终确认的方案，构建 `inventory_result.json`。**关键规则：**
+
+- 若组件/逆变器选择「自筹指定编号」，`inventory_result.components` 或 `inventory_result.inverters` 中必须写入 `code`（物料编号）和 `qty`（数量）
+- 若从库存采购，`source` 为 `stock`；若用户自筹，`source` 为 `user_self`
+
 ```bash
 TMP_DIR="/tmp/dms_inventory"
 analysis=$(cat "$TMP_DIR/analysis.json")
@@ -282,6 +326,19 @@ print('最终结果已写入:', out)
 "
 ```
 
+> ⚠️ **LLM 注意：** 若用户选择了「自筹指定编号」，上述 Python 脚本输出的 `inventory_result.json` 需要补充以下字段（由 LLM 自行填充，Python 脚本仅写骨架）：
+> ```json
+> {
+>   "components": {
+>     "spec": "715W",
+>     "qty": 800,
+>     "source": "user_self",
+>     "code": "6B001440"
+>   }
+> }
+> ```
+> `code` 字段指向零库存但匹配的物料编号，供后续 BOM 生成使用。
+
 ### 阶段五：回顾与反思
 
 流程完成后主动复盘：
@@ -313,7 +370,6 @@ print('最终结果已写入:', out)
 ## 快捷查询（按物料编号/名称/功率）
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
 # 按物料编号查询
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --code 6B001492 --aggregate
 # 按物料名称模糊查询（搜物料名称列）
