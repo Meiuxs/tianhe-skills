@@ -86,6 +86,9 @@ python run_weekly_report.py --stats-only --this-month
 
 # 统计指定日期范围
 python run_weekly_report.py --stats-only --start-date 2026-06-01 --end-date 2026-06-30
+
+# 指定输入文件
+python run_weekly_report.py --stats-only --input-xlsx "询价汇总_20260601_090000.xlsx" --start-date 2026-06-01 --end-date 2026-06-30
 ```
 
 ### 日期解析
@@ -94,8 +97,11 @@ python run_weekly_report.py --stats-only --start-date 2026-06-01 --end-date 2026
 # 解析日期段标签
 python resolve_date_range.py "本周"
 python resolve_date_range.py "上月" --json
+python resolve_date_range.py "上个月12号到现在" --json
 python resolve_date_range.py "2026-06-01 ~ 2026-06-07"
 ```
+
+> 支持的完整格式列表详见 `references/date_parser.md`（含：相对月+日、中文数字、至今后缀等）。
 
 ---
 
