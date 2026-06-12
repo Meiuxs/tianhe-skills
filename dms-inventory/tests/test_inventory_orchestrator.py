@@ -39,8 +39,7 @@ from inventory_orchestrator import (
     _extract_power_num,
     _calc_dc_ac_ratio,
     _calc_existing_kw,
-    _is_tianhe_original,
-    _serializable,
+_serializable,
     run_analysis,
     REMARK_RULES,
 )
@@ -275,47 +274,10 @@ class TestCalcExistingKw(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════
-#  7. _is_tianhe_original
-# ═══════════════════════════════════════════════════════════
-
-class TestIsTianheOriginal(unittest.TestCase):
-    """测试 _is_tianhe_original"""
-
-    def test_exact_match(self):
-        """'天合原装专用' 匹配"""
-        self.assertTrue(_is_tianhe_original('天合原装专用组件'))
-
-    def test_tianyuan_match(self):
-        """'天原' 缩写匹配"""
-        self.assertTrue(_is_tianhe_original('天原专用组件'))
-
-    def test_yuanzhuang_special_match(self):
-        """'原装专用' 匹配（无品牌前缀）"""
-        self.assertTrue(_is_tianhe_original('原装专用组件'))
-
-    def test_no_match(self):
-        """普通物料名称不匹配"""
-        self.assertFalse(_is_tianhe_original('普通组件'))
-
-    def test_nan_input(self):
-        """NaN 输入返回 False"""
-        self.assertFalse(_is_tianhe_original(float('nan')))
-
-    def test_empty_string(self):
-        """空字符串返回 False"""
-        self.assertFalse(_is_tianhe_original(''))
-
-    def test_none_input(self):
-        """None 返回 False"""
-        self.assertFalse(_is_tianhe_original(None))
-
-
-# ═══════════════════════════════════════════════════════════
-#  8. _serializable
+#  7. _serializable
 # ═══════════════════════════════════════════════════════════
 
 class TestSerializable(unittest.TestCase):
-    """测试 _serializable"""
     """测试 _serializable"""
 
     def test_pandas_integer(self):
@@ -341,7 +303,7 @@ class TestSerializable(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════
-#  9. run_analysis — 纯组件需求
+#  8. run_analysis — 纯组件需求
 # ═══════════════════════════════════════════════════════════
 
 class TestRunAnalysisComponentsOnly(unittest.TestCase):
@@ -443,7 +405,7 @@ class TestRunAnalysisComponentsOnly(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════
-#  10. run_analysis — prefer_material 物料偏好
+#  9. run_analysis — prefer_material 物料偏好
 # ═══════════════════════════════════════════════════════════
 
 class TestRunAnalysisPreferMaterial(unittest.TestCase):
@@ -482,20 +444,24 @@ class TestRunAnalysisPreferMaterial(unittest.TestCase):
         }
         result = run_analysis(params)
         inverters = result['inverters']
-        # preferred_material 收集已移除，改为验证品牌分组（所有品牌平等待遇）
+        # prefer_material 前置过滤，只保留匹配的物料进入品牌分组
         self.assertIn('brands', inverters)
         brand_names = [b['name'] for b in inverters['brands']]
         self.assertIn('上能', brand_names)
         self.assertIn('华为', brand_names)
-        # 上能品牌包含天合原装专用和普通物料
+        # 上能品牌只包含天合原装专用物料（普通物料被过滤掉）
         shangneng = next(b for b in inverters['brands'] if b['name'] == '上能')
         shangneng_codes = [m['code'] for m in shangneng['models']]
         self.assertIn('INV001', shangneng_codes)
-        self.assertIn('INV003', shangneng_codes)
-        # 华为品牌只包含天合原装专用物料
+        self.assertNotIn('INV003', shangneng_codes)
+        # 华为品牌包含天合原装专用物料
         huawei = next(b for b in inverters['brands'] if b['name'] == '华为')
         huawei_codes = [m['code'] for m in huawei['models']]
         self.assertIn('INV002', huawei_codes)
+        # preferred_material 记录过滤信息
+        self.assertIn('preferred_material', inverters)
+        self.assertEqual(inverters['preferred_material']['keyword'], '天合原装专用')
+        self.assertEqual(inverters['preferred_material']['total_count'], 2)
 
     @patch('inventory_orchestrator.load_inventory')
     def test_prefer_material_no_match(self, mock_load):
@@ -564,46 +530,6 @@ class TestRunAnalysisPreferMaterial(unittest.TestCase):
         result = run_analysis(params)
         inverters = result['inverters']
         self.assertNotIn('preferred_material', inverters)
-
-    @patch('inventory_orchestrator.load_inventory')
-    def test_prefer_material_combos_generated(self, mock_load):
-        """prefer_material 物料被优先用于生成组合方案，且方案标记 is_material_preferred"""
-        mock_load.return_value = {
-            '组件': pd.DataFrame({
-                '物料编号': ['6B001492'],
-                '物料名称': ['组件A'],
-                '功率': ['730W'],
-                '可用库存': [800.0],
-                '仓库名称': ['南宁仓'],
-            }),
-            '逆变器': pd.DataFrame({
-                '物料编号': ['INV001', 'INV002'],
-                '物料名称': ['天合原装专用40kW', '天合原装专用40kW'],
-                '功率': ['40kW', '40kW'],
-                '可用库存': [5.0, 3.0],
-                '厂家': ['上能', '华为'],
-                '价格排序': [1, 2],
-                '备注': [None, None],
-            }),
-            '并网箱': pd.DataFrame(),
-        }
-        params = {
-            'requirements': {
-                'components': {'power': 730, 'qty': 800},
-                'inverters': {},
-            },
-            'preferences': {
-                'prefer_material': '天合原装专用',
-            },
-        }
-        result = run_analysis(params)
-        combos = result['inverters'].get('combinations', [])
-        # 至少第一个组合是物料偏好的
-        if combos:
-            self.assertTrue(
-                any(c.get('is_material_preferred') for c in combos),
-                "物料偏好方案应标记 is_material_preferred=True",
-            )
 
 
 if __name__ == "__main__":
