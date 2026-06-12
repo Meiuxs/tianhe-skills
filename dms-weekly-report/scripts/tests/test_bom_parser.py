@@ -65,6 +65,21 @@ class TestPowerExtraction(unittest.TestCase):
         self.assertIsNotNone(power)
         self.assertTrue(compare_floats(power, 50.0))
 
+    def test_extract_power_inverter_underscore_separated(self):
+        """逆变器名称以下划线分段，kW 前不是下划线。"""
+        # 组串式逆变器_SG110CX_P2H-CN-110kW_9路/2*40+7*20A
+        # 注意：110kW 后跟着 _，之前 \b 在此处不匹配
+        name = "组串式逆变器_SG110CX_P2H-CN-110kW_9路/2*40+7*20A_三相_180-1000V_380/400V_NB/T32004_IP66_RS485/4G(选配)_风冷"
+        power = extract_power(name)
+        self.assertIsNotNone(power)
+        self.assertTrue(compare_floats(power, 110.0))
+
+    def test_extract_power_kw_after_dash(self):
+        """kW 在横杠之后。"""
+        power = extract_power("SG33CX-P2-CN-33kW")
+        self.assertIsNotNone(power)
+        self.assertTrue(compare_floats(power, 33.0))
+
 
 class TestCapacityExtraction(unittest.TestCase):
     """容量值提取测试。"""

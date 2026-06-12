@@ -34,7 +34,9 @@ def extract_power(name: str) -> float | None:
             return val / 1000 if unit_lower == "w" else val
 
     # 回退：匹配任意位置的 kW 或 W
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?W)\b", name, re.IGNORECASE)
+    # 注意：不能用 \b 结尾，因为 _ 在正则中属于 \w（单词字符），
+    # 逆变器名称如 "110kW_9路" 中 kW 后跟 _ 时 \b 不匹配。
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?W)(?![a-zA-Z])", name, re.IGNORECASE)
     if m and "h" not in m.group(2).lower():
         val = float(m.group(1))
         return val / 1000 if m.group(2).lower() == "w" else val
@@ -54,7 +56,8 @@ def extract_capacity(name: str) -> float | None:
         return val / 1000 if m.group(2).lower() == "wh" else val
 
     # 回退：匹配任意位置的 kWh 或 Wh
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?Wh)\b", name, re.IGNORECASE)
+    # 注意：不能用 \b 结尾，因为 _ 在正则中属于 \w（单词字符）
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?Wh)(?![a-zA-Z])", name, re.IGNORECASE)
     if m:
         val = float(m.group(1))
         return val / 1000 if m.group(2).lower() == "wh" else val
