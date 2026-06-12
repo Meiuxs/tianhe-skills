@@ -351,35 +351,73 @@ def stats_from_excel(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="DMS 非标询价周报自动化")
-    parser.add_argument("--headless", action="store_true", help="无头模式（不显示浏览器）")
+    parser = argparse.ArgumentParser(
+        description="DMS 非标询价周报自动化 — 从 DMS 流程中心筛选询价、提取详情、检查下单、生成 Excel 报表。",
+        epilog=(
+            "使用示例:\n"
+            "  %(prog)s --date-label \"本月\" --headless          # 本月数据，无头模式\n"
+            "  %(prog)s --date-label \"上个月到现在\"              # 上个月至今\n"
+            "  %(prog)s --start-date 2026-06-01 --end-date 2026-06-07  # 自定义日期\n"
+            "  %(prog)s --weeks 1                                # 上周数据\n"
+            "  %(prog)s --stats-only                             # 仅统计（跳过浏览器）\n"
+            "  %(prog)s --stats-only --this-month                 # 仅统计本月\n"
+            "\n"
+            "日期标签（--date-label）支持: 本周 / 上周 / 本月 / 上月 / 本季度 / 去年 /\n"
+            "  6月1号到6月7号 / 上个月12号到现在 / 上个月到现在 等自然语言格式。\n"
+            "  优先级: --start-date > --date-label > --weeks > 默认本周"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--headless", action="store_true",
+                        help="无头模式（不显示浏览器窗口），服务器环境或后台运行必选")
     parser.add_argument("--weeks", type=int, default=0,
-                        help="查询最近 N 周（0=本周, 1=上周, 默认 0）")
+                        help="查询最近 N 周（0=本周, 1=上周, 2=上上周…），默认 0")
     parser.add_argument("--start-date", type=str, default=None,
-                        help="自定义开始日期（YYYY-MM-DD），优先于 --weeks")
+                        help="开始日期，格式 YYYY-MM-DD（例: 2026-06-01）。"
+                             "与 --end-date 配合使用，设此值后 --weeks 失效")
     parser.add_argument("--end-date", type=str, default=None,
-                        help="自定义结束日期（YYYY-MM-DD），默认为今天")
+                        help="结束日期，格式 YYYY-MM-DD（例: 2026-06-07）。"
+                             "不传则默认为今天")
     parser.add_argument("--date-label", type=str, default=None,
-                        help="中文日期标签，如'本周'/'本月'/'上个月到现在'，自动解析为起止日期。"
+                        help="中文日期标签，自动解析为起止日期。"
+                             "支持: 本周/上周/本月/上月/上个月到现在/6月1号到6月7号 等。"
                              "优先级低于 --start-date/--end-date，高于 --weeks")
     parser.add_argument("--workers", type=int, default=4,
-                        help="并行并发数（默认 4）")
+                        help="并行提取并发数（1-8），默认 4。根据网络和 DMS 响应速度调整，"
+                             "过高可能被限流")
     parser.add_argument("--output-dir", type=str, default=None,
-                        help="输出目录（默认为当前工作目录）")
+                        help="输出目录（存放 Excel 和 HTML），默认当前工作目录")
     parser.add_argument("--verbose", "-v", action="store_true",
-                        help="输出详细调试日志")
+                        help="输出 DEBUG 级别详细日志，排查问题时使用")
     parser.add_argument("--stats-only", action="store_true",
-                        help="仅统计模式：从已有Excel按日期范围重新统计，跳过浏览器操作")
+                        help="仅统计模式：从已有 Excel 读取数据，按日期范围重新统计。"
+                             "跳过浏览器登录和提取，快速出数")
     parser.add_argument("--input-xlsx", type=str, default=None,
-                        help="仅统计模式下显式指定输入的询价汇总 Excel 文件路径（默认自动查找）")
+                        help="仅统计模式下指定输入的 Excel 文件路径。"
+                             "不传则自动查找 --output-dir 中的询价汇总文件")
     parser.add_argument("--this-month", action="store_true",
-                        help="快捷统计本月（配合 --stats-only 使用）")
+                        help="快捷统计本月（仅配合 --stats-only 使用），"
+                             "等价于 --stats-only --date-label \"本月\"")
     args = parser.parse_args()
 
     configure_logging(args.verbose)
 
-    # 如果指定了 --date-label，用日期解析脚本解析
-    if args.date_label and not args.start_date:
+    # ───── 参数约束校验 ─────
+
+    # workers 范围限制
+    if args.workers < 1 or args.workers > 8:
+        logger.error("--workers 并发数超出范围（允许 1-8），当前值: %d", args.workers)
+        sys.exit(1)
+
+    # 互斥检查: --stats-only + --this-month = --stats-only + --date-label 本月
+    if args.stats_only and args.this_month:
+        args.start_date, args.end_date = None, None
+        args.date_label = "本月"
+
+    # 三种日期方式只能选一种（优先级: start-date > date-label > weeks）
+    if args.start_date and args.end_date:
+        pass  # 用户明确指定了日期范围
+    elif args.date_label:
         try:
             import subprocess, json
             script_dir = os.path.dirname(os.path.abspath(__file__))

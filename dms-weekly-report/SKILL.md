@@ -42,44 +42,33 @@ metadata:
 
 ### 步骤 1：解析日期范围
 
-直接根据用户话语中的时段词调用日期解析脚本：
+先运行 `--help` 查看脚本支持的日期标签和参数说明：
 
 ```bash
 SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
-RANGE=$(python "$SKILL_DIR/scripts/resolve_date_range.py" "本周" --json)
+python "$SKILL_DIR/scripts/resolve_date_range.py" --help
+```
+
+确认支持的格式后，选择合适的标签传给脚本，并用 `--json` 输出结果：
+
+```bash
+RANGE=$(python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月到现在" --json)
 START=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['start'])")
 END=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['end'])")
 RANGE_STR=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['range_str'])")
 ```
 
-> 以上命令将日期范围信息存入 `$START`（开始日期）、`$END`（结束日期）和 `$RANGE_STR`（显示用范围文本）三个 Shell 变量，后续步骤直接使用。
+> 以上命令将日期范围存入 `$START`、`$END`、`$RANGE_STR` 三个 Shell 变量。
 
-**匹配规则（从用户话语中提取时段词）：**
+**从用户话语提取标签的优先级：**
+1. 先检查标准标签（本周/上周/本月/上月/本季度/去年）
+2. 再检查中文日期范围（`6月1号到6月7号` 等自然表述）
+3. 再检查 `YYYY-MM-DD ~ YYYY-MM-DD` 标准格式
+4. 都无匹配 → 默认 `"本周"`，向用户说明
 
-| 用户说... | 传给脚本的标签 | 行为 |
-|-----------|---------------|------|
-| "帮我把本周的询价做一下周报" | `"本周"` | 本周一到今天 |
-| "做上周的周报" / "做上一周的" | `"上周"` | 上周一到上周日 |
-| "查一下这个月的情况" / "做本月统计" | `"本月"` | 本月一号到今天 |
-| "上个月的询价汇总一下" | `"上月"` | 上个月整月 |
-| "做本季度的报表" | `"本季度"` | 本季度第一天到今天 |
-| "看看去年全年的数据" | `"去年"` | 去年1月1日到12月31日 |
-| "查 6月1号到6月7号的数据" | `"6月1号到6月7号"` | 自动解析中文日期格式（**支持中文数字**） |
-| "上个月12号到现在" | `"上个月12号到现在"` | 上月12日 ~ 今天 |
-| "上个月到现在" | `"上个月到现在"` | 上月1日 ~ 今天 |
-| 用户没说任何时段（只说"做周报"） | `"本周"` | 默认本周 |
+> 解析失败时（退出码非 0）才回退询问用户。更多格式详见 `references/date_parser.md`。
 
-> 更多日期格式详见 `references/date_parser.md`。
-
-**提取方法：** 从用户话语中按优先级匹配关键词
-1. 先检查 "去年"/"本季度"/"上个月"/"上月"/"本月"/"上周"/"本周"
-2. 再检查中文日期范围 `\d{1,2}月\d{1,2}号?\s*(到|~)\s*...`
-3. 再检查 `上个月到现在` / `上个月X号到现在` 等自然表述
-4. 再检查 `YYYY-MM-DD ~ YYYY-MM-DD`
-5. 都无匹配 → 默认 `"本周"`，**然后向用户说一句**：
-   > "没检测到时段时间，默认按本周（本周一~今天）统计。如果需要其他时段请告诉我。"
-
-> 不再使用 `AskUserQuestion` 方式让用户三选一确认，直接用脚本解析。只有在解析失败时（`resolve_date_range.py` 退出码非 0）才回退询问用户。
+**快捷方式：** 也可以跳过本步骤，直接在**步骤 3**中用 `--date-label` 一步完成。
 
 ### 步骤 2：检查运行环境
 
@@ -99,47 +88,36 @@ python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 
 ### 步骤 3：运行脚本
 
-本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作。
+先用 `--help` 查看 `run_weekly_report.py` 的全部参数说明和使用示例：
 
-**推荐方式（一步到位）：使用 `--date-label` 直接传入中文日期标签，脚本内部自动解析日期范围。**
+```bash
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
+python "$SKILL_DIR/scripts/run_weekly_report.py" --help
+```
+
+确认参数后，推荐用 `--date-label` 一步到位（自动解析日期，无需步骤 1）：
 
 ```bash
 SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
-# 使用中文日期标签（一步到位，无需先解析日期）
-python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless
-
-# 也可用其他标签：--date-label "本周" / "上月" / "上个月到现在" / "6月1号到6月7号" 等
+# 最简用法：中文日期标签 + 无头模式
 python "$SCRIPT" --output-dir "$PWD" --date-label "上个月到现在" --headless
 ```
 
-完整用法示例：
+**常用模式速查：**
 
-```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
-SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
+| 场景 | 命令 |
+|------|------|
+| 本月数据（完整模式） | `python "$SCRIPT" --output-dir "$PWD" --date-label "本月"` |
+| 本月数据（无头模式） | `python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless` |
+| 上周数据 | `python "$SCRIPT" --output-dir "$PWD" --weeks 1` |
+| 自定义日期范围 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-06-01" --end-date "2026-06-07"` |
+| 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --date-label "本月"` |
 
-# 使用步骤 1 解析的日期范围
-python "$SCRIPT" --output-dir "$PWD" --date-label "上个月到现在"
-
-# 无头模式（不显示浏览器）
-python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless
-
-# 仅统计模式（跳过浏览器，从已有 Excel 重算统计）
-# 默认自动查找 --output-dir 中的询价汇总文件
-python "$SCRIPT" --output-dir "$PWD" --stats-only --start-date "$START" --end-date "$END"
-
-# 仅统计模式（显式指定输入文件）
-python "$SCRIPT" --output-dir "$PWD" --stats-only --input-xlsx "询价汇总_20260610_180000.xlsx" --start-date "$START" --end-date "$END"
-
-# 查上周（快捷方式，无需步骤 1）
-python "$SCRIPT" --output-dir "$PWD" --weeks 1
-```
-
-> **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录，方便查找。
+> **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录。
 >
-> **注意：** 如果生成的报表中流程编号最后几位不正确，说明 Excel 中该列以数字格式存储而非文本。详见 FAQ「流程编号显示为不正确的数字」。
+> **注意：** 流程编号在 Excel 中显示不正确时，见 FAQ「流程编号显示为不正确的数字」。
 
 ### 步骤 4：呈现结果
 
