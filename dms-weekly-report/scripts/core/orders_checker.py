@@ -30,7 +30,7 @@ async def fetch_ordered_flow_ids(
     支持分页拉取（每页 500 条）。
 
     Args:
-        token: access_token（从已登录页面 URL 提取）
+        token: access_token（通过 dms_browser.get_access_token(context) 获取）
         start_date: 开始日期，格式 YYYY-MM-DD
         end_date: 结束日期，格式 YYYY-MM-DD
 

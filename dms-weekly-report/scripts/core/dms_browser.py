@@ -110,6 +110,25 @@ async def ensure_logged_in(page: Any, target_url: str) -> None:
         await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
 
 
+async def get_access_token(context: Any) -> str | None:
+    """从浏览器 cookie 中提取 DMS 的 access_token。
+
+    登录后 DMS 系统会在 cookie 中设置 dms_admin_token，
+    该 token 用于后端 API 调用的 Authorization 头。
+
+    Args:
+        context: Playwright BrowserContext
+
+    Returns:
+        access_token 字符串，未登录或无 cookie 时返回 None。
+    """
+    cookies = await context.cookies()
+    for c in cookies:
+        if c["name"] == "dms_admin_token":
+            return c["value"]
+    return None
+
+
 def get_week_range(weeks_ago: int = 0) -> tuple[str, str]:
     """计算指定周的开始（周一）和结束日期。"""
     today = datetime.now()

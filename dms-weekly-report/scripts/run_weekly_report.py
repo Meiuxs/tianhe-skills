@@ -39,7 +39,7 @@ from column_definitions import DMS_URL, NAV_TIMEOUT, LOAD_TIMEOUT
 from core.dms_browser import (
     FlowRecord,
     do_login, filter_and_get_flow_ids,
-    extract_all_parallel, get_week_range,
+    extract_all_parallel, get_access_token, get_week_range,
     is_on_login_page,
 )
 
@@ -148,9 +148,8 @@ async def run(args: argparse.Namespace) -> None:
             else:
                 logger.info("会话有效（已复用缓存）")
 
-            # 登录后从 cookie 中提取 access_token（供后续下单检查使用）
-            dms_cookies = [c for c in await context.cookies() if c["name"] == "dms_admin_token"]
-            access_token = dms_cookies[0]["value"] if dms_cookies else None
+            # 登录后提取 access_token（供后续 API 调用使用）
+            access_token = await get_access_token(context)
             if access_token:
                 logger.debug("已获取 access_token")
             else:
