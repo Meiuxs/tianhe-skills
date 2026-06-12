@@ -101,7 +101,7 @@ metadata:
 用 `quick_query.py` 查询指定组件的库存：
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/dms-inventory"
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
 
 # 按功率关键词模糊查询组件库存（如 715W、550W）
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
@@ -123,14 +123,14 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 | **用户自筹** | 组件自行解决 | DC = 原需求功率 × 数量，**仍要跑编排器**匹配逆变器 |
 | **仅精确匹配** | 指定功率无库存则终止 | 流程终止 |
 
-> **⚠️ 禁止提前问用户容配比：** 组件确认后直接继续，容配比由编排器自动处理。编排器的 `preferences.dc_ac_ratio_range` 已预设合理范围（默认 `[1.0, 1.3]`），会自动计算最优组合。
+> **⚠️ 禁止提前问用户容配比：** 组件确认后直接继续，容配比由编排器自动处理。编排器的 `preferences.dc_ac_ratio_range` 固定为 `[1.1, 1.2]`，构造 input.json 时必须照写此值。
 
 #### 子步骤 2：检查指定逆变器库存（如用户已指定）
 
 若用户在项目描述中已指定逆变器型号/功率/数量（如"2台110KW天合逆变器"），用 `quick_query.py` 查询库存：
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/dms-inventory"
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
 
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
   --power "${功率}KW" --category 逆变器 --aggregate
@@ -173,6 +173,9 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 | `preferences.exclude_unlisted` | 排除未上架物料，默认 `true` | ⭕ |
 | `preferences.dc_ac_ratio_range` | DC/AC 比范围 `[min, max]`，默认 `[1.1, 1.2]` | ⭕ |
 
+> **⚡ 构造 input.json 时，`dc_ac_ratio_range` 直接写死 `[1.1, 1.2]`，不要写其他值，也不要留空。**
+> 如需调整范围，先用 AskUserQuestion 让用户确认后再修改。
+
 完整 JSON 格式和示例见 `references/inventory-flow.md`。阶段一完成后进入**阶段二**。
 
 ### 阶段二：运行编排器（匹配逆变器/并网柜）
@@ -180,7 +183,7 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 **组件确认后、DC 容量确定后，才能运行编排器。**
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/dms-inventory"
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
 TMP_DIR="/tmp/dms_inventory"
 mkdir -p "$TMP_DIR"
 
@@ -310,7 +313,7 @@ print('最终结果已写入:', out)
 ## 快捷查询（按物料编号/名称/功率）
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/dms-inventory"
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inventory'))")
 # 按物料编号查询
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --code 6B001492 --aggregate
 # 按物料名称模糊查询（搜物料名称列）
