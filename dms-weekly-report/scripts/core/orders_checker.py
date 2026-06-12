@@ -7,36 +7,42 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-
-import httpx
+from typing import Any
 
 from column_definitions import ORDER_CHECK_EXTEND_DAYS
+from core.dms_browser import get_access_token
 
 logger = logging.getLogger("dms_report")
 
 API_URL = "https://apigw.trinablue.com/dms-admin/orderHistory/getOrderHistoryList"
-MAX_RETRIES = 2
 PAGE_SIZE = 500
 
 
 async def fetch_ordered_flow_ids(
-    token: str,
+    context: Any,
     start_date: str,
     end_date: str,
 ) -> set[str]:
     """调用订单 API，返回所有已下单的流程编号集合。
 
     查询范围从 start_date 到 end_date + ORDER_CHECK_EXTEND_DAYS 天，
-    支持分页拉取（每页 500 条）。
+    支持分页拉取（每页 500 条）。使用 Playwright 内置的 APIRequestContext
+    发送请求，不依赖第三方 HTTP 库。
 
     Args:
-        token: access_token（通过 dms_browser.get_access_token(context) 获取）
+        context: Playwright BrowserContext
         start_date: 开始日期，格式 YYYY-MM-DD
         end_date: 结束日期，格式 YYYY-MM-DD
 
     Returns:
         已下单的流程编号集合，API 异常时返回空集合并记录日志。
     """
+    # 获取 token
+    token = await get_access_token(context)
+    if not token:
+        logger.warning("未获取到 access_token，无法查询订单数据")
+        return set()
+
     # 计算扩展后的结束日期
     end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=ORDER_CHECK_EXTEND_DAYS)
     extended_end = end_dt.strftime("%Y-%m-%d")
@@ -45,60 +51,52 @@ async def fetch_ordered_flow_ids(
 
     all_ids: set[str] = set()
     page_num = 1
-
     headers = {
         "Authorization": f"bearer {token}",
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        while True:
-            try:
-                resp = await client.post(
-                    API_URL,
-                    json={
-                        "createTime": start_date,
-                        "toCreateTime": extended_end,
-                        "pageNum": page_num,
-                        "pageSize": PAGE_SIZE,
-                    },
-                    headers=headers,
-                )
-                data = resp.json()
+    while True:
+        try:
+            resp = await context.request.post(
+                API_URL,
+                data={
+                    "createTime": start_date,
+                    "toCreateTime": extended_end,
+                    "pageNum": page_num,
+                    "pageSize": PAGE_SIZE,
+                },
+                headers=headers,
+            )
+            data = await resp.json()
 
-                if data.get("code") != 1:
-                    logger.warning("订单 API 返回异常 code=%s: %s", data.get("code"), data.get("errMsg", ""))
-                    break
-
-                records = data.get("data", {}).get("records", [])
-                for record in records:
-                    flow_id = record.get("bizFlowId")
-                    if flow_id:
-                        all_ids.add(str(flow_id).strip())
-
-                logger.debug("第 %d 页: 获取 %d 条", page_num, len(records))
-
-                if len(records) < PAGE_SIZE:
-                    break
-
-                page_num += 1
-
-            except httpx.TimeoutException:
-                logger.warning("订单 API 第 %d 页超时，终止分页", page_num)
+            if data.get("code") != 1:
+                logger.warning("订单 API 返回异常 code=%s: %s", data.get("code"), data.get("errMsg", ""))
                 break
-            except httpx.HTTPStatusError as e:
-                logger.warning("订单 API HTTP 错误: %s", e)
+
+            records = data.get("data", {}).get("records", [])
+            for record in records:
+                flow_id = record.get("bizFlowId")
+                if flow_id:
+                    all_ids.add(str(flow_id).strip())
+
+            logger.debug("第 %d 页: 获取 %d 条", page_num, len(records))
+
+            if len(records) < PAGE_SIZE:
                 break
-            except Exception as e:
-                logger.warning("订单 API 请求异常: %s", e)
-                break
+
+            page_num += 1
+
+        except Exception as e:
+            logger.warning("订单 API 请求异常: %s", e)
+            break
 
     logger.info("订单 API 拉取完成：共 %d 条已下单记录", len(all_ids))
     return all_ids
 
 
 async def check_orders_parallel(
-    token: str,
+    context: Any,
     records: list,
     start_date: str,
     end_date: str,
@@ -106,7 +104,7 @@ async def check_orders_parallel(
     """并行检查所有记录的下单状态。
 
     Args:
-        token: access_token
+        context: Playwright BrowserContext
         records: 包含 flow_id 属性的对象列表
         start_date: 查询开始日期
         end_date: 查询结束日期
@@ -116,7 +114,7 @@ async def check_orders_parallel(
     """
     logger.info("下单检查 %d 条（API 批量模式）...", len(records))
 
-    ordered_ids = await fetch_ordered_flow_ids(token, start_date, end_date)
+    ordered_ids = await fetch_ordered_flow_ids(context, start_date, end_date)
 
     for record in records:
         flow_id = getattr(record, "flow_id", "")
