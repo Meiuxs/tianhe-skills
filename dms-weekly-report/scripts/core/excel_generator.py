@@ -18,7 +18,8 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import Font
 
-from column_definitions import HEADERS, COLUMN_WIDTHS
+from column_definitions import HEADERS
+from excel_styles import COLUMN_WIDTHS
 from excel_styles import (
     Colors,
     THIN_BORDER, BOTTOM_BORDER, CARD_BORDER,
