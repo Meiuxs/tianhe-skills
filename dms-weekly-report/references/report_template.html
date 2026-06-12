@@ -1218,7 +1218,7 @@ th.number-right {
                 <th>排名</th>
                 <th>省公司</th>
                 <th>询价次数</th>
-                <th class="number-right">组件功率(kW)</th>
+                <th>组件功率(kW)</th>
               </tr>
             </thead>
             <tbody id="province-table-body"></tbody>
@@ -1282,9 +1282,9 @@ th.number-right {
               <th class="sticky-col">项目名称</th>
               <th>省公司</th>
               <th>业务员</th>
-              <th class="number-right">组件功率(kW)</th>
-              <th class="number-right">逆变器功率(kW)</th>
-              <th class="number-right col-collapsible">电池容量(kWh)</th>
+              <th>组件功率(kW)</th>
+              <th>逆变器功率(kW)</th>
+              <th class="col-collapsible">电池容量(kWh)</th>
               <th>已下单</th>
               <th>提交日期</th>
               <th>采购审批人</th>
@@ -1485,6 +1485,18 @@ function initChartDefaults() {
   Chart.defaults.font.family = '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
   Chart.defaults.font.size   = 12;
   Chart.defaults.color       = '#5D6D7E';
+
+  // 全局插件：图表导出/截图时带白色背景，避免透明背景难看
+  Chart.register({
+    id: 'chart-white-bg',
+    beforeDraw: function(chart) {
+      var ctx = chart.ctx;
+      ctx.save();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, chart.width, chart.height);
+      ctx.restore();
+    },
+  });
 }
 
 function safeChartInit(fn) {
@@ -2281,6 +2293,7 @@ function initOverviewCharts() {
           x: { grid: { display: false }, ticks: { font: { size: 11 } } },
           y: {
             beginAtZero: true,
+            grace: '10%',
             grid: { color: 'rgba(0,0,0,0.06)' },
             ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
           },
@@ -2338,6 +2351,7 @@ function initOverviewCharts() {
         scales: {
           x: {
             beginAtZero: true,
+            grace: '10%',
             grid: { color: 'rgba(0,0,0,0.06)' },
             ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
           },
@@ -2434,6 +2448,7 @@ function initApprovalCharts() {
       scales: {
         x: {
           beginAtZero: true,
+          grace: '10%',
           grid: { color: 'rgba(0,0,0,0.06)' },
           ticks: {
             font: { size: 11 },
@@ -2523,6 +2538,7 @@ function initDetailCharts() {
           },
           y: {
             beginAtZero: true,
+            grace: '10%',
             grid: { color: 'rgba(0,0,0,0.06)' },
             ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
           },
@@ -2614,10 +2630,10 @@ function renderDetailTable(rows) {
     tr.appendChild(createTableCell('td', item.projectName, 'sticky-col'));
     tr.appendChild(createTableCell('td', item.province));
     tr.appendChild(createTableCell('td', item.salesperson));
-    tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--', 'number-right'));
-    tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--', 'number-right'));
+    tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--'));
+    tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--'));
     // 电池容量：0 是合法值（无电池项目），也显示 "0.00" 而非 "--"
-    tr.appendChild(createTableCell('td', item.batteryCapacity != null ? item.batteryCapacity.toFixed(2) : '--', 'number-right'));
+    tr.appendChild(createTableCell('td', item.batteryCapacity != null ? item.batteryCapacity.toFixed(2) : '--'));
     tr.appendChild(createTableCell('td', item.ordered));
     tr.appendChild(createTableCell('td', item.submitDate));
     tr.appendChild(createTableCell('td', item.procurementApprover));
