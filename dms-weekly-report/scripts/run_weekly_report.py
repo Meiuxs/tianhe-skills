@@ -148,17 +148,17 @@ async def run(args: argparse.Namespace) -> None:
             else:
                 logger.info("会话有效（已复用缓存）")
 
+            # 登录后 URL 中包含 access_token，立即提取供后续下单检查使用
+            access_token_match = re.search(r"access_token=([^&]+)", page.url)
+            access_token = access_token_match.group(1) if access_token_match else None
+            if not access_token:
+                logger.warning("未获取到 access_token，后续下单检查将跳过")
+
             # 2. 筛选
             flow_ids = await filter_and_get_flow_ids(page, start_date, end_date)
             if not flow_ids:
                 logger.info("本周无已办询价记录")
                 return
-
-            # 提取 access_token（供后续下单检查使用）
-            access_token_match = re.search(r"access_token=([^&]+)", page.url)
-            access_token = access_token_match.group(1) if access_token_match else None
-            if not access_token:
-                logger.warning("未获取到 access_token，后续下单检查将跳过")
 
             # 关闭初始 page，释放资源供并行 Tab 使用
             await page.close()
