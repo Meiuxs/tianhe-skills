@@ -78,7 +78,7 @@ metadata:
 ### 步骤 0：检查环境
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/dms-inquiry-bom"
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-inquiry-bom'))")
 python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
