@@ -239,6 +239,12 @@ def generate_html_report(
     now = datetime.now()
     now_str = now.strftime("%Y-%m-%d %H:%M")
 
+    # 从 query_range 解析起止日期（格式 "2026-06-08 ~ 2026-06-12"）
+    import re as _re
+    _date_match = _re.match(r'(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})', query_range)
+    query_start_date = _date_match.group(1) if _date_match else ''
+    query_end_date = _date_match.group(2) if _date_match else ''
+
     # 替换纯文本标记（仅展示性字段，不涉及统计数据）
     replacements = {
         "REPORT_DATE_RANGE": query_range,
@@ -246,6 +252,8 @@ def generate_html_report(
         "DATA_SCOPE_TEXT": f"数据范围：{query_range} | 统计截止：{now.strftime('%Y-%m-%d')}",
         "FOOTER_TEXT": "询价周报报表 · 数据来源：DMS 流程中心 · 仅供内部参考",
         "SERVER_TIMESTAMP": now.isoformat(),
+        "QUERY_START_DATE": query_start_date,
+        "QUERY_END_DATE": query_end_date,
     }
     html = _simple_replace(template, replacements)
 

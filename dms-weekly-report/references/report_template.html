@@ -194,33 +194,100 @@ body {
 }
 .quick-btn:hover { background: rgba(255,255,255,0.25); }
 .quick-btn:active { background: rgba(255,255,255,0.35); }
+.quick-btn.active {
+  background: rgba(255,255,255,0.95);
+  border-color: white;
+  color: var(--primary-dark);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.quick-btn.active:hover {
+  background: white;
+}
 
 /* ── date input 在深色 header 上的适配 ── */
 .global-filter input[type="date"] {
-  padding: 4px 8px;
-  border: 1px solid rgba(255,255,255,0.3);
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,0.4);
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-family: var(--font-family);
-  background: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.18);
   color: white;
-  min-width: 110px;
-  max-width: 150px;
-  transition: border-color .2s;
-  /* 修正 date input 日历图标样式 */
+  min-width: 120px;
+  width: 130px;
+  transition: border-color .2s, background .2s;
+  cursor: pointer;
+}
+.global-filter input[type="date"]:hover {
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.6);
 }
 .global-filter input[type="date"]:focus {
   outline: 2px solid rgba(255,255,255,0.6);
   outline-offset: 1px;
-  border-color: transparent;
+  border-color: white;
+  background: rgba(255,255,255,0.22);
 }
 .global-filter input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 .global-filter input[type="date"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
+}
+/* 当 date input 有值时的视觉强调 */
+.global-filter input[type="date"]:not([value=""]) {
+  background: rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.5);
+}
+/* 日期范围选择器分组 — 视觉上自包含 */
+.date-range-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  transition: border-color .2s, background .2s;
+  cursor: pointer;
+}
+.date-range-group:hover {
+  background: rgba(255,255,255,0.13);
+  border-color: rgba(255,255,255,0.35);
+}
+.date-range-group label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.date-range-group input[type="date"] {
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 12px;
+  font-family: var(--font-family);
+  padding: 2px 4px;
+  width: 105px;
+  min-width: 0;
+  cursor: pointer;
+  outline: none;
+}
+.date-range-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.date-range-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+.date-range-sep {
+  color: rgba(255,255,255,0.4);
+  user-select: none;
+  font-size: 13px;
 }
 /* ===================================================================
    TAB NAVIGATION
@@ -235,65 +302,73 @@ body {
   z-index: 100;
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
+  gap: 2px;
 }
 .tab-btn {
-  padding: 14px 24px;
+  padding: 12px 20px;
   border: none;
-  background: none;
-  font-size: 14px;
+  background: transparent;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-tertiary);
   cursor: pointer;
   position: relative;
-  transition: color .2s, background .15s;
+  transition: color .2s, background .15s, box-shadow .2s;
   font-family: var(--font-family);
   white-space: nowrap;
   user-select: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: -1px;
 }
-.tab-btn:hover { color: var(--primary); }
-.tab-btn:active { background: var(--primary-l5); transition-duration: 0.05s; }
+.tab-btn:hover {
+  color: var(--primary);
+  background: var(--primary-l5);
+}
+.tab-btn:active { background: var(--primary-l10); transition-duration: 0.05s; }
+.tab-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
 .tab-btn.active {
   color: var(--primary);
   font-weight: 600;
+  background: var(--primary-l5);
+  box-shadow: 0 -2px 0 var(--primary) inset;
 }
 .tab-btn.active::after {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 8px;
-  right: 8px;
+  left: 0;
+  right: 0;
   height: 3px;
   background: var(--primary);
   border-radius: 3px 3px 0 0;
 }
 .tab-btn .badge {
   display: inline-block;
-  background: var(--primary-l5);
+  background: var(--primary-l10);
   color: var(--primary);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  padding: 1px 8px;
+  padding: 1px 7px;
   border-radius: 10px;
-  margin-left: 6px;
+  margin-left: 5px;
+  letter-spacing: 0.3px;
 }
 .tab-btn.active .badge {
-  background: var(--primary-l10);
-  color: var(--primary-dark);
+  background: var(--primary);
+  color: white;
 }
 
 /* ===================================================================
    TAB CONTENT LAYOUT
    =================================================================== */
 .tab-content {
-  display: none;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
-}
-.tab-content.active {
   display: block;
   opacity: 1;
   transform: translateY(0);
+  scroll-margin-top: 60px;
 }
 .tab-body {
   max-width: 1200px;
@@ -391,6 +466,30 @@ body {
   border-left: 4px solid var(--primary);
 }
 .kpi-card.orange.highlight .label { color: var(--primary); font-weight: 600; }
+
+/* ── Module-level empty state (替代重复的KPI级空提示) ── */
+.module-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius);
+  margin-bottom: var(--spacing-lg);
+}
+.module-empty-state-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+.module-empty-state-text {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-align: center;
+  line-height: 1.6;
+}
 
 /* ── Warning KPI variant (for "not ordered" etc.) ── */
 .kpi-card.warning {
@@ -614,6 +713,256 @@ th.number-right {
 }
 
 /* ===================================================================
+   LOCAL FILTER CARD — 模块内筛选器与全局筛选器的视觉区分
+   =================================================================== */
+.local-filter-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  margin-bottom: var(--spacing-lg);
+  overflow: hidden;
+}
+.local-filter-header {
+  background: var(--primary-l5);
+  padding: 6px var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+}
+.local-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: 0.3px;
+}
+.local-filter-body {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  flex-wrap: wrap;
+}
+.local-filter-body label {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+/* 级联筛选器分组：角色 → 审批人，视觉上更紧凑 */
+.filter-cascade-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px 4px 12px;
+  transition: border-color .2s;
+}
+.filter-cascade-group:focus-within {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.filter-cascade-group label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.filter-cascade-group select {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 2px 4px;
+  min-width: 80px;
+  outline: none;
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+.filter-cascade-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-light);
+  margin: 0 4px;
+}
+
+/* ===================================================================
+   DETAIL FILTER BADGE — 明细模块顶部当前筛选状态标签
+   =================================================================== */
+.detail-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: var(--primary-l5);
+  border: 1px solid var(--primary-l10);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  margin-bottom: var(--spacing-lg);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.detail-filter-badge .badge-icon {
+  font-size: 15px;
+}
+.detail-filter-badge .badge-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: var(--spacing-xs);
+}
+
+/* ===================================================================
+   ANOMALY BADGE — 审批异常预警标签
+   =================================================================== */
+.anomaly-badge {
+  display: inline-block;
+  background: var(--color-red);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 8px;
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* ===================================================================
+   TABLE SCROLL & STICKY COLUMN — 解决表格横向溢出
+   =================================================================== */
+.table-scroll-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll-wrap table {
+  min-width: 800px;
+}
+.table-scroll-wrap th.sticky-col,
+.table-scroll-wrap td.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: inherit;
+}
+.table-scroll-wrap thead th.sticky-col {
+  z-index: 3;
+  background: var(--primary);
+}
+.table-scroll-wrap tbody tr:nth-child(even) td.sticky-col {
+  background: #F7F8FA;
+}
+.table-scroll-wrap tbody tr:hover td.sticky-col {
+  background: var(--primary-l5);
+}
+
+/* ── 可折叠列（小屏隐藏非核心列）── */
+@media (max-width: 900px) {
+  .col-collapsible {
+    display: none;
+  }
+}
+
+/* ===================================================================
+   SECTION SUBTITLE
+   =================================================================== */
+.section-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-left: var(--spacing-md);
+  flex: 1;
+}
+.chart-card-subtitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-sm);
+  padding: 0 0 var(--spacing-xs) 0;
+}
+
+/* ===================================================================
+   CHART DOWNLOAD BUTTON — 中性下载图标
+   =================================================================== */
+.chart-download-btn svg {
+  vertical-align: middle;
+  opacity: 0.5;
+  transition: opacity .2s;
+}
+.chart-download-btn:hover svg {
+  opacity: 1;
+}
+
+/* ===================================================================
+   SUB-SECTION — 大模块内部子模块标题
+   =================================================================== */
+.sub-section {
+  margin-bottom: var(--spacing-xl);
+}
+.sub-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+.sub-title-bar {
+  display: inline-block;
+  width: 3px;
+  height: 16px;
+  background: var(--primary);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.column-toggle-btn {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: all .15s;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+.column-toggle-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary-light);
+  background: var(--primary-l5);
+}
+.column-toggle-btn:active {
+  background: var(--primary-l10);
+}
+/* 列收起状态切换 */
+.col-collapsible.hidden {
+  display: none;
+}
+
+/* ===================================================================
+   FOOTER — 强化与业务内容的视觉隔离
+   =================================================================== */
+.footer {
+  text-align: center;
+  padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  border-top: 2px solid var(--border-color);
+  background: var(--bg-page);
+  margin-top: var(--spacing-2xl);
+  box-shadow: 0 -1px 4px rgba(0,0,0,0.04);
+}
+.footer p {
+  padding-top: var(--spacing-sm);
+}
+.footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  line-height: 1.8;
+}
+
+/* ===================================================================
    TOOLTIP ICON
    =================================================================== */
 .tooltip-icon {
@@ -647,15 +996,13 @@ th.number-right {
   color: white;
   font-size: 11px;
   font-weight: 400;
-  padding: 6px 12px;
+  padding: 5px 14px;
   border-radius: 4px;
-  white-space: normal; /* 允许换行 */
-  max-width: 250px; /* 限制最大宽度 */
+  white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   transition: opacity .2s;
   z-index: 200;
-  line-height: 1.4;
 }
 .tooltip-icon:hover::after {
   opacity: 1;
@@ -666,23 +1013,6 @@ th.number-right {
    =================================================================== */
 .rank-medal { display: inline-block; font-size: 15px; margin-right: 3px; }
 #province-table-body td:first-child { text-align: center; width: 60px; }
-
-/* ===================================================================
-   FOOTER
-   =================================================================== */
-.footer {
-  text-align: center;
-  padding: var(--spacing-lg);
-  color: var(--text-tertiary);
-  font-size: 11px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-white);
-  margin-top: var(--spacing-2xl);
-}
-.footer-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-}
 
 /* ===================================================================
    RESPONSIVE
@@ -707,10 +1037,8 @@ th.number-right {
   .filter-result { margin-left: 0; }
   /* Tooltip 响应式：小屏幕右对齐防止溢出 */
   .tooltip-icon::after {
-    left: auto;
     right: 0;
-    transform: none;
-    max-width: 200px;
+    max-width: 160px;
   }
 }
 
@@ -758,16 +1086,18 @@ th.number-right {
       <div class="global-filter">
         <span class="quick-btns">
           <button class="quick-btn" data-quick="today">今日</button>
-          <button class="quick-btn" data-quick="last7">近7天</button>
+          <button class="quick-btn" data-quick="last7">最近7天</button>
           <button class="quick-btn" data-quick="thisweek">本周</button>
           <button class="quick-btn" data-quick="thismonth">本月</button>
-          <button class="quick-btn" data-quick="lastquarter">上季</button>
+          <button class="quick-btn" data-quick="thisquarter">本季度</button>
           <button class="quick-btn" data-quick="all">全部</button>
         </span>
-        <label>📅 自定义：</label>
-        <input type="date" id="date-start" class="form-control" style="width:140px;">
-        <span style="color:rgba(255,255,255,0.5);margin:0 4px;">~</span>
-        <input type="date" id="date-end" class="form-control" style="width:140px;">
+        <span class="date-range-group" title="点击日期可展开日历面板选择">
+          <label for="date-start">📅 自定义：</label>
+          <input type="date" id="date-start">
+          <span class="date-range-sep">~</span>
+          <input type="date" id="date-end">
+        </span>
       </div>
       </div>
     </div>
@@ -778,14 +1108,14 @@ th.number-right {
      TAB NAVIGATION
      =================================================================== -->
 <nav class="tab-nav" role="tablist">
-  <button class="tab-btn active" role="tab" data-tab="overview">
-    📈 项目与容量概览 <span class="badge">KPI</span>
+  <button class="tab-btn active" role="tab" data-tab="overview" aria-selected="true">
+    📈 项目与容量概览
   </button>
-  <button class="tab-btn" role="tab" data-tab="approval">
-    ⏱ 审批与时效流转 <span class="badge">效率</span>
+  <button class="tab-btn" role="tab" data-tab="detail" aria-selected="false">
+    📋 多维数据明细
   </button>
-  <button class="tab-btn" role="tab" data-tab="detail">
-    📋 多维数据明细 <span class="badge">下钻</span>
+  <button class="tab-btn" role="tab" data-tab="approval" aria-selected="false">
+    ⏱ 审批效率分析
   </button>
 </nav>
 
@@ -795,12 +1125,16 @@ th.number-right {
 <section class="tab-content active" id="tab-overview" role="tabpanel">
   <div class="tab-body">
 
-    <!-- ──────────── 询价概览 ──────────── -->
+    <!-- ──────────── 询价概览 KPI（合并业务 + 容量指标）──────────── -->
     <h2 class="section-title">
-      <span class="title-icon">◉</span>
       询价概览
     </h2>
-    <div class="kpi-grid">
+    <!-- 模块级空状态占位（无数据时显示） -->
+    <div class="module-empty-state" id="overview-empty-state" style="display:none;">
+      <div class="module-empty-state-icon">📊</div>
+      <div class="module-empty-state-text">暂无询价数据，请调整全局时间筛选</div>
+    </div>
+    <div class="kpi-grid" id="overview-kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">询价项目总数</div>
         <div class="value" id="kpi-total-projects">--</div>
@@ -821,32 +1155,6 @@ th.number-right {
         <div class="value" id="kpi-not-ordered">--</div>
         <div class="unit">个</div>
       </div>
-    </div>
-
-    <!-- ──────────── 图表行一：订单状态饼图 + 功率对比柱状图 ──────────── -->
-    <div class="chart-row split-40-60">
-      <div class="chart-card">
-        <div class="chart-title">📊 订单状态分布<button class="chart-download-btn" data-chart-id="chart-order-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
-        <div class="chart-wrap">
-          <canvas id="chart-order-donut"></canvas>
-        </div>
-        <div class="chart-caption">已下单 vs 未下单 项目占比</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">📊 功率容量对比<button class="chart-download-btn" data-chart-id="chart-power-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
-        <div class="chart-wrap">
-          <canvas id="chart-power-bar"></canvas>
-        </div>
-        <div class="chart-caption">组件 / 逆变器 / 电池 总容量</div>
-      </div>
-    </div>
-
-    <!-- ──────────── 功率容量 KPI ──────────── -->
-    <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      功率容量统计
-    </h2>
-    <div class="kpi-grid">
       <div class="kpi-card highlight">
         <div class="label">组件总功率</div>
         <div class="value" id="kpi-module-power">--</div>
@@ -863,27 +1171,46 @@ th.number-right {
         <div class="unit">kWh</div>
       </div>
       <div class="kpi-card highlight">
-        <div class="label">容配比</div>
+        <div class="label">容配比 <span class="tooltip-icon" data-tip="组件总功率 / 逆变器总功率；> 1 表示组件容量大于逆变器">ⓘ</span></div>
         <div class="value" id="kpi-ratio">--</div>
-        <div class="unit">组件/逆变器</div>
+        <div class="unit"></div>
       </div>
     </div>
 
-    <!-- ──────────── 省公司询价排名：横向条形图 + 表格 ──────────── -->
+    <!-- ──────────── 图表行一：订单状态饼图 + 功率对比柱状图 ──────────── -->
+    <div class="chart-row split-40-60">
+      <div class="chart-card">
+        <div class="chart-title">📊 订单状态分布<button class="chart-download-btn" data-chart-id="chart-order-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+        <div class="chart-wrap">
+          <canvas id="chart-order-donut"></canvas>
+        </div>
+        <div class="chart-caption">已下单 vs 未下单 项目占比</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📊 功率容量对比<button class="chart-download-btn" data-chart-id="chart-power-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+        <div class="chart-wrap">
+          <canvas id="chart-power-bar"></canvas>
+        </div>
+        <div class="chart-caption">组件 / 逆变器 / 电池 总容量</div>
+      </div>
+    </div>
+
+    <!-- ──────────── 省公司询价排名：横向条形图 + 表格（图表为主，表格为明细对照）──────────── -->
     <h2 class="section-title">
-      <span class="title-icon">◉</span>
       省公司询价排名
+      <span class="section-subtitle">横向条形图展示各省询价量排名，右侧表格作为明细对照</span>
     </h2>
     <div class="chart-row split-60-40">
       <div class="chart-card">
-        <div class="chart-title">📊 省公司询价次数排名<button class="chart-download-btn" data-chart-id="chart-province-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
+        <div class="chart-title">📊 省公司询价次数排名<button class="chart-download-btn" data-chart-id="chart-province-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
         <div class="chart-wrap">
           <canvas id="chart-province-bar"></canvas>
         </div>
-        <div class="chart-caption">各省公司询价项目数量</div>
+        <div class="chart-caption">横向条形图 — 各省公司询价项目数量，条越长表示询价越活跃</div>
       </div>
       <div class="chart-card">
         <div class="chart-title">📄 排名明细</div>
+        <div class="chart-card-subtitle">表格为左侧图表的对照明细，展示各省具体数值。悬停图表可查看详情</div>
         <div class="table-container" style="border:none;box-shadow:none;margin:0;">
           <table>
             <thead>
@@ -908,151 +1235,180 @@ th.number-right {
 </section>
 
 <!-- ===================================================================
-     TAB 2: 审批与时效流转
+     TAB 2: 多维数据明细
      =================================================================== -->
-<section class="tab-content" id="tab-approval" role="tabpanel">
+<section class="tab-content" id="tab-detail" role="tabpanel">
   <div class="tab-body">
 
-    <!-- ──────────── 关键节点审批统计 ──────────── -->
+    <!-- 父级标题：数据明细查询，包含趋势分析与项目明细两个子模块 -->
     <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      关键节点审批统计
+      数据明细查询
     </h2>
-    <div class="filter-bar">
-      <label for="approval-role-select">👤 审批角色：</label>
-      <select id="approval-role-select" class="form-control" style="min-width:100px;"></select>
-      <label for="approver-select">审批人：</label>
-      <select id="approver-select" class="form-control" style="min-width:150px;">
-        <option value="全部">全部审批人</option>
-      </select>
-      <span class="filter-result" id="approver-filter-result"></span>
-    </div>
-    <div class="kpi-grid">
-      <div class="kpi-card green">
-        <div class="label">审批通过</div>
-        <div class="value" id="approver-approved">--</div>
-        <div class="unit">次</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">经手总次数</div>
-        <div class="value" id="approver-total">--</div>
-        <div class="unit">次</div>
-      </div>
-      <div class="kpi-card highlight">
-        <div class="label">通过率</div>
-        <div class="value" id="approver-rate">--</div>
-        <div class="unit"></div>
-      </div>
+
+    <!-- ── 局部筛选状态标签 ── -->
+    <div class="detail-filter-badge" id="detail-filter-badge">
+      <span class="badge-icon">📅</span>
+      <span>当前筛选：<strong id="detail-period-label">本月</strong></span>
+      <span class="badge-hint">通过顶部全局筛选切换时间段</span>
     </div>
 
-    <!-- ──────────── 图表行：审批通过率饼图 + 审批耗时分组对比 ──────────── -->
-    <div class="chart-row">
-      <div class="chart-card">
-        <div class="chart-title">📊 审批通过率<button class="chart-download-btn" data-chart-id="chart-approval-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
-        <div class="chart-wrap">
-          <canvas id="chart-approval-donut"></canvas>
+    <!-- ── 子模块一：趋势分析 ── -->
+    <div class="sub-section">
+      <h3 class="sub-section-title">
+        <span class="sub-title-bar"></span>趋势分析
+      </h3>
+      <div class="chart-row single">
+        <div class="chart-card full">
+          <div class="chart-title">📊 各周期功率容量趋势<button class="chart-download-btn" data-chart-id="chart-query-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+          <div class="chart-wrap">
+            <canvas id="chart-query-bar"></canvas>
+          </div>
+          <div class="chart-caption">组件功率 / 逆变器功率 / 电池容量 按时间段对比</div>
         </div>
-        <div class="chart-caption">审批通过 / 未通过 占比</div>
       </div>
-      <div class="chart-card">
-        <div class="chart-title">📊 各省公司审批耗时对比<button class="chart-download-btn" data-chart-id="chart-approval-compare" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
-        <div class="chart-wrap">
-          <canvas id="chart-approval-compare"></canvas>
+    </div>
+
+    <!-- ── 子模块二：项目明细 ── -->
+    <div class="sub-section">
+      <h3 class="sub-section-title">
+        <span class="sub-title-bar"></span>项目明细
+        <button id="column-toggle-btn" class="column-toggle-btn" title="显示/隐藏非核心列" onclick="toggleCollapsibleColumns()">⚙ 列设置</button>
+      </h3>
+      <div class="table-container">
+        <div class="table-scroll-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sticky-col">项目名称</th>
+              <th>省公司</th>
+              <th>业务员</th>
+              <th class="number-right">组件功率(kW)</th>
+              <th class="number-right">逆变器功率(kW)</th>
+              <th class="number-right col-collapsible">电池容量(kWh)</th>
+              <th>已下单</th>
+              <th>提交日期</th>
+              <th>采购审批人</th>
+              <th class="col-collapsible">流程编号</th>
+            </tr>
+          </thead>
+          <tbody id="detail-table-body"></tbody>
+        </table>
         </div>
-        <div class="chart-caption">各省公司询价到审批完成的平均耗时（天）</div>
       </div>
     </div>
-
-    <!-- ──────────── 询价到审批完成天数 KPI ──────────── -->
-    <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      询价到审批完成天数
-      <span class="tooltip-icon" data-tip="计算方式：从流程发起人提交审核日到最终审批完成日的日历天数（同天为1天），包含周末及节假日。">(?)</span>
-    </h2>
-    <div class="kpi-grid">
-      <div class="kpi-card highlight">
-        <div class="label">平均天数</div>
-        <div class="value" id="days-avg">--</div>
-        <div class="unit">天</div>
-      </div>
-      <div class="kpi-card green">
-        <div class="label">最短天数</div>
-        <div class="value" id="days-min">--</div>
-        <div class="unit">天</div>
-      </div>
-      <div class="kpi-card orange">
-        <div class="label">最长天数</div>
-        <div class="value" id="days-max">--</div>
-        <div class="unit">天</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">统计样本</div>
-        <div class="value" id="days-sample-count">--</div>
-        <div class="unit">条</div>
-      </div>
-    </div>
-
-    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-      💡 数据基于采购审批节点、省公司统计及审批时间计算
-    </p>
 
   </div>
 </section>
 
 <!-- ===================================================================
-     TAB 3: 多维数据明细
+     TAB 3: 审批效率分析（合并通过率 + 时效分析）
      =================================================================== -->
-<section class="tab-content" id="tab-detail" role="tabpanel">
+<section class="tab-content" id="tab-approval" role="tabpanel">
   <div class="tab-body">
 
+    <!-- 模块标题 -->
     <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      数据明细查询
+      审批效率分析
     </h2>
 
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:var(--spacing-lg);background:var(--primary-l5);padding:10px 16px;border-radius:var(--radius);border-left:3px solid var(--primary);">
-      💡 当前正在展示 <strong id="detail-period-label">本月</strong> 的询价项目明细。如需切换，请使用右上角 <strong>全局时间筛选</strong>。
-    </p>
-
-    <!-- ──────────── 周期功率趋势柱状图 ──────────── -->
-    <div class="chart-row single">
-      <div class="chart-card full">
-        <div class="chart-title">📊 各周期功率容量趋势<button class="chart-download-btn" data-chart-id="chart-query-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;">⬇️</button></div>
-        <div class="chart-wrap">
-          <canvas id="chart-query-bar"></canvas>
+    <!-- 局部筛选器（模块内作用域） -->
+    <div class="local-filter-card">
+      <div class="local-filter-header">
+        <span class="local-filter-label">🔍 本模块筛选</span>
+      </div>
+      <div class="local-filter-body">
+        <div class="filter-cascade-group">
+          <label for="approval-role-select">审批角色</label>
+          <select id="approval-role-select">
+            <option value="procurement">采购审批</option>
+            <option value="province">省总审批</option>
+          </select>
+          <span class="filter-cascade-divider"></span>
+          <label for="approver-select">审批人</label>
+          <select id="approver-select">
+            <option value="全部">全部审批人</option>
+          </select>
         </div>
-        <div class="chart-caption">组件功率 / 逆变器功率 / 电池容量 按时间段对比</div>
+        <span class="filter-result" id="approver-filter-result"></span>
       </div>
     </div>
 
-    <!-- ──────────── 明细数据表格（逐条记录下钻）──────────── -->
-    <h2 class="section-title">
-      <span class="title-icon">◉</span>
-      询价项目明细
-    </h2>
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>流程编号</th>
-            <th>项目名称</th>
-            <th>省公司</th>
-            <th>业务员</th>
-            <th class="number-right">组件功率(kW)</th>
-            <th class="number-right">逆变器功率(kW)</th>
-            <th class="number-right">电池容量(kWh)</th>
-            <th>已下单</th>
-            <th>提交日期</th>
-            <th>采购审批人</th>
-          </tr>
-        </thead>
-        <tbody id="detail-table-body"></tbody>
-      </table>
+    <!-- ── 子模块一：审批通过率 ── -->
+    <div class="sub-section">
+      <h3 class="sub-section-title">
+        <span class="sub-title-bar"></span>审批通过率
+      </h3>
+      <div class="kpi-grid">
+        <div class="kpi-card green">
+          <div class="label">审批通过</div>
+          <div class="value" id="approver-approved">--</div>
+          <div class="unit">次</div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">经手总次数</div>
+          <div class="value" id="approver-total">--</div>
+          <div class="unit">次</div>
+        </div>
+        <div class="kpi-card highlight">
+          <div class="label">通过率</div>
+          <div class="value" id="approver-rate">--</div>
+          <div class="unit">%</div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">📊 审批通过率<button class="chart-download-btn" data-chart-id="chart-approval-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+          <div class="chart-wrap">
+            <canvas id="chart-approval-donut"></canvas>
+          </div>
+          <div class="chart-caption">审批通过 / 未通过 占比</div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">📊 各省公司审批耗时对比<button class="chart-download-btn" data-chart-id="chart-approval-compare" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+          <div class="chart-wrap">
+            <canvas id="chart-approval-compare"></canvas>
+          </div>
+          <div class="chart-caption">各省公司询价到审批完成的平均耗时（天）</div>
+        </div>
+      </div>
     </div>
 
-    <p style="font-size:12px;color:var(--text-tertiary);margin-top:var(--spacing-sm);">
-      💡 使用右上角<strong>全局时间筛选</strong>切换时间段后，上方图表与明细表格同步刷新。明细展示每条询价项目的具体信息。
-    </p>
+    <!-- ── 子模块二：审批时效分析 ── -->
+    <div class="sub-section" id="approval-timeliness-section">
+      <h3 class="sub-section-title">
+        <span class="sub-title-bar"></span>审批时效分析
+        <span class="tooltip-icon" data-tip="从流程发起人提交审核日到最终审批完成日的日历天数（同天为1天），包含周末及节假日。">ⓘ</span>
+      </h3>
+      <!-- 模块级空状态占位（数据为空时显示，有数据时隐藏） -->
+      <div class="module-empty-state" id="approval-empty-state">
+        <div class="module-empty-state-icon">📋</div>
+        <div class="module-empty-state-text">暂无审批时效数据，请调整审批人或时间筛选</div>
+      </div>
+      <div class="kpi-grid" id="approval-timeliness-kpi">
+        <div class="kpi-card highlight">
+          <div class="label">平均天数</div>
+          <div class="value" id="days-avg">--</div>
+          <div class="unit">天</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="label">最短天数</div>
+          <div class="value" id="days-min">--</div>
+          <div class="unit">天</div>
+        </div>
+        <div class="kpi-card orange" id="days-max-card">
+          <div class="label">最长天数</div>
+          <div class="value" id="days-max">--</div>
+          <div class="unit">天</div>
+          <div class="anomaly-badge" id="days-max-alert" style="display:none;"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="label">统计样本</div>
+          <div class="value" id="days-sample-count">--</div>
+          <div class="unit">条</div>
+        </div>
+      </div>
+    </div>
 
   </div>
 </section>
@@ -1189,15 +1545,20 @@ function showNoData(canvasId, message, icon) {
   container.style.cssText = 'text-align:center;padding:48px 16px;';
 
   let iconEl = document.createElement('div');
-  iconEl.style.cssText = 'font-size:40px;margin-bottom:12px;opacity:0.5;';
+  iconEl.style.cssText = 'font-size:40px;margin-bottom:8px;opacity:0.5;';
   iconEl.textContent = icon || '📭';
 
   let msgEl = document.createElement('p');
-  msgEl.style.cssText = 'color:#95A5A6;font-size:13px;margin:0;';
+  msgEl.style.cssText = 'color:#95A5A6;font-size:13px;margin:0 0 4px 0;';
   msgEl.textContent = message || '暂无数据';
+
+  let guideEl = document.createElement('p');
+  guideEl.style.cssText = 'color:#B0BEC5;font-size:11px;margin:0;';
+  guideEl.textContent = '请切换右上角时间范围后重试';
 
   container.appendChild(iconEl);
   container.appendChild(msgEl);
+  container.appendChild(guideEl);
   wrap.appendChild(container);
 }
 
@@ -1403,6 +1764,11 @@ function getQuickRange(quick) {
     }
     case 'thismonth':
       return { start: y + '-' + ('0' + (m + 1)).slice(-2) + '-01', end: todayStr };
+    case 'thisquarter': {
+      var qs = Math.floor(m / 3) * 3;
+      var qStart = new Date(y, qs, 1);
+      return { start: fmtLocalDate(qStart), end: todayStr };
+    }
     case 'lastquarter': {
       var qs = Math.floor(m / 3) * 3;
       var qStart = new Date(y, qs - 3, 1);
@@ -1773,6 +2139,15 @@ function computePeriodSummaries(rows) {
    =================================================================== */
 
 function updateOverviewKPIs(stats) {
+  var hasData = stats && stats.totalProjects > 0;
+  var emptyState = document.getElementById('overview-empty-state');
+  var kpiGrid = document.getElementById('overview-kpi-grid');
+  if (emptyState && kpiGrid) {
+    emptyState.style.display = hasData ? 'none' : 'flex';
+    kpiGrid.style.display = hasData ? 'grid' : 'none';
+  }
+  if (!hasData) return;
+
   setText('kpi-total-projects', stats.totalProjects);
   setText('kpi-total-salespersons', stats.salespersons);
   setText('kpi-ordered', stats.orderedCount);
@@ -1795,10 +2170,33 @@ function renderApproverKPI(stats) {
 }
 
 function renderApprovalDays(days) {
+  var hasData = days && days.sampleCount > 0 && days.avg > 0;
+  var emptyState = document.getElementById('approval-empty-state');
+  var kpiGrid = document.getElementById('approval-timeliness-kpi');
+  if (emptyState && kpiGrid) {
+    emptyState.style.display = hasData ? 'none' : 'flex';
+    kpiGrid.style.display = hasData ? 'grid' : 'none';
+  }
+  if (!hasData) return;
+
   setText('days-avg', days.avg.toFixed(1));
   setText('days-min', days.min);
   setText('days-max', days.max);
   setText('days-sample-count', days.sampleCount);
+
+  // 异常预警：最长天数超出平均值 3 倍时标记
+  var alertEl = document.getElementById('days-max-alert');
+  var cardEl = document.getElementById('days-max-card');
+  if (alertEl && cardEl) {
+    if (days.avg > 0 && days.max > days.avg * 3) {
+      alertEl.style.display = 'inline-block';
+      cardEl.classList.add('red');
+      alertEl.textContent = '⚠ 最长审批天数(' + days.max + '天) 超出均值 ' + (days.avg.toFixed(1)) + '天 的 ' + (days.max / days.avg).toFixed(1) + ' 倍';
+    } else {
+      alertEl.style.display = 'none';
+      cardEl.classList.remove('red');
+    }
+  }
 }
 
 function setText(id, val) {
@@ -2171,12 +2569,25 @@ function renderDetailTable(rows) {
     }
   }
 
+  // 更新筛选状态标签
+  var badgeEl = document.getElementById('detail-filter-badge');
+  if (badgeEl) {
+    var currentFilter = label ? label.textContent : '全部';
+    var hintEl = badgeEl.querySelector('.badge-hint');
+    if (currentFilter === '全部') {
+      badgeEl.innerHTML = '<span class="badge-icon">📅</span><span>当前筛选：<strong>全部数据</strong></span>';
+      if (hintEl) hintEl.textContent = '';
+    } else {
+      badgeEl.innerHTML = '<span class="badge-icon">📅</span><span>当前筛选：<strong>' + currentFilter + '</strong></span><span class="badge-hint">通过顶部全局筛选切换时间段</span>';
+    }
+  }
+
   if (rows.length === 0) {
     let tr = document.createElement('tr');
     let td = document.createElement('td');
     td.colSpan = 10;
-    td.style.cssText = 'text-align:center;padding:32px;color:#95A5A6;';
-    td.textContent = '该时间段暂无询价项目明细';
+    td.style.cssText = 'text-align:center;padding:40px;color:#95A5A6;';
+    td.innerHTML = '📭 <span style="font-size:14px;">该时间段暂无询价项目明细</span><br><span style="font-size:12px;">请切换右上角时间范围后重试</span>';
     tr.appendChild(td);
     tbody.appendChild(tr);
 
@@ -2197,11 +2608,10 @@ function renderDetailTable(rows) {
   let endIdx = Math.min(startIdx + detailPageState.pageSize, rows.length);
   let pageRows = rows.slice(startIdx, endIdx);
 
-  // 渲染当前页
+  // 渲染当前页（项目名称 -> sticky 列；流程编号 -> 最后可折叠列）
   pageRows.forEach(function(item) {
     let tr = document.createElement('tr');
-    tr.appendChild(createTableCell('td', item.flowId));
-    tr.appendChild(createTableCell('td', item.projectName));
+    tr.appendChild(createTableCell('td', item.projectName, 'sticky-col'));
     tr.appendChild(createTableCell('td', item.province));
     tr.appendChild(createTableCell('td', item.salesperson));
     tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--', 'number-right'));
@@ -2211,6 +2621,7 @@ function renderDetailTable(rows) {
     tr.appendChild(createTableCell('td', item.ordered));
     tr.appendChild(createTableCell('td', item.submitDate));
     tr.appendChild(createTableCell('td', item.procurementApprover));
+    tr.appendChild(createTableCell('td', item.flowId, 'col-collapsible'));
     tbody.appendChild(tr);
   });
 
@@ -2275,6 +2686,17 @@ function renderProvinceTable() {
       '<td class="number-right">' + item.module.toFixed(2) + '</td>';
     tbody.appendChild(tr);
   });
+}
+
+/* ──────────── 列设置：切换可折叠列的显隐 ──────────── */
+var _collapsibleVisible = false;
+function toggleCollapsibleColumns() {
+  _collapsibleVisible = !_collapsibleVisible;
+  document.querySelectorAll('.col-collapsible').forEach(function(el) {
+    el.classList.toggle('hidden', !_collapsibleVisible);
+  });
+  var btn = document.getElementById('column-toggle-btn');
+  if (btn) btn.textContent = _collapsibleVisible ? '✓ 全部列' : '⚙ 列设置';
 }
 
 /* ──────────── 审批人下拉列表 ──────────── */
@@ -2376,14 +2798,14 @@ function onDateRangeChange() {
   renderProvinceTable();
   populateApproverList();
 
-  // 重建当前 Tab 的图表
-  let tabName = getActiveTab();
-  initTabCharts(tabName);
-
-  // Tab 3 表格单独刷新
-  if (tabName === 'detail') {
-    renderDetailTable(currentFiltered);
-  }
+  // 重建所有图表（所有 tab content 始终可见）
+  tabInitialized.overview = false;
+  tabInitialized.approval = false;
+  tabInitialized.detail = false;
+  initTabCharts('overview');
+  initTabCharts('approval');
+  initTabCharts('detail');
+  renderDetailTable(currentFiltered);
 }
 
 /* 审批人切换 */
@@ -2404,37 +2826,44 @@ function onApproverChange(selectedValue) {
   initTabCharts('approval');
 }
 
-/* Tab 切换 */
+/* Tab 切换 — 点击标签平滑滚动到对应内容区 */
 function switchTab(name) {
-  // 先淡出当前 tab
-  let currentActive = document.querySelector('.tab-content.active');
-  if (currentActive) {
-    currentActive.style.opacity = '0';
-    currentActive.style.transform = 'translateY(-4px)';
+  var targetSection = document.getElementById('tab-' + name);
+  if (!targetSection) return;
+
+  // 更新按钮激活态
+  document.querySelectorAll('.tab-btn').forEach(function(el) {
+    el.classList.remove('active');
+    el.setAttribute('aria-selected', 'false');
+  });
+  var activeBtn = document.querySelector('[data-tab="' + name + '"]');
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+    activeBtn.setAttribute('aria-selected', 'true');
   }
 
-  // 快速淡出后切换（缩短为 150ms）
-  setTimeout(function() {
-    document.querySelectorAll('.tab-content').forEach(function(el) {
-      el.classList.remove('active');
-      el.style.opacity = '';
-      el.style.transform = '';
-    });
-    document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
-    document.getElementById('tab-' + name).classList.add('active');
-    document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+  // 目标区域标记激活（仅用于 CSS 样式钩子）
+  document.querySelectorAll('.tab-content').forEach(function(el) {
+    el.classList.remove('active');
+  });
+  targetSection.classList.add('active');
 
-    // 初始化（无需额外延时，requestAnimationFrame 足以保证 DOM 更新）
-    setTimeout(function() {
-      if (name === 'approval') {
-        populateApproverList();
-      }
-      initTabCharts(name);
-      if (name === 'detail') {
-        renderDetailTable(getFilteredRows());
-      }
-    }, 30);
-  }, 150);
+  // 平滑滚动（考虑 sticky tab-nav 高度）
+  var tabNav = document.querySelector('.tab-nav');
+  var offset = tabNav ? tabNav.offsetHeight + 8 : 0;
+  var targetTop = targetSection.getBoundingClientRect().top + window.pageYOffset - offset;
+  window.scrollTo({ top: targetTop, behavior: 'smooth' });
+
+  // 确保图表已初始化
+  setTimeout(function() {
+    if (name === 'approval') {
+      populateApproverList();
+    }
+    initTabCharts(name);
+    if (name === 'detail') {
+      renderDetailTable(getFilteredRows());
+    }
+  }, 50);
 }
 
 /* ===================================================================
@@ -2498,7 +2927,15 @@ function initEventListeners() {
   document.getElementById('date-end').addEventListener('change', onDateRangeChange);
   document.querySelector('.quick-btns').addEventListener('click', function(e) {
     if (e.target.classList.contains('quick-btn')) {
-      var range = getQuickRange(e.target.dataset.quick);
+      // 切换激活态
+      document.querySelectorAll('.quick-btn').forEach(function(b) { b.classList.remove('active'); });
+      e.target.classList.add('active');
+      var range;
+      if (e.target.dataset.quick === 'all') {
+        range = { start: '{{QUERY_START_DATE}}', end: '{{QUERY_END_DATE}}' };
+      } else {
+        range = getQuickRange(e.target.dataset.quick);
+      }
       document.getElementById('date-start').value = range.start;
       document.getElementById('date-end').value = range.end;
       onDateRangeChange();
@@ -2510,8 +2947,34 @@ function initEventListeners() {
     });
   });
 
-  // 初始化角色下拉
+  // 初始化审批角色下拉（必须在 populateApproverList 之前执行）
   initRoleSelect();
+
+  /* 滚动高亮：IntersectionObserver 监视各 tab 内容区，自动高亮当前标签 */
+  var tabSections = document.querySelectorAll('.tab-content');
+  var tabObserver = new IntersectionObserver(function(entries) {
+    // 找出当前可见比例最高的 section
+    var maxRatio = 0;
+    var mostVisibleId = null;
+    entries.forEach(function(entry) {
+      if (entry.intersectionRatio > maxRatio) {
+        maxRatio = entry.intersectionRatio;
+        mostVisibleId = entry.target.id.replace('tab-', '');
+      }
+    });
+    if (mostVisibleId) {
+      document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        var isActive = btn.dataset.tab === mostVisibleId;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+    }
+  }, {
+    root: null,
+    rootMargin: '-20% 0px -40% 0px',
+    threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+  });
+  tabSections.forEach(function(section) { tabObserver.observe(section); });
 
   /* 审批角色切换 — 联动审批人列表 */
   var roleSelect = document.getElementById('approval-role-select');
@@ -2603,13 +3066,40 @@ document.addEventListener('DOMContentLoaded', function() {
   initEventListeners();
   checkChartJsLoaded();
 
+  // 默认"全部"激活，日期由后端注入的查询范围填充
+  var defaultQuickBtn = document.querySelector('.quick-btn[data-quick="all"]');
+  if (defaultQuickBtn) {
+    defaultQuickBtn.classList.add('active');
+  }
+  var qStart = '{{QUERY_START_DATE}}';
+  var qEnd = '{{QUERY_END_DATE}}';
+  document.getElementById('date-start').value = qStart;
+  document.getElementById('date-end').value = qEnd;
+
   // 初始渲染（Chart.js 已加载则立即渲染，否则稍后重试）
   updateOverviewKPIs(computeAggregates(getFilteredRows()));
   renderProvinceTable();
   if (typeof Chart !== 'undefined') {
-    initTabCharts('overview');
+    // 所有 tab content 始终可见，一次性初始化所有图表
+    initOverviewCharts();
+    initApprovalCharts();
+    initDetailCharts();
+    tabInitialized.overview = true;
+    tabInitialized.approval = true;
+    tabInitialized.detail = true;
+    populateApproverList();
+    renderDetailTable(getFilteredRows());
   } else {
-    waitForChartJs(2, function() { initTabCharts('overview'); });
+    waitForChartJs(2, function() {
+      initOverviewCharts();
+      initApprovalCharts();
+      initDetailCharts();
+      tabInitialized.overview = true;
+      tabInitialized.approval = true;
+      tabInitialized.detail = true;
+      populateApproverList();
+      renderDetailTable(getFilteredRows());
+    });
   }
 });
 </script>
