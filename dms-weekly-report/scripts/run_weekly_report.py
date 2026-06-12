@@ -148,10 +148,12 @@ async def run(args: argparse.Namespace) -> None:
             else:
                 logger.info("会话有效（已复用缓存）")
 
-            # 登录后 URL 中包含 access_token，立即提取供后续下单检查使用
-            access_token_match = re.search(r"access_token=([^&]+)", page.url)
-            access_token = access_token_match.group(1) if access_token_match else None
-            if not access_token:
+            # 登录后从 cookie 中提取 access_token（供后续下单检查使用）
+            dms_cookies = [c for c in await context.cookies() if c["name"] == "dms_admin_token"]
+            access_token = dms_cookies[0]["value"] if dms_cookies else None
+            if access_token:
+                logger.debug("已获取 access_token")
+            else:
                 logger.warning("未获取到 access_token，后续下单检查将跳过")
 
             # 2. 筛选
