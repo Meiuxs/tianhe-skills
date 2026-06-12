@@ -99,17 +99,32 @@ python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 
 ### 步骤 3：运行脚本
 
-本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作。使用**步骤 1** 解析出的日期变量：
+本 skill 目录下的 `scripts/run_weekly_report.py` 执行实际工作。
+
+**推荐方式（一步到位）：使用 `--date-label` 直接传入中文日期标签，脚本内部自动解析日期范围。**
+
+```bash
+SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
+SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
+
+# 使用中文日期标签（一步到位，无需先解析日期）
+python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless
+
+# 也可用其他标签：--date-label "本周" / "上月" / "上个月到现在" / "6月1号到6月7号" 等
+python "$SCRIPT" --output-dir "$PWD" --date-label "上个月到现在" --headless
+```
+
+完整用法示例：
 
 ```bash
 SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
 # 使用步骤 1 解析的日期范围
-python "$SCRIPT" --output-dir "$PWD" --start-date "$START" --end-date "$END"
+python "$SCRIPT" --output-dir "$PWD" --date-label "上个月到现在"
 
 # 无头模式（不显示浏览器）
-python "$SCRIPT" --output-dir "$PWD" --start-date "$START" --end-date "$END" --headless
+python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless
 
 # 仅统计模式（跳过浏览器，从已有 Excel 重算统计）
 # 默认自动查找 --output-dir 中的询价汇总文件
@@ -177,6 +192,7 @@ AskUserQuestion:
 | `--weeks N` | 最近 N 周（0=本周, 1=上周） | 0 |
 | `--start-date YYYY-MM-DD` | 自定义开始日期 | 本周一 |
 | `--end-date YYYY-MM-DD` | 自定义结束日期 | 今天 |
+| `--date-label LABEL` | 中文日期标签（自动解析，如"本月"/"上个月到现在"） | 无 |
 | `--workers N` | 并行并发数 | 4 |
 | `--verbose` | 详细日志输出 | 仅 info |
 | `--stats-only` | 仅统计模式：从已有 Excel 读取数据，按日期范围重新统计，跳过浏览器操作 | 自动查找 |

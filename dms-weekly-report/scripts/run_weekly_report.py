@@ -359,6 +359,9 @@ def main() -> None:
                         help="自定义开始日期（YYYY-MM-DD），优先于 --weeks")
     parser.add_argument("--end-date", type=str, default=None,
                         help="自定义结束日期（YYYY-MM-DD），默认为今天")
+    parser.add_argument("--date-label", type=str, default=None,
+                        help="中文日期标签，如'本周'/'本月'/'上个月到现在'，自动解析为起止日期。"
+                             "优先级低于 --start-date/--end-date，高于 --weeks")
     parser.add_argument("--workers", type=int, default=4,
                         help="并行并发数（默认 4）")
     parser.add_argument("--output-dir", type=str, default=None,
@@ -374,6 +377,24 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging(args.verbose)
+
+    # 如果指定了 --date-label，用日期解析脚本解析
+    if args.date_label and not args.start_date:
+        try:
+            import subprocess, json
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            result = subprocess.run(
+                [sys.executable, os.path.join(script_dir, "resolve_date_range.py"),
+                 args.date_label, "--json"],
+                capture_output=True, text=True, check=True, encoding="utf-8",
+            )
+            parsed = json.loads(result.stdout)
+            args.start_date = parsed["start"]
+            args.end_date = parsed["end"]
+            logger.info("日期标签 '%s' → %s ~ %s", args.date_label, args.start_date, args.end_date)
+        except Exception as e:
+            logger.error("日期标签解析失败 '%s': %s", args.date_label, e)
+            sys.exit(1)
 
     if args.stats_only:
         stats_from_excel(args)
