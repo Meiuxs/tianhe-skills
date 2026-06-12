@@ -211,12 +211,17 @@ def stats_from_excel(args: argparse.Namespace) -> None:
 
     output_dir = args.output_dir or os.getcwd()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    candidates = [
-        os.path.join(output_dir, f"询价汇总_{ts}.xlsx"),
-        os.path.join(output_dir, "询价汇总.xlsx"),
-        os.path.join(output_dir, "询价汇总_v2.xlsx"),
-    ]
-    file_path = next((p for p in candidates if os.path.exists(p)), candidates[0])
+
+    # 如果显式指定了输入文件，直接使用；否则自动查找
+    if args.input_xlsx:
+        file_path = os.path.abspath(args.input_xlsx)
+    else:
+        candidates = [
+            os.path.join(output_dir, f"询价汇总_{ts}.xlsx"),
+            os.path.join(output_dir, "询价汇总.xlsx"),
+            os.path.join(output_dir, "询价汇总_v2.xlsx"),
+        ]
+        file_path = next((p for p in candidates if os.path.exists(p)), candidates[0])
 
     if not os.path.exists(file_path):
         logger.error("未找到询价汇总文件: %s", file_path)
@@ -359,6 +364,8 @@ def main() -> None:
                         help="输出详细调试日志")
     parser.add_argument("--stats-only", action="store_true",
                         help="仅统计模式：从已有Excel按日期范围重新统计，跳过浏览器操作")
+    parser.add_argument("--input-xlsx", type=str, default=None,
+                        help="仅统计模式下显式指定输入的询价汇总 Excel 文件路径（默认自动查找）")
     parser.add_argument("--this-month", action="store_true",
                         help="快捷统计本月（配合 --stats-only 使用）")
     args = parser.parse_args()
