@@ -535,95 +535,64 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
         if '价格排序' not in raw_available.columns:
             raw_available['价格排序'] = 999
 
-        # 尝试先找首选品牌的组合
+        stock_sufficient = preferences.get('stock_sufficient', True)
+
+        # ── 组合生成：所有品牌各自 same_brand → 不足时混合兜底 ──
         all_combos = []
 
-        # 生成单台方案的辅助函数
-        def _add_single_unit_combos(model_list, brand_tag, *, stock_sufficient=True):
-            """将库存充足的单台方案（在目标功率容差范围内）作为独立方案添加。"""
-            added = 0
-            target_min = target_power * (1 - tolerance)
-            target_max = target_power * (1 + tolerance)
-            for m in model_list:
-                if added >= max_combos:
-                    break
-                p = m.get('power', 0)
-                if p <= 0:
-                    continue
-                if target_min <= p <= target_max:
-                    # 检查是否有库存
-                    stock = m.get('stock', 0)
-                    if stock_sufficient and stock < 1:
-                        continue
-                    combo = {
-                        'total_power': p,
-                        'items': [{
-                            'code': m['code'],
-                            'power': p,
-                            'quantity': 1,
-                            'subtotal': p,
-                            'price_rank': m.get('price_rank', 999),
-                            'brand': m.get('brand', brand_tag),
-                        }],
-                        'total_price_rank': m.get('price_rank', 999),
-                        'brand': brand_tag,
-                        'is_same_brand': True,
-                    }
-                    # 避免重复（检查是否已有相同code的方案）
-                    existing_codes = set()
-                    for c in all_combos:
-                        for item in c.get('items', []):
-                            existing_codes.add(item['code'])
-                    if m['code'] not in existing_codes:
-                        all_combos.append(combo)
-                        added += 1
-            return added
+        # 使用 raw_items_filtered（来自前置过滤）而非 raw_available
+        # raw_items_filtered 在有 prefer_material 时已被筛选
+        avail_codes_for_combo = set(raw_items_filtered['物料编号'].values)
+        combo_data = items[items['物料编号'].isin(avail_codes_for_combo)].copy()
+        if '价格排序' not in combo_data.columns:
+            combo_data['价格排序'] = 999
 
-        stock_sufficient_override = preferences.get('stock_sufficient', True)
-
-        # 所有品牌各自 same_brand 搜索（不再有 preferred_brand 特权）
-        for brand_entry in result['brands']:
-            if len(all_combos) >= max_combos:
-                break
+        # 第 1 段：同品牌组合（所有品牌平等待遇）
+        for brand_entry in result.get('brands', []):
             brand_name = brand_entry['name']
-            brand_raw = raw_available[raw_available['厂家'] == brand_name]
-            if not brand_raw.empty:
-                combos = find_inverter_combinations(
-                    brand_raw, target_power, tolerance,
-                    max_combos - len(all_combos),
-                    same_brand=True, stock_sufficient=stock_sufficient_override
-                )
-                for combo_data in combos:
-                    formatted = format_combination(combo_data)
-                    all_combos.append(formatted)
-
-            # 补充品牌的单台方案
-            _add_single_unit_combos(brand_entry.get('models', []), brand_name, stock_sufficient=stock_sufficient_override)
-
-        # 最后补充混合品牌方案
-        if len(all_combos) < max_combos:
+            brand_raw = combo_data[combo_data['厂家'] == brand_name]
+            if brand_raw.empty:
+                continue
             combos = find_inverter_combinations(
-                raw_available, target_power, tolerance,
-                max_combos - len(all_combos),
-                same_brand=False, stock_sufficient=stock_sufficient_override
+                brand_raw, target_power, tolerance,
+                max_combos, same_brand=True,
+                stock_sufficient=stock_sufficient,
             )
-            for combo_data in combos:
-                formatted = format_combination(combo_data)
+            for combo_data_item in combos:
+                formatted = format_combination(combo_data_item)
                 all_combos.append(formatted)
 
-        # 增强组合信息：设备台数
+        # 同品牌有结果 → 直接输出，不凑数
+        if all_combos:
+            result['combinations'] = all_combos
+            return result
+
+        # 第 2 段：混合品牌兜底（仅当同品牌无任何方案时）
+        combos = find_inverter_combinations(
+            combo_data, target_power, tolerance,
+            max_combos, same_brand=False,
+            stock_sufficient=stock_sufficient,
+        )
+        for combo_data_item in combos:
+            formatted = format_combination(combo_data_item)
+            all_combos.append(formatted)
+
+        if not all_combos:
+            return result
+
+        # 增强组合信息
+        existing_total = existing_kw
         for combo in all_combos:
-            total_inv = existing_kw + combo['total_power']
+            total_inv = existing_total + combo['total_power']
             combo['dc_ac_ratio'] = _calc_dc_ac_ratio(component_kw, total_inv)
             combo['total_inverter_kw'] = total_inv
             combo['total_units'] = sum(item['quantity'] for item in combo['items'])
-            # 平均每kW价格排序（越低越划算）
             combo['avg_price_per_kw'] = round(
                 combo['total_price_rank'] / combo['total_power'], 2
             ) if combo['total_power'] > 0 else 999
 
-        # 排序：总价序（低→高）优先，同价格时设备台数少的优先
-        all_combos.sort(key=lambda c: (c['total_price_rank'], c['total_units']))
+        # 排序：台数少优先 → 同台数时价格低优先
+        all_combos.sort(key=lambda c: (c['total_units'], c['total_price_rank']))
 
         # 添加方案标签
         for i, combo in enumerate(all_combos, 1):
