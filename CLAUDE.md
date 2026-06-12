@@ -2,20 +2,34 @@
 
 ## Skill 同步规则
 
-修改工作区 `d:\Code\Skills开发\` 下任何 skill 的脚本后，必须**先删除目标目录再全量复制**同步到 `$HOME/.claude/skills/`，避免 `cp -r` 在目标已存在时产生嵌套目录：
+修改工作区 `d:\Code\Skills开发\` 下任何 skill 的脚本后，必须**先删除目标目录再全量复制**同步到 Agent 的 skill 目录，避免 `cp -r` 在目标已存在时产生嵌套目录。
+
+目标目录自动检测（兼容 Claude Code 的 `~/.claude/skills/`、WorkBuddy 的 `~/.workbuddy/skills/` 等），也可通过 `$SKILL_TARGET` 环境变量手动指定：
 
 ```bash
+# 自动检测 skill 目标目录（常用位置）
+if [ -n "$SKILL_TARGET" ]; then
+  SKILL_DEST="$SKILL_TARGET"
+elif [ -d "$HOME/.workbuddy/skills" ]; then
+  SKILL_DEST="$HOME/.workbuddy/skills"
+elif [ -d "$HOME/.claude/skills" ]; then
+  SKILL_DEST="$HOME/.claude/skills"
+else
+  echo "❌ 未找到 skill 安装目录，请设置 SKILL_TARGET 环境变量"
+  exit 1
+fi
+
 # dms-weekly-report（全目录覆盖：SKILL.md + scripts/ + assets/ 等）
-rm -rf "$HOME/.claude/skills/dms-weekly-report/"
-cp -r "d:/Code/Skills开发/tianhe-skills/dms-weekly-report/" "$HOME/.claude/skills/dms-weekly-report/"
+rm -rf "$SKILL_DEST/dms-weekly-report/"
+cp -r "d:/Code/Skills开发/tianhe-skills/dms-weekly-report/" "$SKILL_DEST/dms-weekly-report/"
 
 # dms-inquiry-bom（全目录覆盖：SKILL.md + scripts/ + assets/ 等）
-rm -rf "$HOME/.claude/skills/dms-inquiry-bom/"
-cp -r "d:/Code/Skills开发/tianhe-skills/dms-inquiry-bom/" "$HOME/.claude/skills/dms-inquiry-bom/"
+rm -rf "$SKILL_DEST/dms-inquiry-bom/"
+cp -r "d:/Code/Skills开发/tianhe-skills/dms-inquiry-bom/" "$SKILL_DEST/dms-inquiry-bom/"
 
 # dms-inventory
-rm -rf "$HOME/.claude/skills/dms-inventory/"
-cp -r "d:/Code/Skills开发/tianhe-skills/dms-inventory/" "$HOME/.claude/skills/dms-inventory/"
+rm -rf "$SKILL_DEST/dms-inventory/"
+cp -r "d:/Code/Skills开发/tianhe-skills/dms-inventory/" "$SKILL_DEST/dms-inventory/"
 ```
 
 > ⚠️ 注意：`cp -r src/ dest/` 当 `dest/` 已存在时，会在 dest 内创建 `src/` 子目录（即 `dest/src/`），导致 `scripts/scripts/` 嵌套问题。必须先 `rm -rf` 再 `cp -r`。

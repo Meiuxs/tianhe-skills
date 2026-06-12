@@ -40,42 +40,38 @@ metadata:
 
 ## 使用流程
 
-### 步骤 1：解析日期范围
+> **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。Agent 执行前自动检测路径（兼容 Claude Code 的 `~/.claude/skills/`、WorkBuddy 的 `~/.workbuddy/skills/` 等）：
+> ```bash
+> if [ -d "$HOME/.workbuddy/skills/dms-weekly-report" ]; then
+>   SKILL_DIR="$HOME/.workbuddy/skills/dms-weekly-report"
+> else
+>   SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
+> fi
+> ```
+
+### 步骤 1：解析并确认日期范围
 
 先运行 `--help` 查看脚本支持的日期标签和参数说明：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 python "$SKILL_DIR/scripts/resolve_date_range.py" --help
 ```
 
-确认支持的格式后，选择合适的标签传给脚本，并用 `--json` 输出结果：
+确认支持的格式后，选择合适的标签传给脚本，用 `--json` 输出解析结果：
 
 ```bash
-RANGE=$(python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月到现在" --json)
-START=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['start'])")
-END=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['end'])")
-RANGE_STR=$(echo "$RANGE" | python -c "import sys,json;print(json.load(sys.stdin)['range_str'])")
+python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月到现在" --json
 ```
 
-> 以上命令将日期范围存入 `$START`、`$END`、`$RANGE_STR` 三个 Shell 变量。
-
-**从用户话语提取标签的优先级：**
-1. 先检查标准标签（本周/上周/本月/上月/本季度/去年）
-2. 再检查中文日期范围（`6月1号到6月7号` 等自然表述）
-3. 再检查 `YYYY-MM-DD ~ YYYY-MM-DD` 标准格式
-4. 都无匹配 → 默认 `"本周"`，向用户说明
-
-> 解析失败时（退出码非 0）才回退询问用户。更多格式详见 `references/date_parser.md`。
-
-**快捷方式：** 也可以跳过本步骤，直接在**步骤 3**中用 `--date-label` 一步完成。
+> 输出示例：`{"start": "2026-05-12", "end": "2026-06-12", "range_str": "2026-05-12 ~ 2026-06-12"}`
+>
+> 此步骤用于**确认日期解析是否正确**。Agent 会根据输出的日期值，在**步骤 3** 中直接填入命令，不依赖 Shell 跨步骤变量。
 
 ### 步骤 2：检查运行环境
 
 确认日期范围后，先检查 DMS 登录凭据和浏览器环境：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
@@ -91,29 +87,28 @@ python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 先用 `--help` 查看 `run_weekly_report.py` 的全部参数说明和使用示例：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 python "$SKILL_DIR/scripts/run_weekly_report.py" --help
 ```
 
-确认参数后，推荐用 `--date-label` 一步到位（自动解析日期，无需步骤 1）：
+Agent 根据**步骤 1** 解析出的日期，直接用日期字符串传参（不依赖 Shell 变量）：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
-# 最简用法：中文日期标签 + 无头模式
-python "$SCRIPT" --output-dir "$PWD" --date-label "上个月到现在" --headless
+# 用步骤 1 确认的日期值直接传参 + 无头模式
+python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless
 ```
+
+> **注意：** Agent 会在步骤 1 输出后自动将日期值填入步骤 3 的命令中，用户无需手动操作。
 
 **常用模式速查：**
 
 | 场景 | 命令 |
 |------|------|
-| 本月数据（完整模式） | `python "$SCRIPT" --output-dir "$PWD" --date-label "本月"` |
-| 本月数据（无头模式） | `python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless` |
+| 本月数据（无头模式） | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-06-01" --end-date "2026-06-12" --headless` |
+| 自定义日期 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless` |
 | 上周数据 | `python "$SCRIPT" --output-dir "$PWD" --weeks 1` |
-| 自定义日期范围 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-06-01" --end-date "2026-06-07"` |
-| 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --date-label "本月"` |
+| 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --start-date "2026-06-01" --end-date "2026-06-12"` |
 
 > **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录。
 >
@@ -155,7 +150,7 @@ AskUserQuestion:
 
 **根据用户确认/补充后：**
 - ✅ 更新 SKILL.md 中的说明、注意事项、常见错误
-- ✅ 修改脚本或参考文件后，按 CLAUDE.md 同步规则复制到 `~/.claude/skills/`
+- ✅ 修改脚本或参考文件后，按项目 CLAUDE.md 同步规则复制到对应 skill 目录
 
 > **原则：** 先自行反思提炼，再给用户确认补充。
 
@@ -191,7 +186,6 @@ AskUserQuestion:
 从已有 xlsx 单独生成 HTML 报表（不经过 DMS 登录流程）：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 python "$SKILL_DIR/scripts/generate_html_report.py" \
   --xlsx "询价汇总.xlsx" \
   --range "2026-06-01 ~ 2026-06-07"
@@ -216,7 +210,6 @@ pip install playwright openpyxl && playwright install chromium
 DMS 登录凭据通过环境变量读取，**不硬编码密码**。详见 `references/login_config.md`（含检测顺序、持久化机制）：
 
 ```bash
-SKILL_DIR=$(python -c "import os; print(os.path.expanduser('~/.claude/skills/dms-weekly-report'))")
 python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
