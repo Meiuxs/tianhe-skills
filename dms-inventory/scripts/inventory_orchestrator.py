@@ -512,11 +512,14 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
         if comp_req:
             component_kw = round(comp_req.get('power', 0) * comp_req.get('qty', 0) / 1000, 2)
 
+    # ── 组合生成（所有品牌各自 same_brand → 不足时混合兜底） ──
+    all_combos = []
+
     if component_kw > 0 and existing_kw >= 0:
         ratio_range = preferences.get('dc_ac_ratio_range', [1.1, 1.2])
         ratio_min, ratio_max = ratio_range[0], ratio_range[1]
 
-        need_min, need_max, (total_min, total_max) = calculate_inverter_range(
+        need_min, need_max, (_, _) = calculate_inverter_range(
             component_kw, existing_kw, ratio_min, ratio_max
         )
 
@@ -525,23 +528,9 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
         max_combos = options.get('max_combinations', 5)
         tolerance = options.get('tolerance', 0.15)
 
-        # 用可用库存的原始 DataFrame（非聚合）进行组合搜索
-        # 但 find_inverter_combinations 期望一个带 物料编号/功率/库存/价格排序/厂家 的 DataFrame
-        # 先从聚合数据反查可用物料
-        avail_codes = set(available['物料编号'].values)
-        raw_available = items[items['物料编号'].isin(avail_codes)].copy()
-
-        # 确保价格排序列存在
-        if '价格排序' not in raw_available.columns:
-            raw_available['价格排序'] = 999
-
         stock_sufficient = preferences.get('stock_sufficient', True)
 
-        # ── 组合生成：所有品牌各自 same_brand → 不足时混合兜底 ──
-        all_combos = []
-
-        # 使用 raw_items_filtered（来自前置过滤）而非 raw_available
-        # raw_items_filtered 在有 prefer_material 时已被筛选
+        # 使用 raw_items_filtered（来自前置过滤）作为组合搜索数据源
         avail_codes_for_combo = set(raw_items_filtered['物料编号'].values)
         combo_data = items[items['物料编号'].isin(avail_codes_for_combo)].copy()
         if '价格排序' not in combo_data.columns:
@@ -562,28 +551,21 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
                 formatted = format_combination(combo_data_item)
                 all_combos.append(formatted)
 
-        # 同品牌有结果 → 直接输出，不凑数
-        if all_combos:
-            result['combinations'] = all_combos
-            return result
-
         # 第 2 段：混合品牌兜底（仅当同品牌无任何方案时）
-        combos = find_inverter_combinations(
-            combo_data, target_power, tolerance,
-            max_combos, same_brand=False,
-            stock_sufficient=stock_sufficient,
-        )
-        for combo_data_item in combos:
-            formatted = format_combination(combo_data_item)
-            all_combos.append(formatted)
-
         if not all_combos:
-            return result
+            combos = find_inverter_combinations(
+                combo_data, target_power, tolerance,
+                max_combos, same_brand=False,
+                stock_sufficient=stock_sufficient,
+            )
+            for combo_data_item in combos:
+                formatted = format_combination(combo_data_item)
+                all_combos.append(formatted)
 
-        # 增强组合信息
-        existing_total = existing_kw
+    # 增强组合信息
+    if all_combos:
         for combo in all_combos:
-            total_inv = existing_total + combo['total_power']
+            total_inv = existing_kw + combo['total_power']
             combo['dc_ac_ratio'] = _calc_dc_ac_ratio(component_kw, total_inv)
             combo['total_inverter_kw'] = total_inv
             combo['total_units'] = sum(item['quantity'] for item in combo['items'])
