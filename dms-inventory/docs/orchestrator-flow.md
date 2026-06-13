@@ -265,35 +265,15 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Start([开始品牌分组]) --> AvailCodes["avail_codes = set(available['物料编号'].values)<br/>从聚合数据获取可用编码"]
-
-    AvailCodes --> RawItems["raw_items = items[items['物料编号'].isin(avail_codes)]<br/>从原始数据反查完整行"]
-    RawItems --> StockLookup["stock_lookup = {物料编号: 库存总量}<br/>从聚合数据构建库存查询表"]
-
-    StockLookup --> Loop[遍历 raw_items 每行]
-    Loop --> Brand[提取 厂家 列作为品牌名]
-    Brand --> Dedup{同品牌下<br/>已有此物料编码?}
-    Dedup -->|是| Skip[跳过（保留首个仓库行）]
-    Dedup -->|否| AddItem["构建 item<br/>{code, power, name, stock, price_rank, remark, brand}"]
-
-    AddItem --> Loop
-    Skip --> Loop
-    Loop --> Done[品牌分组完成]
-
-    Done --> PrefBrand{prefer_brand 已设置?}
-    PrefBrand -->|是| Match{品牌在分组中?}
-    Match -->|是| Pop["从 brand_groups 弹出 → 存入 preferred_brand"]
-    Match -->|否| SkipBrand
-
-    PrefBrand -->|否| SkipBrand
-    Pop --> Others[剩余品牌 → 存入 other_brands]
-    SkipBrand --> Others
-
-    Others --> PrefMaterial{prefer_material 已设置?}
-    PrefMaterial -->|是| Scan[扫描所有品牌组<br/>物料名称含关键词的]
-    Scan --> Collect[收集为 material_models]
-    Collect --> Store["→ 存入 preferred_material"]
-    PrefMaterial -->|否| End([结束])
+    Start([开始品牌分组]) --> AvailCodes["avail_codes = set(available.物料编号)"]
+    AvailCodes --> RawItems["raw_items = items[avail_codes]<br/>从原始数据反查完整行"]
+    RawItems --> PrefFilter{prefer_material 设置?}
+    PrefFilter -->|是| Filter["过滤 raw_items<br/>仅保留物料名称含关键词的行"]
+    PrefFilter -->|否| Skip
+    Filter --> Skip
+    Skip --> StockLookup["stock_lookup = {物料编号: 库存总量}"]
+    StockLookup --> BrandLoop["按 厂家 列分组 → brands 列表"]
+    BrandLoop --> Done([品牌分组完成])
 
     style Start fill:#e1f5fe
     style End fill:#e1f5fe
@@ -303,35 +283,23 @@ flowchart TD
 
 ```json
 {
-  "preferred_brand": {
-    "name": "上能",
-    "models": [
-      {"code": "INV001", "power": 40, "name": "上能40kW", "stock": 5, "brand": "上能"},
-      {"code": "INV003", "power": 50, "name": "上能50kW", "stock": 3, "brand": "上能"}
-    ]
-  },
-  "other_brands": [
+  "brands": [
+    {
+      "name": "上能",
+      "models": [
+        {"code": "INV001", "power": 40, "name": "上能40kW", "stock": 5, "brand": "上能"},
+        {"code": "INV003", "power": 50, "name": "上能50kW", "stock": 3, "brand": "上能"}
+      ]
+    },
     {
       "name": "华为",
       "models": [{"code": "INV002", "power": 40, "name": "华为40kW", "stock": 8, "brand": "华为"}]
     }
-  ],
-  "preferred_material": {             // 仅在设置了 prefer_material 时出现
-    "keyword": "天合原装专用",
-    "models": [
-      {"code": "INV001", "brand": "上能", "name": "天合原装专用40kW", ...},  // 保留实际品牌
-      {"code": "INV002", "brand": "华为", "name": "天合原装专用40kW", ...}
-    ]
-  }
+  ]
 }
 ```
 
-> **`prefer_brand` 与 `prefer_material` 是正交的两个维度：**
->
-> | | `prefer_material` 未设置 | `prefer_material="天合原装专用"` |
-> |---|---|---|
-> | `prefer_brand` 未设置 | 按品牌分组正常推荐 | 天合原装物料跨品牌优先 |
-> | `prefer_brand="上能"` | 上能优先 | 上能的天合原装 > 其他品牌天合原装 > 上能其他 > 其他品牌 |
+> **`prefer_material`** 在品牌分组前完成前置过滤：若设置，`raw_items` 在分组前已按物料名称关键词过滤，后续品牌分组和组合搜索均只包含匹配的型号。
 
 ---
 
@@ -341,62 +309,37 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([开始组合]) --> DCAC["calculate_inverter_range<br/>根据组件总功率 + 已有逆变器 + DC/AC 比范围<br/>计算目标功率 target_power"]
+    Start([开始组合]) --> DCAC["calculate_inverter_range()<br/>DC/AC 比 1.1~1.2 → 目标功率 target_power"]
 
-    DCAC --> Init["all_combos = []<br/>stock_sufficient = preferences.stock_sufficient"]
+    DCAC --> Loop["遍历 brands 每个品牌<br/>same_brand=True 独立搜索"]
 
-    Init --> Step0{"preferred_material<br/>有值?"}
-    Step0 -->|步骤 0| Step0_1["material_raw = raw_available 过滤<br/>→ find_inverter_combinations"]
-    Step0_1 --> Step0_2[组合标记 is_material_preferred = True]
-    Step0_2 --> Step0_3["_add_single_unit_combos<br/>单台方案，保留实际品牌"]
+    Loop --> BrandAlgo["find_inverter_combinations()<br/>品牌内贪婪: 大功率优先 → 最少台数"]
+    BrandAlgo --> HasResult{同品牌<br/>有方案产出?}
 
-    Step0 --> Step1{"preferred_brand<br/>有值?"}
-    Step0_3 --> Step1
+    HasResult -->|是| Enhance
+    HasResult -->|否| Mixed["find_inverter_combinations<br/>混合品牌 same_brand=False"]
 
-    Step1 -->|步骤 1| Step1_1["preferred_raw → find_inverter_combinations<br/>same_brand=True"]
-    Step1_1 --> Step1_2[补充首选品牌的单台方案]
+    Mixed --> Enhance
 
-    Step1 --> Step2{"all_combos 数量<br/>< max_combos?"}
-    Step1_2 --> Step2
-
-    Step2 -->|步骤 2: 是| Step2_1[遍历 other_brands 每个品牌]
-    Step2_1 --> Step2_2["brand_raw → find_inverter_combinations<br/>same_brand=True"]
-    Step2_2 --> Step2_3[补充该品牌的单台方案]
-    Step2_3 -.->|下一个品牌| Step2_1
-    Step2_3 -->|品牌遍历完毕| Step3
-
-    Step2 -->|否| Step3
-
-    Step3{"all_combos 数量<br/>< max_combos?"}
-    Step3 -->|步骤 3: 是| Step3_1["raw_available 全量<br/>→ find_inverter_combinations<br/>same_brand=False 混合品牌"]
-    Step3 -->|否| E1
-
-    Step3_1 --> E1["dc_ac_ratio"]
-    E1 --> E2["total_inverter_kw<br/>= existing_kw + total_power"]
-    E2 --> E3["total_units"]
-    E3 --> E4["avg_price_per_kw"]
-
-    E4 --> Sort["排序: (total_price_rank, total_units)<br/>总价序低→高，同价时设备台数少优先"]
-    Sort --> Label[添加 plan_label: 方案1, 方案2...]
-    Label --> Return[返回 combinations 列表]
+    Enhance["增强信息: dc_ac_ratio / total_units / avg_price_per_kw"]
+    Enhance --> Sort["排序: (total_units ASC, total_price_rank ASC)<br/>台数少优先 → 同台数价格低优先"]
+    Sort --> Label["标记 plan_label"]
+    Label --> Return["返回 combinations"]
     Return --> End([结束])
 
     style Start fill:#e1f5fe
     style End fill:#e1f5fe
-    style Step0 fill:#e8f5e9
-    style Step1 fill:#e8f5e9
-    style Step2 fill:#e8f5e9
-    style Step3 fill:#e8f5e9
+    style HasResult fill:#fff9c4
 ```
 
-### 四步填充优先级表格
+### 组合优先级
 
-| 步骤 | 名称 | 数据来源 | same_brand | 说明 |
-|------|------|---------|-----------|------|
-| **0** | 物料偏好方案 | `preferred_material` 匹配的型号（跨品牌） | `False` | **新增**，`is_material_preferred: True` |
-| **1** | 首选品牌方案 | `preferred_brand` 品牌的所有型号 | `True` | 纯品牌，不再混入天合原装 |
-| **2** | 其他品牌方案 | `other_brands` 每个品牌分别搜索 | `True` | 按品牌名顺序填充 |
-| **3** | 混合品牌方案 | `raw_available` 全量 | `False` | 兜底，可组合不同品牌 |
+| 阶段 | 名称 | 数据来源 | same_brand | 触发条件 |
+|------|------|---------|-----------|---------|
+| **1** | 同品牌方案 | `brands` 每个品牌各自的型号 | `True` | 始终执行，每个品牌独立搜索 |
+| **2** | 混合品牌方案 | 全量（`raw_items_filtered`） | `False` | 仅当阶段 1 无任何方案时触发 |
+
+**终止条件：** 阶段 1 任一品牌产出方案 → 直接输出，不再执行阶段 2。
 
 ### 单台方案补充逻辑
 
@@ -536,7 +479,7 @@ flowchart TD
 | `requirements.combiner_boxes` | `existing` | list | 否 | `[]` | 已有并网柜列表 |
 | `requirements.combiner_boxes` | `power` | int | 否 | `50` | 目标并网柜功率 (kW) |
 | `preferences` | `prefer_brand` | string | 否 | — | 首选品牌（厂家列） |
-| `preferences` | `prefer_material` | string | 否 | — | **物料偏好关键词**（物料名称列匹配） |
+| `preferences` | `prefer_material` | string | 否 | — | 物料偏好关键词（前置过滤，物料名称列匹配） |
 | `preferences` | `exclude_project_specific` | bool | 否 | `true` | 排除项目专用物料 |
 | `preferences` | `exclude_unlisted` | bool | 否 | `true` | 排除未上架物料 |
 | `preferences` | `prefer_non_original` | bool | 否 | `true` | 优先非原厂机 |
