@@ -114,14 +114,14 @@ class TestResolveDateRange(unittest.TestCase):
         """测试'上个月X号到现在'（相对月+日+至今）。"""
         result = resolve_date_range("上个月12号到现在")
         self.assertEqual(result["start"], "2026-05-12")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
         self.assertIn("至今", result["label"])
 
     def test_last_month_day_chinese_numeral(self):
         """测试中文数字'上个月十二号到现在'。"""
         result = resolve_date_range("上个月十二号到现在")
         self.assertEqual(result["start"], "2026-05-12")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
 
     def test_last_month_day_only(self):
         """测试'上月X号'（相对月+日，无至今→到月末）。"""
@@ -133,19 +133,19 @@ class TestResolveDateRange(unittest.TestCase):
         """测试'本月X号至今'。"""
         result = resolve_date_range("本月1号至今")
         self.assertEqual(result["start"], "2026-06-01")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
 
     def test_month_day_until_now(self):
         """测试'X月X号到现在'。"""
         result = resolve_date_range("5月12号到现在")
         self.assertEqual(result["start"], "2026-05-12")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
 
     def test_chinese_date_range_with_cn_numeral(self):
         """测试中文数字日期范围'六月十二号至今'。"""
         result = resolve_date_range("六月十二号至今")
         self.assertEqual(result["start"], "2026-06-12")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
 
     def test_chinese_date_range_cn_month_day(self):
         """测试中文数字的'6月1号到6月7号'。"""
@@ -157,14 +157,14 @@ class TestResolveDateRange(unittest.TestCase):
         """测试'上个月到现在'（不带日号）。"""
         result = resolve_date_range("上个月到现在")
         self.assertEqual(result["start"], "2026-05-01")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
         self.assertIn("至今", result["label"])
 
     def test_this_month_until_now(self):
         """测试'本月到现在'。"""
         result = resolve_date_range("本月到现在")
         self.assertEqual(result["start"], "2026-06-01")
-        self.assertEqual(result["end"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-13")
 
 
 if __name__ == "__main__":
