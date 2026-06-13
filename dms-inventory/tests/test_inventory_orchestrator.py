@@ -532,5 +532,84 @@ class TestRunAnalysisPreferMaterial(unittest.TestCase):
         self.assertNotIn('preferred_material', inverters)
 
 
+# ═══════════════════════════════════════════════════════════
+#  10. run_analysis — 组合逻辑测试
+# ═══════════════════════════════════════════════════════════
+
+class TestRunAnalysisCombinations(unittest.TestCase):
+    """测试逆变器组合生成逻辑"""
+
+    @patch('inventory_orchestrator.load_inventory')
+    def test_same_brand_preferred_over_mixed(self, mock_load):
+        """同品牌有方案时应直接输出，不尝试混合品牌"""
+        mock_load.return_value = {
+            '组件': pd.DataFrame({
+                '物料编号': ['6B001492'],
+                '物料名称': ['组件A'], '功率': ['730W'],
+                '可用库存': [800.0], '仓库名称': ['南宁仓'],
+            }),
+            '逆变器': pd.DataFrame({
+                '物料编号': ['INV001', 'INV002', 'INV003'],
+                '物料名称': ['品牌A 50kW', '品牌A 40kW', '品牌B 40kW'],
+                '功率': ['50kW', '40kW', '40kW'],
+                '可用库存': [10.0, 10.0, 10.0],
+                '厂家': ['品牌A', '品牌A', '品牌B'],
+                '价格排序': [1, 2, 3],
+                '备注': [None, None, None],
+            }),
+            '并网箱': pd.DataFrame(),
+        }
+        params = {
+            'requirements': {'components': {'power': 730, 'qty': 800}, 'inverters': {}},
+            'preferences': {},
+        }
+        result = run_analysis(params)
+        combos = result['inverters'].get('combinations', [])
+        # 品牌A有足够的库存出方案 → 应返回组合
+        self.assertTrue(len(combos) > 0, "同品牌应有方案输出")
+        # 所有组合应为同品牌（is_same_brand=True）
+        for combo in combos:
+            self.assertTrue(
+                combo.get('is_same_brand', False),
+                f"组合 {combo.get('plan_label')} 应为同品牌",
+            )
+
+    @patch('inventory_orchestrator.load_inventory')
+    def test_combos_sorted_by_units_then_price(self, mock_load):
+        """组合排序按 total_units ASC → total_price_rank ASC"""
+        mock_load.return_value = {
+            '组件': pd.DataFrame({
+                '物料编号': ['6B001492'],
+                '物料名称': ['组件A'], '功率': ['730W'],
+                '可用库存': [800.0], '仓库名称': ['南宁仓'],
+            }),
+            '逆变器': pd.DataFrame({
+                '物料编号': ['INV001', 'INV002'],
+                '物料名称': ['品牌A 50kW', '品牌A 40kW'],
+                '功率': ['50kW', '40kW'],
+                '可用库存': [20.0, 20.0],
+                '厂家': ['品牌A', '品牌A'],
+                '价格排序': [1, 2],
+                '备注': [None, None],
+            }),
+            '并网箱': pd.DataFrame(),
+        }
+        params = {
+            'requirements': {'components': {'power': 730, 'qty': 800}, 'inverters': {}},
+            'preferences': {},
+        }
+        result = run_analysis(params)
+        combos = result['inverters'].get('combinations', [])
+        for i in range(len(combos) - 1):
+            u1 = combos[i]['total_units']
+            u2 = combos[i + 1]['total_units']
+            p1 = combos[i]['total_price_rank']
+            p2 = combos[i + 1]['total_price_rank']
+            self.assertTrue(
+                u1 < u2 or (u1 == u2 and p1 <= p2),
+                f"方案{i+1}(台数{u1},价格{p1}) 应在方案{i+2}(台数{u2},价格{p2})之前",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
