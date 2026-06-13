@@ -32,41 +32,38 @@ metadata:
 | 快捷查询 | `scripts/lookup_by_code.py` — 按物料编码/名称查询 |
 | 架构文档 | `references/inventory-flow.md` |
 | 异常处理 | `references/error-handling.md` |
-| 临时目录 | `/tmp/dms_inventory/`（固定路径） |
+| 临时目录 | `TMP_DIR`（跨平台，`tempfile.gettempdir()` 自动适配各系统） |
 | 库存文件 | `assets/` 目录下的 Excel 文件 |
 
-> **⚠️ 强制性规范：禁止在 `python -c` 内使用 `/tmp/` 路径**
+> **⚠️ 临时目录规范：使用 Python `tempfile.gettempdir()` 作为唯一来源**
 >
-> **原理：** 在 Git Bash (MSYS2) 环境下，`/tmp/` 只在**命令行参数**中被自动翻译为 Windows 临时目录；
-> `python -c "..."` 代码字符串**内部**的 `/tmp/` **不会被翻译**，Python 会解析为 `C:\tmp\...`。
+> **原理：** 各平台临时目录位置不同，MSYS2 下还有 Shell/Python 路径翻译不一致问题：
+> | 系统 | 实际临时目录 | 风险 |
+> |:----|:------------|:-----|
+> | Linux | `/tmp` | 无 |
+> | macOS | `/tmp` | 无 |
+> | Windows (MSYS2) | `C:\Users\...\AppData\Local\Temp` | Shell 中 `/tmp/` 自动翻译，Python 字符串中不翻译 → 指向 `C:\tmp\` |
 >
-> **安全用法（MSYS2 会翻译命令行参数，放心使用）：**
+> **统一规范：** 用一个 Python 命令确定临时目录，后续所有命令引用 `$TMP_DIR`：
 > ```bash
-> --output-file "$TMP_DIR/analysis.json"    # ✅ 命令行参数，MSYS2 自动翻译
-> --params "$(cat "$TMP_DIR/input.json")"   # ✅ 同上
+> TMP_DIR=$(python -c "import os,tempfile; print(os.path.join(tempfile.gettempdir(),'dms_inventory'))")
+> mkdir -p "$TMP_DIR"
+> ```
+> `tempfile.gettempdir()` 返回系统标准临时目录，Windows/Linux/macOS 均正确。
+>
+> **禁止用法：**
+> ```bash
+> python -c "open('/tmp/file')"                 # ❌ Windows 上变成 C:\tmp\file
+> python -c "open(os.environ['TMP']+'/file')"  # ❌ 依赖环境变量，多一层间接
+> ```
+> **正确用法（绝对不要写成别的方式）：**
+> ```bash
+> cat "$TMP_DIR/file"                              # ✅ Shell 命令
+> --output-file "$TMP_DIR/file"                    # ✅ 命令行参数
+> python -c "open(r'$TMP_DIR/file')"               # ✅ Python 中用 r'' raw string 引用 shell 变量（防 Windows 反斜杠转义）
 > ```
 >
-> **不安全用法（MSYS2 不翻译 `-c` 内的字符串）：**
-> ```bash
-> python -c "open('/tmp/dms_inventory/analysis.json')"   # ❌ 不会被翻译
-> ```
->
-> **两种正确做法（二选一）：**
-> 1. **`cat | python`（推荐）** — 通过 stdin 传递文件内容，避开文件路径：
->    ```bash
->    cat /tmp/dms_inventory/analysis.json | PYTHONIOENCODING=utf-8 python -c "
->    import json, sys
->    d = json.load(sys.stdin)
->    "
->    ```
-> 2. **`python -c` 内用 `os.environ['TMP']`** — 动态获取 Windows 临时目录：
->    ```python
->    import os, json
->    TMP = os.environ.get('TMP', '/tmp')
->    d = json.load(open(os.path.join(TMP, 'dms_inventory', 'analysis.json')))
->    ```
->
-> 以下所有代码块已按此规范编写，**LLM 自行编写 `python -c` 命令时必须遵守此规则**。
+> 以下所有代码块中的 `$TMP_DIR` 均按此规范设置和引用。**LLM 自行编写命令时必须遵守此规则**。
 
 ## 何时使用 / 何时不使用
 
@@ -88,41 +85,22 @@ metadata:
 
 ## 工作流
 
-> **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。Agent 执行前自动检测路径（通过 `scripts/detect_skill_dir.py` 扫描用户目录下所有 `skills/` 目录，不限 Agent 类型）：
+> **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。
+> 执行 Agent 在加载 Skill 时应自动设置此变量。
+> 若未设置，可用以下命令跨平台自定位（不依赖特定 Agent 路径，Windows/Linux/macOS 兼容）：
 > ```bash
-> # 自动检测 skill 安装目录（扫描 ~/ 下所有含 skills/ 的目录）
-> SKILL_DIR=$(python << 'DETECTSKILL'
-> import os, sys, subprocess
-> 
-> skill = 'dms-inventory'
-> candidates = []
-> 
-> # 1. SKILL_TARGET 环境变量（手动覆盖）
-> if 'SKILL_TARGET' in os.environ:
->     candidates.append(os.environ['SKILL_TARGET'])
-> 
-> # 2. 扫描 ~/ 下所有含 skills/ 子目录的目录（不限 Agent）
-> home = os.path.expanduser('~')
-> for entry in os.scandir(home):
->     if entry.is_dir():
->         skills_dir = os.path.join(entry.path, 'skills')
->         if os.path.isdir(skills_dir):
->             candidates.append(skills_dir)
-> 
-> # 3. 找 detect_skill_dir.py 并执行（自动去重）
-> for base in dict.fromkeys(candidates):
->     sp = os.path.join(base, skill, 'scripts', 'detect_skill_dir.py')
->     if os.path.isfile(sp):
->         r = subprocess.run([sys.executable, sp, skill],
->                            capture_output=True, text=True)
->         if r.returncode == 0 and r.stdout.strip():
->             print(r.stdout.strip())
->             sys.exit(0)
-> sys.exit(1)
-> DETECTSKILL
-> )
+> SKILL_DIR="${SKILL_DIR:-$(python -c "
+> import os
+> for e in os.scandir(os.path.expanduser('~')):
+>     if e.is_dir():
+>         p = os.path.join(e.path, 'skills', 'dms-inventory', 'scripts', 'detect_skill_dir.py')
+>         if os.path.isfile(p):
+>             import subprocess
+>             r = subprocess.run(['python', p], capture_output=True, text=True)
+>             if r.returncode == 0 and r.stdout.strip():
+>                 print(r.stdout.strip()); break
+> ")}"
 > ```
-> 设置成功后可用 `echo "$SKILL_DIR"` 确认路径。
 >
 > **核心串行规则：必须先确认组件方案（DC 容量）才能跑编排器匹配逆变器/并网柜（DC/AC 比）。**
 > 组件功率决定 DC 总容量 → DC 容量决定 DC/AC 比 → DC/AC 比决定编排器推荐的逆变器组合。
@@ -154,6 +132,13 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 
 **⚠️ 此阶段只问物料策略，不问容配比/组合方案。DC 容量未确定前不能跑编排器。**
 
+**🚫 子步骤 1 禁止行为（LLM 必须遵守）：**
+> - ❌ 禁止问容配比——DC 容量未确定，容配比无意义
+> - ❌ 禁止跑编排器——DC 容量未定，编排器无法工作
+> - ❌ 禁止让用户选逆变器/并网柜方案——那是阶段三的任务
+> - ❌ 禁止替用户决定替代规格——必须用户确认后才可替代
+> - ❌ 零库存候选物料有「项目专用」「未上架」等排除性备注时禁止推荐
+
 | 选项 | 说明 | 后续影响（DC 容量） |
 |:----|:------|:-------------------|
 | **接受替代功率** | 推荐库存最足的相近功率 | DC = 替代功率 × 数量，需重跑编排器 |
@@ -166,6 +151,13 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 
 #### 子步骤 2：检查指定逆变器库存（如用户已指定）
 
+**🚫 子步骤 2 禁止行为（LLM 必须遵守）：**
+> - ❌ 禁止推荐具体逆变器型号——此步骤只有库存信息，不知道价格/品牌，无法推荐
+> - ❌ 禁止跑编排器——DC 容量未全量确定（组件方案可能还在确认中），编排器无法工作
+> - ❌ 禁止问组合方案——那是阶段三的任务
+> - ❌ 禁止回头问组件方案——组件已在子步骤 1 确认
+> - ❌ 零库存候选物料有「项目专用」「未上架」等排除性备注时禁止推荐
+
 若用户在项目描述中已指定逆变器型号/功率/数量（如"2台110KW天合逆变器"），用 `quick_query.py` 查询库存：
 
 ```bash
@@ -177,18 +169,16 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 
 | 结果 | 处理 |
 |:----|:-----|
-| **有库存且满足需求（`库存总量 >= qty`）** | → 保留原指定规格，进入**子步骤 3** |
+| **有库存且满足需求（`库存总量 >= qty`）** | → **直接进入子步骤 3**，不提问。原指定规格写入 `input.json` 的 `required_new` |
 | **无库存或不足（`库存总量 == 0` 或 `库存总量 < qty`）** | → 用 `AskUserQuestion` 确认应对策略（见下方表格） |
+
+> **ℹ️ 零库存候选：** `quick_query.py --aggregate` 输出包含库存为0的逆变器物料。仅当匹配条件（功率/品牌）的物料满足「其他条件都满足、仅库存为0、无排除性备注」时，展示其物料编号供自筹选择。
 
 | 选项 | 说明 | 后续操作 |
 |:----|:------|:---------|
-| **接受替代方案** | 编排器自动从库存中推荐其他品牌/型号的可用组合 | `input.json` 中**不设** `required_new`，让编排器自由推荐 |
 | **自筹指定编号** | 使用 quick_query 输出中匹配但库存为0的物料编号，由用户自行采购该型号 | `input.json` 中**不设** `required_new`，仅保留 `existing` 信息；记录物料编号到最终结果 |
+| **不指定型号** | 不约束具体型号，由阶段二的编排器根据 DC/AC 比自动匹配最优组合（含价格、品牌等） | `input.json` 中**不设** `required_new`，让编排器自由推荐 |
 | **仅精确匹配** | 指定型号无库存则终止流程 | 流程终止 |
-
-> **ℹ️ 零库存候选：** `quick_query.py --aggregate` 输出同样包含库存为0的逆变器物料。仅当匹配条件（功率/品牌）的物料满足「其他条件都满足、仅库存为0、无排除性备注」时，展示其物料编号供自筹选择。
->
-> ⚠️ 子步骤 2 只问逆变器策略（接受替代/自筹/终止），不要在这里让用户选具体组合方案（那是阶段三的任务）。
 
 若用户未指定逆变器型号/功率，则跳过此子步骤。
 
@@ -220,14 +210,13 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" \
 
 ### 阶段二：运行编排器（匹配逆变器/并网柜）
 
-**组件确认后、DC 容量确定后，才能运行编排器。**
+**组件确认后、DC 容量确定后，才能运行编排器。先初始化临时目录：**
 
 ```bash
-TMP_DIR="/tmp/dms_inventory"
+TMP_DIR=$(python -c "import os,tempfile; print(os.path.join(tempfile.gettempdir(),'dms_inventory'))")
 mkdir -p "$TMP_DIR"
 
 # ⚠️ 使用 --params $(cat ...) 而非 --params-file
-# 避免 Windows MSYS2 路径翻译不一致
 PARAMS_JSON=$(cat "$TMP_DIR/input.json")
 
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/inventory_orchestrator.py" \
@@ -239,18 +228,18 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/inventory_orchestrator.py" \
 
 > ⚠️ **LLM 执行规范**
 > - ❌ 不得用 `find /` `find .` 全盘搜索
-> - ✅ 编排器打印 `[完成]` 后直接 `cat` 该路径
-> - ✅ 需 Python 处理 JSON 时用 `cat | python` 或 `os.environ['TMP']`
+> - ✅ 编排器打印 `[完成]` 后直接 `cat "$TMP_DIR/analysis.json"`
+> - ✅ 需 Python 处理 JSON 时用 `cat "$TMP_DIR/..." | python`
 
 ### 阶段三：展示编排器结果并确认
 
-**读取 analysis.json（二选一）：**
+**读取 analysis.json（二选一，`$TMP_DIR` 沿用阶段二设置）：**
 ```bash
 # 方式一（推荐）：cat 直接读取，LLM 阅读 JSON 文本
-cat /tmp/dms_inventory/analysis.json
+cat "$TMP_DIR/analysis.json"
 
 # 方式二（需 Python 处理时）：cat + stdin 传入
-cat /tmp/dms_inventory/analysis.json | PYTHONIOENCODING=utf-8 python -c "
+cat "$TMP_DIR/analysis.json" | PYTHONIOENCODING=utf-8 python -c "
 import json, sys
 d = json.load(sys.stdin)
 print(json.dumps(d, ensure_ascii=False, indent=2))
@@ -289,13 +278,14 @@ print(json.dumps(d, ensure_ascii=False, indent=2))
 - 若从库存采购，`source` 为 `stock`；若用户自筹，`source` 为 `user_self`
 
 ```bash
-TMP_DIR="/tmp/dms_inventory"
+TMP_DIR=$(python -c "import os,tempfile; print(os.path.join(tempfile.gettempdir(),'dms_inventory'))")
+mkdir -p "$TMP_DIR"
 analysis=$(cat "$TMP_DIR/analysis.json")
 
 cat "$TMP_DIR/analysis.json" | PYTHONIOENCODING=utf-8 python -c "
 import json, sys, os
 analysis = json.load(sys.stdin)
-TMP_DIR = os.environ.get('TMP', '/tmp') + '/dms_inventory'
+TMP_DIR = r'$TMP_DIR'  # r'' raw string 防 Windows 反斜杠转义
 os.makedirs(TMP_DIR, exist_ok=True)
 
 # 从 analysis 中提取摘要信息动态填充
@@ -363,7 +353,7 @@ print('最终结果已写入:', out)
 |:---------|:---------|:-----|
 | 编排器报错 | 检查输出是否含 `Traceback`，确认 JSON 格式正确 | `references/error-handling.md` |
 | Excel 缺失/损坏 | 确认 `assets/` 目录有 `.xlsx` 文件（异常时再检查，不要提前确认） | `references/error-handling.md` |
-| `python -c` 读不到文件 | MSYS2 不翻译 `-c` 内 `/tmp/` → 改用 `cat \| python` 或 `os.environ['TMP']` | 本文件"强制性规范" |
+| `python -c` 路径错误 | `$TMP_DIR` 未设置或混用 `/tmp/` 字面量 → 确保统一使用 `tempfile.gettempdir()` | 本文件"临时目录规范" |
 | 逆变器组合为空 | 提示用户调整 `dc_ac_ratio_range` 或品牌偏好后重跑 | 阶段三 |
 | 终端中文乱码 | 加 `PYTHONIOENCODING=utf-8` | `references/error-handling.md` |
 
@@ -380,7 +370,7 @@ PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --power "110KW
 # 多条件交集：天合原装 且 功率110KW
 PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --name "天合原装" --power "110KW" --category 逆变器 --aggregate
 # JSON 输出到文件
-PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --code AB001347 --aggregate --json --output-file /tmp/dms_inventory/lookup_result.json
+PYTHONIOENCODING=utf-8 python "$SKILL_DIR/scripts/quick_query.py" --code AB001347 --aggregate --json --output-file "$TMP_DIR/lookup_result.json"
 ```
 
 > `--name` 搜物料名称列，`--power` 搜功率列，语义隔离。同时使用为 **AND（交集）**。完整参数说明见 `references/quick-query.md`
