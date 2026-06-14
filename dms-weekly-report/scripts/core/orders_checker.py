@@ -14,6 +14,7 @@ from core.dms_browser import get_access_token
 
 logger = logging.getLogger("dms_report")
 
+# 内部 API：DMS 订单历史查询接口，仅限公司内网访问
 API_URL = "https://apigw.trinablue.com/dms-admin/orderHistory/getOrderHistoryList"
 PAGE_SIZE = 500
 
@@ -56,40 +57,58 @@ async def fetch_ordered_flow_ids(
         "Content-Type": "application/json",
     }
 
+    MAX_API_RETRIES = 3
+    API_RETRY_DELAY = 2.0
+
     while True:
-        try:
-            resp = await context.request.post(
-                API_URL,
-                data={
-                    "createTime": start_date,
-                    "toCreateTime": extended_end,
-                    "pageNum": page_num,
-                    "pageSize": PAGE_SIZE,
-                },
-                headers=headers,
-            )
-            data = await resp.json()
-
-            if data.get("code") != 1:
-                logger.warning("订单 API 返回异常 code=%s: %s", data.get("code"), data.get("errMsg", ""))
+        resp = None
+        last_error = None
+        for attempt in range(MAX_API_RETRIES):
+            try:
+                resp = await context.request.post(
+                    API_URL,
+                    data={
+                        "createTime": start_date,
+                        "toCreateTime": extended_end,
+                        "pageNum": page_num,
+                        "pageSize": PAGE_SIZE,
+                    },
+                    headers=headers,
+                )
                 break
+            except Exception as e:
+                last_error = e
+                if attempt < MAX_API_RETRIES - 1:
+                    import asyncio
+                    await asyncio.sleep(API_RETRY_DELAY * (2 ** attempt))
+                    logger.debug("订单 API 第 %d 页请求重试 (%d/%d)", page_num, attempt + 1, MAX_API_RETRIES)
 
-            records = data.get("data", {}).get("records", [])
-            for record in records:
-                flow_id = record.get("bizFlowId")
-                if flow_id:
-                    all_ids.add(str(flow_id).strip())
-
-            logger.debug("第 %d 页: 获取 %d 条", page_num, len(records))
-
-            if len(records) < PAGE_SIZE:
-                break
-
-            page_num += 1
-
-        except Exception as e:
-            logger.warning("订单 API 请求异常: %s", e)
+        if resp is None:
+            logger.warning("订单 API 第 %d 页重试 %d 次后仍失败: %s", page_num, MAX_API_RETRIES, last_error)
             break
+
+        try:
+            data = await resp.json()
+        except Exception as e:
+            logger.warning("订单 API 第 %d 页响应解析失败: %s", page_num, e)
+            break
+
+        if data.get("code") != 1:
+            logger.warning("订单 API 返回异常 code=%s: %s", data.get("code"), data.get("errMsg", ""))
+            break
+
+        records = data.get("data", {}).get("records", [])
+        for record in records:
+            flow_id = record.get("bizFlowId")
+            if flow_id:
+                all_ids.add(str(flow_id).strip())
+
+        logger.debug("第 %d 页: 获取 %d 条", page_num, len(records))
+
+        if len(records) < PAGE_SIZE:
+            break
+
+        page_num += 1
 
     logger.info("订单 API 拉取完成：共 %d 条已下单记录", len(all_ids))
     return all_ids

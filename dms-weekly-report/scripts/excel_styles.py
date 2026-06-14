@@ -1,98 +1,100 @@
-"""Excel 样式主题配置 — 专业报表风格（Corporate Blue）。
+"""Excel 样式主题配置 — 靛蓝现代报表风格（匹配 HTML 报表配色）。
 
-架构定位：
-  本模块是所有 Excel 样式的唯一来源，被 run_weekly_report.py 导入。
-  提供字体、填充、对齐、边框等共享样式常量和布局辅助函数。
-  修改配色/字体只需在本模块调整，所有 Sheet 自动生效。
-
-样式体系：
-  Colors         — 调色板常量（主色、功能色、文字色）
-  FONT_*         — 字体预设（标题、表头、数据、KPI 等）
-  FILL_*         — 填充预设（深蓝表头、浅蓝底、卡片底色）
-  ALIGN_*        — 对齐预设
-  apply_*        — 快捷应用函数（apply_header_style, apply_data_row）
-  write_*        — 写入函数（write_section_title, write_kpi_card）
+设计来源：references/report_template.html CSS Design Tokens
+配色体系：靛蓝主色 (#1D4ED8) + 翠绿/琥珀/朱红功能色 + 石板暖灰中性色
 """
+
+from __future__ import annotations
+
+from typing import Any
 
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 # ==================== 通用边框 ====================
 
 THIN_BORDER = Border(
-    left=Side("thin", color="CCCCCC"),
-    right=Side("thin", color="CCCCCC"),
-    top=Side("thin", color="CCCCCC"),
-    bottom=Side("thin", color="CCCCCC"),
+    left=Side("thin", color="E2E8F0"),
+    right=Side("thin", color="E2E8F0"),
+    top=Side("thin", color="E2E8F0"),
+    bottom=Side("thin", color="E2E8F0"),
 )
 
 HEADER_BORDER = Border(
-    left=Side("thin", color="FFFFFF"),
-    right=Side("thin", color="FFFFFF"),
-    top=Side("thin", color="FFFFFF"),
-    bottom=Side("medium", color="1F4E79"),
+    left=Side("thin", color="1D4ED8"),
+    right=Side("thin", color="1D4ED8"),
+    top=Side("thin", color="1D4ED8"),
+    bottom=Side("medium", color="1E3A8A"),
 )
 
 BOTTOM_BORDER = Border(
-    bottom=Side("medium", color="2E5C99"),
-    left=Side("thin", color="CCCCCC"),
-    right=Side("thin", color="CCCCCC"),
-    top=Side("thin", color="CCCCCC"),
+    bottom=Side("medium", color="1D4ED8"),
+    left=Side("thin", color="E2E8F0"),
+    right=Side("thin", color="E2E8F0"),
+    top=Side("thin", color="E2E8F0"),
 )
 
 CARD_BORDER = Border(
-    left=Side("thin", color="E8EAED"),
-    right=Side("thin", color="E8EAED"),
-    top=Side("thin", color="E8EAED"),
-    bottom=Side("thin", color="E8EAED"),
+    left=Side("thin", color="CBD5E1"),
+    right=Side("thin", color="CBD5E1"),
+    top=Side("thin", color="CBD5E1"),
+    bottom=Side("thin", color="CBD5E1"),
 )
 
 # ==================== 调色板 ====================
 
 class Colors:
-    # 主色系
-    DARK_BLUE = "1F4E79"        # 深蓝主色（标题、表头）
-    PRIMARY_BLUE = "2E5C99"     # 稍浅的深蓝（二级标题）
-    ACCENT_BLUE = "4472C4"      # 亮蓝（强调数据）
+    # 主色系 — 靛蓝（匹配 HTML --primary）
+    DARK_BLUE = "1E3A8A"        # 靛蓝-深色
+    PRIMARY_BLUE = "1D4ED8"     # 靛蓝-主色
+    ACCENT_BLUE = "3B82F6"      # 靛蓝-亮色
+    PRIMARY_LIGHT = "60A5FA"    # 靛蓝-浅色
+    PRIMARY_L10 = "DBEAFE"      # 10% 浅色 tint
+    PRIMARY_L5 = "EFF6FF"       # 5% 浅色 tint
 
-    # 中性灰
-    DARK_GRAY = "2D3436"        # 深灰（正文）
-    MID_GRAY = "636E72"         # 中灰（辅助文字）
-    LIGHT_GRAY = "E8EAED"       # 浅灰（分割线、底色）
-    BG_GRAY = "F8F9FA"          # 背景灰（卡片底）
-    WHITE = "FFFFFF"            # 纯白
+    # 功能色（匹配 HTML）
+    GREEN = "10B981"            # 翠绿
+    ORANGE = "F59E0B"           # 琥珀
+    RED = "EF4444"              # 朱红
+    PURPLE = "8B5CF6"           # 紫罗兰
+    TEAL = "06B6D4"             # 青碧
 
-    # 功能色
-    RED_ACCENT = "D73026"       # 警告红（更深的红）
-    RED_LIGHT = "FADAD5"        # 浅红（背景）
-    GREEN_ACCENT = "27A745"     # 成功绿
-    ORANGE_ACCENT = "FFA500"    # 提示橙
+    # 中性色 — 石板暖灰系（匹配 HTML）
+    TEXT_PRIMARY = "0F172A"     # 石板-900
+    TEXT_SECONDARY = "475569"   # 石板-600
+    TEXT_TERTIARY = "94A3B8"    # 石板-400
+    BG_PAGE = "F1F5F9"          # 石板-100
+    BG_CARD = "F8FAFC"          # 石板-50
+    BORDER = "CBD5E1"           # 石板-300
+    BORDER_LIGHT = "E2E8F0"     # 石板-200
+    WHITE = "FFFFFF"
 
-    # 表头和填充
-    HEADER_FILL = "1F4E79"      # 表头背景（深蓝）
-    LIGHT_FILL = "EEF2F5"       # 浅蓝底（数据行）
-    VERY_LIGHT_FILL = "F5F7FA"  # 极浅蓝（交替行）
-    CARD_FILL = "F8F9FA"        # 卡片底色（纯灰）
+    # 表格交替行（匹配 HTML tbody tr:nth-child(even)）
+    ROW_ALT = "F7F8FA"
 
 # ==================== 字体 ====================
 
-FONT_TITLE = Font(bold=True, size=16, color=Colors.DARK_BLUE, name="微软雅黑")
-FONT_SECTION = Font(bold=True, size=13, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+FONT_TITLE = Font(bold=True, size=14, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+FONT_SECTION = Font(bold=True, size=11, color=Colors.PRIMARY_BLUE, name="微软雅黑")
 FONT_SUBSECTION = Font(bold=True, size=11, color=Colors.PRIMARY_BLUE, name="微软雅黑")
-FONT_HEADER = Font(bold=True, size=11, color=Colors.WHITE, name="微软雅黑")
-FONT_DATA = Font(size=11, color=Colors.DARK_GRAY, name="Calibri")
-FONT_LABEL = Font(bold=True, size=11, color=Colors.DARK_GRAY, name="微软雅黑")
-FONT_KPI_BIG = Font(bold=True, size=22, color=Colors.RED_ACCENT, name="微软雅黑")
-FONT_KPI_MED = Font(bold=True, size=16, color=Colors.RED_ACCENT, name="微软雅黑")
-FONT_HINT = Font(size=9, color=Colors.MID_GRAY, name="Calibri")
-FONT_VALUE = Font(bold=True, size=12, color=Colors.ACCENT_BLUE, name="Calibri")
+FONT_HEADER = Font(bold=True, size=10, color=Colors.WHITE, name="微软雅黑")
+FONT_DATA = Font(size=10, color=Colors.TEXT_PRIMARY, name="微软雅黑")
+FONT_LABEL = Font(bold=False, size=10, color=Colors.TEXT_PRIMARY, name="微软雅黑")
+FONT_KPI_BIG = Font(bold=True, size=10, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+FONT_KPI_MED = Font(bold=True, size=10, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+FONT_HINT = Font(size=9, color=Colors.TEXT_TERTIARY, name="微软雅黑")
+FONT_VALUE = Font(bold=True, size=10, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+
+# 功能色字体 — KPI 数值用颜色区分
+FONT_GREEN = Font(bold=True, size=10, color=Colors.GREEN, name="微软雅黑")
+FONT_ORANGE = Font(bold=True, size=10, color=Colors.ORANGE, name="微软雅黑")
+FONT_RED = Font(bold=True, size=10, color=Colors.RED, name="微软雅黑")
 
 # ==================== 填充 ====================
 
-FILL_HEADER = PatternFill(start_color=Colors.HEADER_FILL, end_color=Colors.HEADER_FILL, fill_type="solid")
-FILL_LIGHT = PatternFill(start_color=Colors.LIGHT_FILL, end_color=Colors.LIGHT_FILL, fill_type="solid")
-FILL_VERY_LIGHT = PatternFill(start_color=Colors.VERY_LIGHT_FILL, end_color=Colors.VERY_LIGHT_FILL, fill_type="solid")
-FILL_CARD = PatternFill(start_color=Colors.CARD_FILL, end_color=Colors.CARD_FILL, fill_type="solid")
-FILL_RED_LIGHT = PatternFill(start_color=Colors.RED_LIGHT, end_color=Colors.RED_LIGHT, fill_type="solid")
+FILL_HEADER = PatternFill(start_color=Colors.PRIMARY_BLUE, end_color=Colors.PRIMARY_BLUE, fill_type="solid")
+FILL_LIGHT = PatternFill(start_color=Colors.PRIMARY_L10, end_color=Colors.PRIMARY_L10, fill_type="solid")
+FILL_VERY_LIGHT = PatternFill(start_color=Colors.ROW_ALT, end_color=Colors.ROW_ALT, fill_type="solid")
+FILL_CARD = PatternFill(start_color=Colors.BG_CARD, end_color=Colors.BG_CARD, fill_type="solid")
 FILL_WHITE = PatternFill(start_color=Colors.WHITE, end_color=Colors.WHITE, fill_type="solid")
 
 # ==================== 对齐 ====================
@@ -118,7 +120,7 @@ COLUMN_WIDTHS: list[int] = [
 ]
 
 
-def apply_header_style(ws, row: int, headers: list[str], start_col: int = 1) -> None:
+def apply_header_style(ws: Any, row: int, headers: list[str], start_col: int = 1) -> None:
     """给指定行应用深蓝表头样式。"""
     for col, h in enumerate(headers, start_col):
         cell = ws.cell(row=row, column=col, value=h)
@@ -128,47 +130,58 @@ def apply_header_style(ws, row: int, headers: list[str], start_col: int = 1) -> 
         cell.alignment = ALIGN_HEADER
 
 
-def apply_data_row(ws, row: int, values: list, start_col: int = 1, is_alt: bool = False) -> None:
-    """给数据行应用标准样式，支持交替行色。"""
-    fill = FILL_VERY_LIGHT if is_alt else FILL_WHITE
+def apply_data_row(ws: Any, row: int, values: list, start_col: int = 1, is_alt: bool = False) -> None:
+    """给数据行应用标准样式，无背景色，全部居中。"""
     for col, val in enumerate(values, start_col):
         cell = ws.cell(row=row, column=col, value=val)
         cell.font = FONT_DATA
         cell.border = THIN_BORDER
         cell.alignment = ALIGN_CENTER
-        cell.fill = fill
+        cell.fill = FILL_WHITE
 
 
-def write_section_title(ws, row: int, col: int, title: str, merge_end_col: int | None = None) -> int:
-    """写入节标题，可选合并单元格，返回下一行号。"""
+def write_section_title(ws: Any, row: int, col: int, title: str, merge_end_col: int | None = None) -> int:
+    """写入节标题，蓝色文字 + 底部线条，可选合并单元格，返回下一行号。"""
+    font = Font(bold=True, size=11, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+
     cell = ws.cell(row=row, column=col, value=title)
-    cell.font = FONT_SECTION
+    cell.font = font
+    cell.fill = FILL_WHITE
     cell.alignment = ALIGN_LEFT
-    cell.border = BOTTOM_BORDER
+    cell.border = Border(bottom=Side("medium", color=Colors.PRIMARY_L10))
+
     if merge_end_col:
         ws.merge_cells(start_row=row, start_column=col, end_row=row, end_column=merge_end_col)
-    ws.row_dimensions[row].height = ROW_HEIGHT_SECTION
+        for c in range(col, merge_end_col + 1):
+            ws.cell(row=row, column=c).fill = FILL_WHITE
+            ws.cell(row=row, column=c).font = font
+
+    ws.row_dimensions[row].height = ROW_HEIGHT_SECTION - 8
     return row + 1
 
 
-def write_kpi_card(ws, row: int, col: int, label: str, value, unit: str = "",
-                   value_font=None, alt_fill: bool = False) -> None:
-    """写入 KPI 卡片（label + value + 可选单位）。"""
-    fill = FILL_CARD if alt_fill else FILL_WHITE
+def write_kpi_card(ws: Any, row: int, col: int, label: str, value: str | int | float,
+                   unit: str = "", value_font: Font | None = None,
+                   alt_fill: bool = False) -> None:
+    """写入 KPI 卡片，所有内容居中对齐。"""
+    fill = FILL_WHITE
     border = CARD_BORDER
 
+    # label
     c1 = ws.cell(row=row, column=col, value=label)
     c1.font = FONT_LABEL
     c1.alignment = ALIGN_CENTER
     c1.border = border
     c1.fill = fill
 
+    # value
     c2 = ws.cell(row=row, column=col + 1, value=value)
     c2.font = value_font or FONT_KPI_BIG
     c2.alignment = ALIGN_CENTER
     c2.border = border
     c2.fill = fill
 
+    # unit
     if unit:
         c3 = ws.cell(row=row, column=col + 2, value=unit)
         c3.font = FONT_HINT
@@ -176,10 +189,10 @@ def write_kpi_card(ws, row: int, col: int, label: str, value, unit: str = "",
         c3.border = border
         c3.fill = fill
 
-    ws.row_dimensions[row].height = ROW_HEIGHT_DATA
+    ws.row_dimensions[row].height = ROW_HEIGHT_DATA + 4
 
 
-def apply_accent_row(ws, row: int, values: list, start_col: int = 1, color="ACCENT_BLUE") -> None:
+def apply_accent_row(ws: Any, row: int, values: list, start_col: int = 1, color="ACCENT_BLUE") -> None:
     """给重要数据行应用强调样式。"""
     accent_color = getattr(Colors, color, Colors.ACCENT_BLUE)
     for col, val in enumerate(values, start_col):
@@ -192,7 +205,7 @@ def apply_accent_row(ws, row: int, values: list, start_col: int = 1, color="ACCE
     ws.row_dimensions[row].height = ROW_HEIGHT_DATA
 
 
-def apply_status_cell(ws, row: int, col: int, status: str, bg_color: str) -> None:
+def apply_status_cell(ws: Any, row: int, col: int, status: str, bg_color: str) -> None:
     """写入状态指示器单元格。"""
     cell = ws.cell(row=row, column=col, value=status)
     cell.font = Font(bold=True, size=10, color=Colors.WHITE, name="微软雅黑")

@@ -16,16 +16,16 @@ from datetime import date as dt_date, datetime, timedelta
 from typing import Any
 
 import openpyxl
-from openpyxl.styles import Font
+from openpyxl.styles import Border, Font, PatternFill, Side
 
-from column_definitions import HEADERS
+from column_definitions import HEADERS, accumulate_power
 from excel_styles import COLUMN_WIDTHS
 from excel_styles import (
     Colors,
     THIN_BORDER, BOTTOM_BORDER, CARD_BORDER,
     FONT_TITLE, FONT_SECTION, FONT_SUBSECTION, FONT_HEADER,
     FONT_DATA, FONT_LABEL, FONT_KPI_BIG, FONT_KPI_MED,
-    FONT_HINT, FONT_VALUE,
+    FONT_HINT, FONT_VALUE, FONT_GREEN, FONT_ORANGE,
     FILL_HEADER, FILL_LIGHT, FILL_VERY_LIGHT, FILL_CARD, FILL_WHITE,
     ALIGN_CENTER, ALIGN_LEFT, ALIGN_RIGHT, ALIGN_HEADER, ALIGN_DATA,
     ROW_HEIGHT_TITLE, ROW_HEIGHT_SECTION, ROW_HEIGHT_DATA, ROW_HEIGHT_HEADER,
@@ -37,7 +37,7 @@ logger = logging.getLogger("dms_report")
 
 
 def generate_excel(
-    records: list,
+    records: list[Any],
     output_dir: str | None = None,
     query_range: str = "",
     timestamp_str: str | None = None,
@@ -70,10 +70,21 @@ def generate_excel(
     rows_data = _build_rows_data(records)
 
     if os.path.exists(file_path):
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        rows_data = _deduplicate_rows(wb, rows_data)
-        next_row = ws.max_row + 1
+        try:
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+            rows_data = _deduplicate_rows(wb, rows_data)
+            next_row = ws.max_row + 1
+        except Exception as e:
+            logger.warning("Excel 文件读取失败 (%s)，将重新创建: %s", file_path, e)
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "询价汇总"
+            apply_header_style(ws, 1, HEADERS)
+            for i, w in enumerate(COLUMN_WIDTHS):
+                ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
+            ws.row_dimensions[1].height = ROW_HEIGHT_HEADER
+            next_row = 2
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -96,7 +107,17 @@ def generate_excel(
     _create_date_query_sheet_v2(wb)
     _create_report_dashboard(wb)
 
-    wb.save(file_path)
+    try:
+        wb.save(file_path)
+    except PermissionError:
+        backup_path = os.path.join(output_dir, f"询价汇总_{ts}_backup.xlsx")
+        logger.warning("无法保存到 %s（文件被占用），尝试备用路径: %s", file_path, backup_path)
+        wb.save(backup_path)
+        file_path = backup_path
+    except OSError as e:
+        logger.error("保存 Excel 失败: %s", e)
+        raise
+
     logger.info("Excel 已保存: %s (共 %d 条记录)", file_path, len(rows_data))
     return file_path, rows_data
 
@@ -173,13 +194,11 @@ def _update_summary_sheet(
         ws.column_dimensions[chr(64 + c)].width = w
 
     # 计算统计数据
-    total_module = 0.0
-    total_inverter = 0.0
-    total_battery = 0.0
     total_projects = 0
     ordered_count = 0
     not_ordered_count = 0
     salesperson_set: set[str] = set()
+    valid_rows: list = []
 
     source_rows = filtered_rows if filtered_rows is not None else data_ws.iter_rows(min_row=2, values_only=True)
 
@@ -188,24 +207,7 @@ def _update_summary_sheet(
         if not re.match(r"^\d{15,}$", flow_id):
             continue
         total_projects += 1
-        mk = row[6]
-        if mk not in ("无", "--", None, ""):
-            try:
-                total_module += float(mk)
-            except (ValueError, TypeError):
-                pass
-        ik = row[7]
-        if ik not in ("无", "--", None, ""):
-            try:
-                total_inverter += float(ik)
-            except (ValueError, TypeError):
-                pass
-        bk = row[8]
-        if bk not in ("无", "--", None, ""):
-            try:
-                total_battery += float(bk)
-            except (ValueError, TypeError):
-                pass
+        valid_rows.append(row)
         ordered = str(row[13] if row[13] else "")
         if ordered == "是":
             ordered_count += 1
@@ -214,6 +216,8 @@ def _update_summary_sheet(
         sp = str(row[5] if row[5] else "")
         if sp not in ("--", "无", ""):
             salesperson_set.add(sp)
+
+    total_module, total_inverter, total_battery = accumulate_power(valid_rows)
 
     # ---- 新排版：KPI 仪表盘 ----
     r = 1
@@ -234,16 +238,13 @@ def _update_summary_sheet(
     r += 2
 
     # ---- 区域1：询价概览 —— 每个 KPI 一行，从 A 列开始 ----
-    ws.cell(r, 1, "询价概览").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
-    r += 1
+    r = write_section_title(ws, r, 1, "询价概览", merge_end_col=3)
 
     kpis_1 = [
         ("询价项目总数", f"{total_projects}", "个", FONT_KPI_BIG),
-        ("涉及业务员", f"{len(salesperson_set)}", "人" if salesperson_set else "", FONT_KPI_BIG),
-        ("已下单项目", f"{ordered_count}", "个", FONT_KPI_BIG),
-        ("未下单项目", f"{not_ordered_count}", "个", FONT_KPI_BIG),
+        ("涉及业务员", f"{len(salesperson_set)}", "人" if salesperson_set else "", FONT_KPI_MED),
+        ("已下单项目", f"{ordered_count}", "个", FONT_GREEN),
+        ("未下单项目", f"{not_ordered_count}", "个", FONT_ORANGE),
     ]
     for i, (label, value, unit, vf) in enumerate(kpis_1):
         write_kpi_card(ws, r + i, 1, label, value, unit, vf)
@@ -251,10 +252,7 @@ def _update_summary_sheet(
     r += len(kpis_1) + 2
 
     # ---- 区域2：功率容量统计 —— 每个 KPI 一行，从 A 列开始 ----
-    ws.cell(r, 1, "功率容量统计").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
-    r += 1
+    r = write_section_title(ws, r, 1, "功率容量统计", merge_end_col=3)
 
     module_display = f"{total_module:,.2f}" if total_module > 0 else "0"
     inverter_display = f"{total_inverter:,.2f}" if total_inverter > 0 else "0"
@@ -263,9 +261,9 @@ def _update_summary_sheet(
 
     kpis_2 = [
         ("组件总功率", module_display, "kW", FONT_KPI_BIG),
-        ("逆变器总功率", inverter_display, "kW", FONT_KPI_BIG),
-        ("电池总容量", battery_display, "kWh", FONT_KPI_BIG),
-        ("容配比(组件/逆变器)", ratio_display, "", FONT_KPI_BIG),
+        ("逆变器总功率", inverter_display, "kW", FONT_KPI_MED),
+        ("电池总容量", battery_display, "kWh", FONT_KPI_MED),
+        ("容配比(组件/逆变器)", ratio_display, "", FONT_VALUE),
     ]
     for i, (label, value, unit, vf) in enumerate(kpis_2):
         write_kpi_card(ws, r + i, 1, label, value, unit, vf)
@@ -359,12 +357,19 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
     ws.row_dimensions[r].height = ROW_HEIGHT_TITLE
     r += 1
 
-    # 筛选标签和下拉（从 B2 开始，比原来的 D3 更靠左）
+    # 筛选标签和下拉（从 B2 开始）
+    for c in range(1, 4):
+        ws.cell(r, c).fill = FILL_WHITE
+        ws.cell(r, c).border = THIN_BORDER
     ws.cell(r, 1, "时间段筛选：").font = FONT_LABEL
     ws.cell(r, 1).alignment = ALIGN_LEFT
-    ws.cell(r, 1).border = THIN_BORDER
-    ws.cell(r, 2, "全部").font = FONT_DATA
-    ws.cell(r, 2).border = THIN_BORDER
+    ws.cell(r, 2, "全部").font = Font(bold=True, size=10, color=Colors.PRIMARY_BLUE, name="微软雅黑")
+    ws.cell(r, 2).border = Border(
+        left=Side("medium", color=Colors.PRIMARY_BLUE),
+        right=Side("medium", color=Colors.PRIMARY_BLUE),
+        top=Side("medium", color=Colors.PRIMARY_BLUE),
+        bottom=Side("medium", color=Colors.PRIMARY_BLUE),
+    )
     ws.cell(r, 2).alignment = ALIGN_CENTER
     ws.cell(r, 3, "  ← 点击选择").font = FONT_HINT
     ws.cell(r, 3).alignment = ALIGN_LEFT
@@ -383,10 +388,7 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
     r += 2
 
     # 预计算结果表
-    ws.cell(r, 1, "预计算结果").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
-    r += 1
+    r = write_section_title(ws, r, 1, "预计算结果", merge_end_col=7)
 
     headers = ["时间段", "项目数", "组件功率(kW)", "逆变器功率(kW)", "电池容量(kWh)", "容配比"]
     apply_header_style(ws, r, headers)
@@ -406,10 +408,7 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
     r += 1
 
     # INDEX/MATCH 公式结果（实时对应下拉选择）
-    ws.cell(r, 1, "当前选择结果").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
-    r += 1
+    r = write_section_title(ws, r, 1, "当前选择结果", merge_end_col=7)
 
     n_p = len(presets)
     data_first = table_header_row + 1
@@ -428,7 +427,7 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
         ws.cell(r, 1).border = THIN_BORDER
         ws.cell(r, 1).alignment = ALIGN_CENTER
         ws.cell(r, 2).value = f'=IFERROR(INDEX({dr},MATCH($B$2,{lr},0),{ci}),0)'
-        ws.cell(r, 2).font = Font(bold=True, size=11, color=Colors.RED_ACCENT)
+        ws.cell(r, 2).font = Font(bold=True, size=10, color=Colors.TEXT_PRIMARY, name="微软雅黑")
         ws.cell(r, 2).border = THIN_BORDER
         ws.cell(r, 2).alignment = ALIGN_CENTER
         ws.cell(r, 2).number_format = nf
@@ -437,8 +436,7 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
 
     r += 2
     # 使用说明
-    ws.cell(r, 1, "使用说明").font = FONT_SECTION
-    r += 1
+    r = write_section_title(ws, r, 1, "使用说明", merge_end_col=7)
     for tip in [
         "1. 点击 B2 → 从下拉选择预设时间段",
         "2. 预计算表格展示所有周期数据",
@@ -486,10 +484,7 @@ def _create_report_dashboard(wb: Any) -> None:
     r += 2
 
     # ===== 区域1：王剑审批统计（一行三卡片） =====
-    ws.cell(r, 1, "王剑采购审批统计").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
-    r += 1
+    r = write_section_title(ws, r, 1, "王剑采购审批统计", merge_end_col=7)
 
     wangjian_count = 0
     wangjian_total = 0
@@ -507,9 +502,9 @@ def _create_report_dashboard(wb: Any) -> None:
     rate = f"{wangjian_count/wangjian_total*100:.0f}%" if wangjian_total > 0 else "--"
 
     cards = [
-        ("审批通过", wangjian_count, "次", FONT_KPI_BIG),
+        ("审批通过", wangjian_count, "次", FONT_GREEN),
         ("经手总次数", wangjian_total, "次", FONT_KPI_MED),
-        ("通过率", rate, "", FONT_KPI_BIG),
+        ("通过率", rate, "", FONT_VALUE),
     ]
     for i, (label, value, unit, vf) in enumerate(cards):
         col = 1 + i * 2  # A(1), C(3), E(5) — 从 A 列开始
@@ -517,10 +512,7 @@ def _create_report_dashboard(wb: Any) -> None:
     r += 2
 
     # ===== 区域2：省公司询价排名 =====
-    ws.cell(r, 1, "省公司询价排名").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
-    r += 1
+    r = write_section_title(ws, r, 1, "省公司询价排名", merge_end_col=7)
 
     province_stats: dict[str, dict[str, Any]] = {}
     for row in rows_data:
@@ -552,10 +544,7 @@ def _create_report_dashboard(wb: Any) -> None:
     r += 2
 
     # ===== 区域3：审批天数统计（一行四卡片） =====
-    ws.cell(r, 1, "询价到审批完成天数").font = FONT_SECTION
-    ws.cell(r, 1).alignment = ALIGN_CENTER
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
-    r += 1
+    r = write_section_title(ws, r, 1, "询价到审批完成天数", merge_end_col=7)
 
     days_list: list[int] = []
     for row in rows_data:
@@ -582,9 +571,9 @@ def _create_report_dashboard(wb: Any) -> None:
     total_with_both = len(days_list)
 
     day_cards = [
-        ("平均天数", avg_days, "天", FONT_KPI_BIG),
-        ("最短天数", min(days_list) if days_list else 0, "天", FONT_KPI_MED),
-        ("最长天数", max(days_list) if days_list else 0, "天", FONT_KPI_MED),
+        ("平均天数", avg_days, "天", FONT_VALUE),
+        ("最短天数", min(days_list) if days_list else 0, "天", FONT_GREEN),
+        ("最长天数", max(days_list) if days_list else 0, "天", FONT_ORANGE),
         ("统计样本数", total_with_both, "条", FONT_KPI_MED),
     ]
     for i, (label, value, unit, vf) in enumerate(day_cards):
@@ -593,8 +582,7 @@ def _create_report_dashboard(wb: Any) -> None:
     r += 2
 
     # 说明
-    ws.cell(r, 1, "说明").font = FONT_SECTION
-    r += 1
+    r = write_section_title(ws, r, 1, "说明", merge_end_col=7)
     for tip in [
         "1. 王剑审批统计基于采购审批节点数据",
         "2. 省公司排名按询价次数降序排列",

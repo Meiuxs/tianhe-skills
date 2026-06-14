@@ -20,13 +20,14 @@
 
 from __future__ import annotations
 
+import html
 import json
 import math
 import os
 import re
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, TypedDict
 
 # 导入共享的列定义
 from column_definitions import (
@@ -37,20 +38,42 @@ from column_definitions import (
     COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
 )
+class RowDetail(TypedDict):
+    """单条询价数据行的类型定义，对应前端 ROWS_DETAIL 数组元素。"""
+    fid: str
+    project_name: str
+    province: str
+    salesperson: str
+    module_kw: float
+    inverter_kw: float
+    battery_kwh: float
+    submit_time: str
+    ordered: bool
+    province_processor: str
+    province_status: str
+    purchase_processor: str
+    purchase_status: str
+    final_time: str
+    has_province_approval: bool
+    has_purchase_approval: bool
 
-# 向后兼容的别名
-COL_MODULE_POWER = COL_MODULE_KW
-COL_INVERTER_POWER = COL_INVERTER_KW
-COL_BATTERY_CAPACITY = COL_BATTERY_KWH
-COL_SUBMIT_DATE = COL_SUBMIT_TIME
-COL_PROVINCE_APPROVER = COL_PROVINCE_PROCESSOR
-COL_APPROVER = COL_PURCHASE_PROCESSOR
-COL_APPROVAL_STATUS = COL_PURCHASE_STATUS
-COL_FINAL_DATE = COL_FINAL_APPROVAL_TIME
 
 
 # ==================== 工具函数 ====================
 
+
+
+def _format_datetime(value: Any) -> str:
+    """将单元格日期值格式化为 YYYY-MM-DD HH:MM:SS 字符串。"""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(value)
+    # 尝试截取常见日期时间格式 (YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DDTHH:MM:SS)
+    if len(s) >= 19 and s[4] == "-" and s[7] == "-":
+        return s[:19].replace("T", " ")
+    return s
 
 def _safe_float(value: Any) -> float:
     """安全地将单元格值转为 float，处理字符串 "无" 等非数字值。"""
@@ -80,7 +103,8 @@ def _simple_replace(template: str, replacements: dict[str, str]) -> str:
 
 def _replace_json_field(template: str, field_name: str, data: Any) -> str:
     """将模板中的 {{FIELD_NAME_JSON}} 替换为 JSON 字符串。"""
-    json_str = json.dumps(data, ensure_ascii=False, indent=2)
+    json_str = json.dumps(data, ensure_ascii=False, separators=(",", ": "))
+    json_str = json_str.replace("<", "\\u003c").replace(">", "\\u003e").replace("/", "\\u002f")
     return template.replace("{{" + field_name + "_JSON}}", json_str)
 
 
@@ -92,30 +116,31 @@ def read_rows_from_xlsx(xlsx_path: str) -> list[list[Any]]:
     import openpyxl
 
     wb = openpyxl.load_workbook(xlsx_path)
-    if "询价汇总" not in wb.sheetnames:
-        avail = ", ".join(wb.sheetnames)
-        raise ValueError(
-            f"工作簿中找不到「询价汇总」Sheet。可用 Sheet：{avail}"
-        )
-    ws = wb["询价汇总"]
-    rows: list[list[Any]] = []
-    for r in range(2, ws.max_row + 1):
-        row: list[Any] = []
-        for c in range(1, 20):
-            row.append(ws.cell(r, c).value)
-        rows.append(row)
+    try:
+        if "询价汇总" not in wb.sheetnames:
+            avail = ", ".join(wb.sheetnames)
+            raise ValueError(
+                f"工作簿中找不到「询价汇总」Sheet。可用 Sheet：{avail}"
+            )
+        ws = wb["询价汇总"]
+        rows: list[list[Any]] = [
+            [cell.value for cell in row]
+            for row in ws.iter_rows(min_row=2)
+        ]
+    finally:
+        wb.close()
     return rows
 
 
 # ==================== 数据映射（唯一列索引引用点）====================
 
 
-def compute_rows_detail(rows: list[list[Any]]) -> list[dict[str, Any]]:
+def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
     """将原始数据行转为有名字典列表，供前端 ROWS_DETAIL 使用。
 
     所有列索引仅在此函数中出现一次，新增字段只需在此添加。
     """
-    detail: list[dict[str, Any]] = []
+    detail: list[RowDetail] = []
     for row in rows:
         raw_fid = row[COL_FLOW_ID]
         if raw_fid is None:
@@ -133,23 +158,23 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[dict[str, Any]]:
             fid = str(raw_fid)
         if not re.match(r"^\d{15,}$", fid):
             continue
-        submit_time = str(row[COL_SUBMIT_DATE]) if row[COL_SUBMIT_DATE] else ""
-        final_raw = str(row[COL_FINAL_DATE]) if row[COL_FINAL_DATE] else ""
+        submit_time = _format_datetime(row[COL_SUBMIT_TIME])
+        final_raw = _format_datetime(row[COL_FINAL_APPROVAL_TIME])
         detail.append({
             "flowId": fid,
             "projectName": str(row[COL_PROJECT_NAME]) if row[COL_PROJECT_NAME] else "",
             "province": str(row[COL_PROVINCE]) if row[COL_PROVINCE] else "",
             "salesperson": str(row[COL_SALESPERSON]) if row[COL_SALESPERSON] else "",
-            "modulePower": _safe_float(row[COL_MODULE_POWER]),
-            "inverterPower": _safe_float(row[COL_INVERTER_POWER]),
-            "batteryCapacity": _safe_float(row[COL_BATTERY_CAPACITY]),
+            "modulePower": _safe_float(row[COL_MODULE_KW]),
+            "inverterPower": _safe_float(row[COL_INVERTER_KW]),
+            "batteryCapacity": _safe_float(row[COL_BATTERY_KWH]),
             "ordered": str(row[COL_ORDERED]) if row[COL_ORDERED] else "否",
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "finalDate": final_raw[:10] if len(final_raw) >= 10 and final_raw not in ("--", "无", "") else "",
             "procurementApprover": (
-                str(row[COL_APPROVER])
-                if row[COL_APPROVER]
-                and row[COL_APPROVER] != "--"
+                str(row[COL_PURCHASE_PROCESSOR])
+                if row[COL_PURCHASE_PROCESSOR]
+                and row[COL_PURCHASE_PROCESSOR] != "--"
                 else ""
             ),
             "procurementStatus": (
@@ -159,9 +184,9 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[dict[str, Any]]:
                 else ""
             ),
             "provinceApprover": (
-                str(row[COL_PROVINCE_APPROVER])
-                if row[COL_PROVINCE_APPROVER]
-                and row[COL_PROVINCE_APPROVER] != "--"
+                str(row[COL_PROVINCE_PROCESSOR])
+                if row[COL_PROVINCE_PROCESSOR]
+                and row[COL_PROVINCE_PROCESSOR] != "--"
                 else ""
             ),
             "provinceStatus": (
@@ -213,7 +238,7 @@ def generate_html_report(
 <body style="font-family: sans-serif; padding: 48px; text-align: center; color: #666;">
 <h2>询价周报报表</h2>
 <p>暂无数据</p>
-<p style="font-size: 0.9em; color: #999;">数据范围：""" + query_range + """</p>
+<p style="font-size: 0.9em; color: #999;">数据范围：""" + html.escape(query_range) + """</p>
 </body>
 </html>"""
         output_dir = os.path.dirname(os.path.abspath(output_path))
@@ -240,8 +265,7 @@ def generate_html_report(
     now_str = now.strftime("%Y-%m-%d %H:%M")
 
     # 从 query_range 解析起止日期（格式 "2026-06-08 ~ 2026-06-12"）
-    import re as _re
-    _date_match = _re.match(r'(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})', query_range)
+    _date_match = re.match(r'(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})', query_range)
     query_start_date = _date_match.group(1) if _date_match else ''
     query_end_date = _date_match.group(2) if _date_match else ''
 
@@ -255,16 +279,16 @@ def generate_html_report(
         "QUERY_START_DATE": query_start_date,
         "QUERY_END_DATE": query_end_date,
     }
-    html = _simple_replace(template, replacements)
+    rendered = _simple_replace(template, replacements)
 
     # 注入 ROWS_DETAIL（唯一数据源，前端实时派生所有聚合）
-    html = _replace_json_field(html, "ROWS_DETAIL", rows_detail)
+    rendered = _replace_json_field(rendered, "ROWS_DETAIL", rows_detail)
 
     # 输出
     output_dir = os.path.dirname(os.path.abspath(output_path))
     os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(rendered)
 
     return output_path
 

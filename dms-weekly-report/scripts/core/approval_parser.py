@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger("dms_report")
 
 
 async def extract_approval_info(page: Any) -> dict[str, str]:
@@ -58,6 +61,6 @@ async def extract_approval_info(page: Any) -> dict[str, str]:
                                 if result["final_approval_time"] in ("--", "") or time_text > result["final_approval_time"]:
                                     result["final_approval_time"] = time_text
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("审批信息提取异常（不影响主流程）: %s", e)
     return result
