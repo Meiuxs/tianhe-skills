@@ -71,3 +71,46 @@ LOGIN_CHECK_DOMAIN = "iauth.trinapower.com"
 # ==================== 下单检查配置 ====================
 
 ORDER_CHECK_EXTEND_DAYS = 31  # 下单检查日期范围扩展天数（覆盖审批周期）
+
+# ==================== 功率累加函数 ====================
+
+
+def accumulate_power(rows, cols=None):
+    """累加数据行中指定列的功率/容量值，跳过占位符。
+
+    Args:
+        rows: 数据行列表，每行为 tuple/list。
+        cols: (组件列索引, 逆变器列索引, 电池列索引)，默认 (6, 7, 8)。
+
+    Returns:
+        (total_module, total_inverter, total_battery) 三元组。
+    """
+    if cols is None:
+        cols = (COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH)
+    col_mk, col_ik, col_bk = cols
+    total_mk = total_ik = total_bk = 0.0
+    for row in rows:
+        for val, acc in [(row[col_mk], 'mk'), (row[col_ik], 'ik'), (row[col_bk], 'bk')]:
+            if val not in ("无", "--", None, ""):
+                try:
+                    v = float(val)
+                    if acc == 'mk':
+                        total_mk += v
+                    elif acc == 'ik':
+                        total_ik += v
+                    else:
+                        total_bk += v
+                except (ValueError, TypeError):
+                    pass
+    return total_mk, total_ik, total_bk
+
+
+# ==================== 状态常量 ====================
+STATUS_ORDERED = "已下单"
+STATUS_NOT_ORDERED = "未下单"
+STATUS_CHECK_FAILED = "检查失败"
+STATUS_YES = "是"
+STATUS_NO = "否"
+STATUS_NONE = "无"
+STATUS_DASH = "--"
+SHEET_DATA = "询价汇总"

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
 import types
@@ -92,6 +93,13 @@ class MockWorkbook:
 mock_openpyxl.Workbook = MockWorkbook
 mock_openpyxl.load_workbook = lambda f: MockWorkbook()
 
+# Save originals before mocking (restored at end of file)
+_saved_sys_modules = {}
+for _k in ("dms_credentials", "_compat", "playwright", "playwright.async_api",
+           "playwright._impl", "playwright._impl._errors", "openpyxl", "openpyxl.styles"):
+    if _k in sys.modules:
+        _saved_sys_modules[_k] = sys.modules[_k]
+
 sys.modules["playwright"] = mock_playwright
 sys.modules["playwright.async_api"] = mock_playwright.async_api
 sys.modules["playwright._impl"] = mock_playwright_impl
@@ -116,6 +124,16 @@ mock_col_defs.WAIT_SHORT = 500
 mock_col_defs.WAIT_MEDIUM = 1000
 mock_col_defs.MAX_RETRIES = 3
 mock_col_defs.RETRY_BASE_DELAY = 1.0
+mock_col_defs.accumulate_power = lambda rows, cols=None: (0.0, 0.0, 0.0)
+mock_col_defs.SHEET_DATA = "sheet1"
+mock_col_defs.STATUS_YES = "Yes"
+mock_col_defs.STATUS_NO = "No"
+mock_col_defs.STATUS_NONE = "None"
+mock_col_defs.STATUS_DASH = "--"
+mock_col_defs.STATUS_ORDERED = "已下单"
+mock_col_defs.STATUS_NOT_ORDERED = "未下单"
+mock_col_defs.STATUS_CHECK_FAILED = "检查失败"
+mock_col_defs.ORDER_CHECK_EXTEND_DAYS = 31
 sys.modules["column_definitions"] = mock_col_defs
 
 # ==================== 导入 core 模块 ====================
@@ -433,3 +451,118 @@ class TestRetryAsync:
         with pytest.raises(OSError):
             asyncio.run(always_fail())
         assert call_count[0] == 2
+
+
+class TestRunFlowIdsEmpty:
+    """测试 run() 中 flow_ids 为空时提前返回的逻辑（第 206 行）。"""
+
+    @pytest.mark.asyncio
+    async def test_empty_flow_ids_returns_early(self, caplog):
+        """filter_and_get_flow_ids 返回空列表时，run() 应提前返回，不执行后续步骤。"""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from run_weekly_report import run
+
+        args = MagicMock()
+        args.start_date = "2026-06-01"
+        args.end_date = "2026-06-07"
+        args.weeks = 0
+        args.workers = 2
+        args.headless = True
+        args.output_dir = None
+
+        # 构造 filter_result 返回空 flow_ids
+        mock_filter_result = MagicMock()
+        mock_filter_result.flow_ids = []
+        mock_filter_result.skipped_invalid = 0
+
+        # 追踪后续步骤是否被调用
+        extract_called = False
+
+        async def fake_filter(*a, **kw):
+            return mock_filter_result
+
+        async def fake_extract(*a, **kw):
+            nonlocal extract_called
+            extract_called = True
+            return []
+
+        with patch("run_weekly_report._find_headless_shell", return_value="/fake/path"), \
+             patch("run_weekly_report.async_playwright") as mock_pw, \
+             patch("run_weekly_report.filter_and_get_flow_ids", side_effect=fake_filter), \
+             patch("run_weekly_report.extract_all_parallel", side_effect=fake_extract):
+
+            mock_context = AsyncMock()
+            mock_page = AsyncMock()
+            mock_page.url = "https://dms-admin.trinapower.com"
+            mock_context.new_page = AsyncMock(return_value=mock_page)
+
+            mock_pw.return_value.__aenter__ = AsyncMock(return_value=mock_pw.return_value)
+            mock_pw.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_pw.return_value.chromium.launch_persistent_context = AsyncMock(return_value=mock_context)
+
+            with caplog.at_level(logging.INFO):
+                await run(args)
+
+            assert "本周无已办询价记录" in caplog.text
+            assert not extract_called, "flow_ids 为空时不应调用 extract_all_parallel"
+
+    @pytest.mark.asyncio
+    async def test_non_empty_flow_ids_continues(self, caplog):
+        """filter_and_get_flow_ids 返回非空列表时，run() 应继续执行后续步骤。"""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from run_weekly_report import run
+
+        args = MagicMock()
+        args.start_date = "2026-06-01"
+        args.end_date = "2026-06-07"
+        args.weeks = 0
+        args.workers = 2
+        args.headless = True
+        args.output_dir = None
+
+        # 构造 filter_result 返回非空 flow_ids
+        mock_filter_result = MagicMock()
+        mock_filter_result.flow_ids = ["FLOW001", "FLOW002"]
+        mock_filter_result.skipped_invalid = 0
+
+        extract_called = False
+
+        async def fake_filter(*a, **kw):
+            return mock_filter_result
+
+        async def fake_extract(*a, **kw):
+            nonlocal extract_called
+            extract_called = True
+            return []
+
+        with patch("run_weekly_report._find_headless_shell", return_value="/fake/path"), \
+             patch("run_weekly_report.async_playwright") as mock_pw, \
+             patch("run_weekly_report.filter_and_get_flow_ids", side_effect=fake_filter), \
+             patch("run_weekly_report.extract_all_parallel", side_effect=fake_extract):
+
+            mock_context = AsyncMock()
+            mock_page = AsyncMock()
+            mock_page.url = "https://dms-admin.trinapower.com"
+            mock_context.new_page = AsyncMock(return_value=mock_page)
+
+            mock_pw.return_value.__aenter__ = AsyncMock(return_value=mock_pw.return_value)
+            mock_pw.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_pw.return_value.chromium.launch_persistent_context = AsyncMock(return_value=mock_context)
+
+            with caplog.at_level(logging.INFO):
+                await run(args)
+
+            assert extract_called, "flow_ids 非空时应调用 extract_all_parallel"
+
+
+# ==================== Restore sys.modules after all tests ====================
+for _k, _v in _saved_sys_modules.items():
+    sys.modules[_k] = _v
+for _k in ("dms_credentials", "_compat", "playwright", "playwright.async_api",
+           "playwright._impl", "playwright._impl._errors", "openpyxl", "openpyxl.styles"):
+    if _k not in _saved_sys_modules and _k in sys.modules:
+        del sys.modules[_k]

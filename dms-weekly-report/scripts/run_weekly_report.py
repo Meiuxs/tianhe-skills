@@ -21,11 +21,16 @@
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
+import asyncio
+import glob
 import logging
 import os
 import re
 import sys
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -34,10 +39,14 @@ from playwright._impl._errors import TargetClosedError
 
 # 共享模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import _compat  # noqa: F401, E402
-from column_definitions import DMS_URL, NAV_TIMEOUT, LOAD_TIMEOUT
+import _compat  # noqa: F401 — side-effect: 修复 Windows 中文输出乱码
+from column_definitions import (
+    DMS_URL, NAV_TIMEOUT, LOAD_TIMEOUT, accumulate_power,
+    STATUS_ORDERED, STATUS_NOT_ORDERED, STATUS_CHECK_FAILED,
+    STATUS_YES, STATUS_NO, STATUS_NONE, STATUS_DASH, SHEET_DATA,
+)
 from core.dms_browser import (
-    FlowRecord,
+    FlowRecord, TableProcessResult,
     do_login, filter_and_get_flow_ids,
     extract_all_parallel, get_week_range,
     is_on_login_page,
@@ -48,11 +57,37 @@ _handler = logging.StreamHandler(sys.stdout)
 _handler.setFormatter(logging.Formatter(
     "[%(asctime)s] %(levelname)s %(message)s", datefmt="%H:%M:%S"
 ))
-logger.addHandler(_handler)
+if not logger.handlers:
+    logger.addHandler(_handler)
 
 # ==================== 配置 ====================
 
 USER_DATA_DIR = Path.home() / ".dms_browser_data"
+
+
+def _find_headless_shell() -> str | None:
+    """查找 Playwright headless shell 可执行文件路径。"""
+    home = os.path.expanduser("~")
+    patterns = [
+        # Windows: chrome-win/headless_shell.exe
+        os.path.join(home, "AppData", "Local", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-win", "headless_shell.exe"),
+        # Windows: chrome-headless-shell-win64/chrome-headless-shell.exe
+        os.path.join(home, "AppData", "Local", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-headless-shell-win64",
+                     "chrome-headless-shell.exe"),
+        # Linux
+        os.path.join(home, ".cache", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-linux", "headless_shell"),
+        # macOS
+        os.path.join(home, "Library", "Caches", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-mac", "headless_shell"),
+    ]
+    for pattern in patterns:
+        matches = glob.glob(pattern)
+        if matches:
+            return matches[0]
+    return None
 
 
 def configure_logging(verbose: bool = False) -> None:
@@ -72,12 +107,13 @@ def print_summary(
     records: list[FlowRecord] | None = None,
     excel_path: str | None = None,
     error: str | None = None,
+    discarded: int = 0,
 ) -> None:
     """打印格式化执行摘要到终端。"""
     elapsed = (datetime.now() - start_time).total_seconds()
-    ordered = sum(1 for r in (records or []) if r.ordered == "是")
-    not_ordered = sum(1 for r in (records or []) if r.ordered == "否")
-    check_failed = sum(1 for r in (records or []) if r.ordered == "检查失败")
+    ordered = sum(1 for r in (records or []) if r.ordered == STATUS_YES)
+    not_ordered = sum(1 for r in (records or []) if r.ordered == STATUS_NO)
+    check_failed = sum(1 for r in (records or []) if r.ordered == STATUS_CHECK_FAILED)
 
     print("\n========================================")
     print("  执行摘要")
@@ -85,6 +121,8 @@ def print_summary(
     print(f"  查询范围    {start_date} ~ {end_date}")
     if flow_ids:
         print(f"  提取记录    {len(flow_ids)} 条")
+    if discarded:
+        print(f"  作废流程    {discarded} 条")
     if records:
         print(f"  已下单      {ordered} 条")
         print(f"  未下单      {not_ordered} 条")
@@ -125,11 +163,25 @@ async def run(args: argparse.Namespace) -> None:
     records: list[FlowRecord] = []
     excel_path: str | None = None
     error_msg: str | None = None
+    filter_result = None
 
-    USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        logger.error("无权限写入目录: %s，请检查权限或设置别的路径", USER_DATA_DIR)
+        sys.exit(1)
+
+    # 查找 headless shell 可执行文件
+    headless_shell = _find_headless_shell()
+    if not headless_shell:
+        raise RuntimeError(
+            "未找到 Playwright headless shell，请执行: playwright install chromium"
+        )
+    logger.debug("Headless shell: %s", headless_shell)
 
     async with async_playwright() as p:
         context = await p.chromium.launch_persistent_context(
+            executable_path=headless_shell,
             user_data_dir=str(USER_DATA_DIR),
             headless=args.headless,
             no_viewport=True,
@@ -149,7 +201,8 @@ async def run(args: argparse.Namespace) -> None:
                 logger.info("会话有效（已复用缓存）")
 
             # 2. 筛选
-            flow_ids = await filter_and_get_flow_ids(page, start_date, end_date)
+            filter_result = await filter_and_get_flow_ids(page, start_date, end_date)
+            flow_ids = filter_result.flow_ids
             if not flow_ids:
                 logger.info("本周无已办询价记录")
                 return
@@ -184,20 +237,26 @@ async def run(args: argparse.Namespace) -> None:
                 _gen_html(rows_data, query_range, html_path)
                 logger.info("HTML 报表已生成: %s", html_path)
             except Exception as html_e:
-                logger.warning("HTML 报表生成失败（不影响 Excel）: %s", html_e, exc_info=False)
+                logger.warning("HTML 报表生成失败（不影响 Excel）: %s", html_e)
 
+        except KeyboardInterrupt:
+            logger.info("用户中断执行")
+            error_msg = "用户中断"
+            discarded = filter_result.skipped_invalid if filter_result else 0
+            print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded)
+            raise
         except Exception as e:
             error_msg = str(e)
             logger.error("执行异常: %s", e)
-            import traceback
             traceback.print_exc()
         finally:
             try:
                 await context.close()
-            except TargetClosedError:
-                logger.debug("浏览器上下文已提前关闭，忽略")
+            except Exception as e:
+                logger.debug("浏览器上下文关闭时异常，忽略: %s", e)
 
-    print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg)
+    discarded = filter_result.skipped_invalid if filter_result else 0
+    print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded)
 
 
 def stats_from_excel(args: argparse.Namespace) -> None:
@@ -224,7 +283,10 @@ def stats_from_excel(args: argparse.Namespace) -> None:
             os.path.join(output_dir, "询价汇总.xlsx"),
             os.path.join(output_dir, "询价汇总_v2.xlsx"),
         ]
-        file_path = next((p for p in candidates if os.path.exists(p)), candidates[0])
+        existing = [p for p in candidates if os.path.exists(p)]
+        if len(existing) > 1:
+            logger.warning("找到多个汇总文件，使用最新匹配: %s", existing[0])
+        file_path = existing[0] if existing else candidates[0]
 
     if not os.path.exists(file_path):
         logger.error("未找到询价汇总文件: %s", file_path)
@@ -247,7 +309,7 @@ def stats_from_excel(args: argparse.Namespace) -> None:
     logger.info("数据来源: %s", file_path)
 
     wb = openpyxl.load_workbook(file_path)
-    data_ws = wb["询价汇总"]
+    data_ws = wb[SHEET_DATA]
 
     # 确保列头完整
     for col in range(1, len(HEADERS) + 1):
@@ -261,7 +323,6 @@ def stats_from_excel(args: argparse.Namespace) -> None:
             cell.alignment = ALIGN_HEADER
 
     # 清除旧数据并补充辅助列
-    import re
     for r in range(2, data_ws.max_row + 1):
         for c in range(15, 20):
             data_ws.cell(row=r, column=c).value = None
@@ -283,40 +344,21 @@ def stats_from_excel(args: argparse.Namespace) -> None:
         filtered_rows.append(row)
 
     # 计算统计
-    total_module = 0.0
-    total_inverter = 0.0
-    total_battery = 0.0
     ordered_count = 0
     not_ordered_count = 0
     salesperson_set: set[str] = set()
 
     for row in filtered_rows:
-        mk = row[6]
-        if mk not in ("无", "--", None, ""):
-            try:
-                total_module += float(mk)
-            except (ValueError, TypeError):
-                pass
-        ik = row[7]
-        if ik not in ("无", "--", None, ""):
-            try:
-                total_inverter += float(ik)
-            except (ValueError, TypeError):
-                pass
-        bk = row[8]
-        if bk not in ("无", "--", None, ""):
-            try:
-                total_battery += float(bk)
-            except (ValueError, TypeError):
-                pass
         ordered = str(row[13] if row[13] else "")
-        if ordered == "是":
+        if ordered == STATUS_YES:
             ordered_count += 1
         else:
             not_ordered_count += 1
         sp = str(row[5] if row[5] else "")
-        if sp not in ("--", "无", ""):
+        if sp not in (STATUS_DASH, STATUS_NONE, ""):
             salesperson_set.add(sp)
+
+    total_module, total_inverter, total_battery = accumulate_power(filtered_rows)
 
     # 更新 Sheet
     _update_summary_sheet(wb, data_ws, query_range, filtered_rows=filtered_rows)
@@ -363,7 +405,7 @@ def main() -> None:
             "  %(prog)s --stats-only --this-month                 # 仅统计本月\n"
             "\n"
             "日期标签（--date-label）支持: 本周 / 上周 / 本月 / 上月 / 本季度 / 去年 /\n"
-            "  6月1号到6月7号 / 上个月12号到现在 / 上个月到现在 等自然语言格式。\n"
+            "  6月1号到6月7号 / 上个月12号到现在 / 上个月到现在 / 本季度 / 上季度 / 今年 / 去年 等自然语言格式。\n"
             "  优先级: --start-date > --date-label > --weeks > 默认本周"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -379,8 +421,8 @@ def main() -> None:
                         help="结束日期，格式 YYYY-MM-DD（例: 2026-06-07）。"
                              "不传则默认为今天")
     parser.add_argument("--date-label", type=str, default=None,
-                        help="中文日期标签，自动解析为起止日期。"
-                             "支持: 本周/上周/本月/上月/上个月到现在/6月1号到6月7号 等。"
+                        help="中文日期标签，自动解析。"
+                             "支持: 本周/上周/本月/上月/本季度/上季度/今年/去年/上个月X号到现在/X月X号到X月X号等。"
                              "优先级低于 --start-date/--end-date，高于 --weeks")
     parser.add_argument("--workers", type=int, default=4,
                         help="并行提取并发数（1-8），默认 4。根据网络和 DMS 响应速度调整，"
@@ -416,15 +458,28 @@ def main() -> None:
 
     # 三种日期方式只能选一种（优先级: start-date > date-label > weeks）
     if args.start_date and args.end_date:
-        pass  # 用户明确指定了日期范围
+        # 验证日期格式和逻辑
+        try:
+            sd = datetime.strptime(args.start_date, "%Y-%m-%d")
+        except ValueError:
+            logger.error("--start-date 格式无效，应为 YYYY-MM-DD，当前值: %s", args.start_date)
+            sys.exit(1)
+        try:
+            ed = datetime.strptime(args.end_date, "%Y-%m-%d")
+        except ValueError:
+            logger.error("--end-date 格式无效，应为 YYYY-MM-DD，当前值: %s", args.end_date)
+            sys.exit(1)
+        if sd > ed:
+            logger.error("--start-date (%s) 不能晚于 --end-date (%s)", args.start_date, args.end_date)
+            sys.exit(1)
     elif args.date_label:
         try:
-            import subprocess, json
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            result = subprocess.run(
+            from _compat import captured_run
+            result = captured_run(
                 [sys.executable, os.path.join(script_dir, "resolve_date_range.py"),
                  args.date_label, "--json"],
-                capture_output=True, text=True, check=True, encoding="utf-8",
+                capture_output=True, text=True, check=True,
             )
             parsed = json.loads(result.stdout)
             args.start_date = parsed["start"]
@@ -437,7 +492,6 @@ def main() -> None:
     if args.stats_only:
         stats_from_excel(args)
     else:
-        import asyncio
         asyncio.run(run(args))
 
 

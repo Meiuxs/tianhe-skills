@@ -63,6 +63,7 @@ class TableProcessResult:
     """表格翻页处理结果。"""
     flow_ids: list[str] = field(default_factory=list)
     seen_ids: set[str] = field(default_factory=set)
+    skipped_wrong_type: int = 0
     skipped_invalid: int = 0
     skipped_dup: int = 0
     valid_rows: int = 0
@@ -183,8 +184,13 @@ async def _process_table_rows(
     result: TableProcessResult,
 ) -> TableProcessResult:
     """处理当前页面的表格行，提取有效流程编号。"""
-    rows = await page.locator("table.el-table__body tbody tr").all()
+    rows = await page.locator("table.el-table__body").first.locator("tbody tr").all()
     logger.debug("找到 %d 行", len(rows))
+
+    page_skipped_wrong_type = 0
+    page_skipped_invalid = 0
+    page_skipped_dup = 0
+    page_valid = 0
 
     for row in rows:
         cells = await row.locator("td").all()
@@ -193,15 +199,16 @@ async def _process_table_rows(
         cell_texts = [((await c.text_content()) or "").strip().strip('"') for c in cells]
         flow_text = cell_texts[0] if cell_texts else ""
 
-        # 按流程类型筛选：仅保留"户用小型工商业询价流程"
-        if len(cell_texts) >= 2 and "户用小型工商业询价流程" not in cell_texts[1]:
-            result.skipped_invalid += 1
-            logger.debug("跳过非目标流程类型: %s (%s)", flow_text, cell_texts[1] if len(cell_texts) > 1 else "?")
-            continue
-
+        # 流程编号未匹配，跳过
         if not re.match(r"^\d{15,}$", flow_text):
             continue
-        result.valid_rows += 1
+
+        # 按流程类型筛选：仅保留"户用小型工商业询价流程"
+        if len(cell_texts) >= 2 and "户用小型工商业询价流程" not in cell_texts[1]:
+            page_skipped_wrong_type += 1
+            result.skipped_wrong_type += 1
+            logger.debug("跳过非目标流程类型: %s (%s)", flow_text, cell_texts[1] if len(cell_texts) > 1 else "?")
+            continue
 
         status_text = ""
         for t in cell_texts[-3:]:
@@ -210,21 +217,28 @@ async def _process_table_rows(
                 break
 
         if "作废" in status_text:
+            page_skipped_invalid += 1
             result.skipped_invalid += 1
             logger.debug("跳过作废流程: %s", flow_text)
             continue
+
         if flow_text in result.seen_ids:
+            page_skipped_dup += 1
             result.skipped_dup += 1
             logger.debug("跳过重复流程: %s", flow_text)
             continue
 
+        page_valid += 1
+        result.valid_rows += 1
         result.seen_ids.add(flow_text)
         result.flow_ids.append(flow_text)
+
+    logger.info("有效行: %d 行（去重后 %d 个流程）", result.valid_rows, len(result.flow_ids))
 
     return result
 
 
-async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> list[str]:
+async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> TableProcessResult:
     """在已办流程中按日期筛选，返回有效流程编号列表（支持多页翻页）。"""
     logger.info("筛选日期范围: %s ~ %s", start_date, end_date)
     await _navigate_to_process_center(page)
@@ -263,6 +277,10 @@ async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> 
         logger.debug("翻到第 %d 页", page_num)
         try:
             await page.locator(".el-pager").get_by_text(str(page_num), exact=True).click()
+            # 等待表格新数据渲染完成，避免新旧数据重叠导致重复计数
+            await page.locator("table.el-table__body tbody tr").first.wait_for(
+                state="visible", timeout=LOAD_TIMEOUT
+            )
             await page.wait_for_timeout(WAIT_MEDIUM)
         except PlaywrightTimeout:
             logger.warning("翻到第 %d 页失败，终止翻页", page_num)
@@ -271,11 +289,13 @@ async def filter_and_get_flow_ids(page: Any, start_date: str, end_date: str) -> 
         result = await _process_table_rows(page, result)
 
     logger.info("有效行: %d 行（去重后 %d 个流程）", result.valid_rows, len(result.flow_ids))
+    if result.skipped_wrong_type:
+        logger.info("跳过非目标流程: %d 条", result.skipped_wrong_type)
     if result.skipped_invalid:
         logger.info("跳过作废流程: %d 条", result.skipped_invalid)
     if result.skipped_dup:
         logger.info("跳过重复流程: %d 条", result.skipped_dup)
-    return result.flow_ids
+    return result
 
 
 # ==================== HTML 提取工具 ====================

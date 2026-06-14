@@ -23,7 +23,7 @@ class TestColorsClass(unittest.TestCase):
                 if isinstance(value, str):
                     self.assertRegex(value, r"^[0-9A-F]{6}$", f"{attr_name} not hex")
     def test_key_colors_exist(self):
-        for c in ["DARK_BLUE", "PRIMARY_BLUE", "ACCENT_BLUE", "WHITE", "DARK_GRAY"]:
+        for c in ["DARK_BLUE", "PRIMARY_BLUE", "ACCENT_BLUE", "WHITE", "TEXT_PRIMARY"]:
             self.assertTrue(hasattr(Colors, c))
 
 class TestFontDefinitions(unittest.TestCase):
