@@ -8,8 +8,8 @@ description: >
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.3.0
-  updated: 2026-06-10
+  version: 1.6.0
+  updated: 2026-06-14
 ---
 
 # DMS 非标询价周报生成器
@@ -25,7 +25,7 @@ metadata:
 用户说以下内容时直接触发：
 
 | 场景 | 用户可能说 |
-|------|-----------|
+|------|--------|
 | **定期周报** | "帮我做周报" / "这周询价汇总一下" / "做本周询价周报" |
 | **临时查询 / 批量获取** | "查一下上周的询价" / "看看这个月的流程" / "把最近两周的都提取出来" |
 | **导出汇总** | "导出询价明细到Excel" / "把已办询价整理成表格" / "出个报表" |
@@ -38,16 +38,57 @@ metadata:
 - ❌ **修改已有数据** — 不在本 skill 范围内
 - ❌ **非 DMS 系统的数据提取** — 本 skill 仅针对 DMS 流程中心
 
-## 使用流程
+## 使用流程（步骤 0 → 步骤 3）
 
-> **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。Agent 执行前自动检测路径（兼容 Claude Code 的 `~/.claude/skills/`、WorkBuddy 的 `~/.workbuddy/skills/` 等）：
-> ```bash
-> if [ -d "$HOME/.workbuddy/skills/dms-weekly-report" ]; then
->   SKILL_DIR="$HOME/.workbuddy/skills/dms-weekly-report"
-> else
->   SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
-> fi
-> ```
+> **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。Agent 执行前自动检测路径
+
+### 步骤 0：检查运行环境
+
+> **Fail-fast 原则：** 环境检查放在最开始，避免执行中途因环境问题失败。
+
+**0.1 检测 Python → 0.2 安装依赖 → 0.3 运行环境检查 → 0.4 检查登录凭据**
+
+**Step 1 — 检测 Python 是否可用：**
+
+```bash
+python --version 2>/dev/null || python3 --version 2>/dev/null || py --version 2>/dev/null
+```
+
+- **命令不存在** → 向用户说明情况，根据检测到的操作系统给出**一键安装命令**（自动同意协议），用户复制粘贴执行后重新检测。详见 `references/installation.md#python-安装`。
+- **Python 可用** → 进入 Step 2。
+
+**Step 2 — 安装前置依赖（首次使用前）：**
+
+```bash
+pip install playwright openpyxl -i https://mirrors.aliyun.com/pypi/simple/ && playwright install chromium
+```
+
+> ⚠️ **国内网络提示：** 如果上面的命令超时或下载失败，优先尝试 Aliyun 镜像（已内置在命令中）。如果 Aliyun 镜像也失败，可尝试以下备选方案：
+> - 腾讯云镜像：`-i https://mirrors.cloud.tencent.com/pypi/simple/`
+> - 华为云镜像：`-i https://repo.huaweicloud.com/repository/pypi/simple/`
+> - PyPI 官方（代理环境）：去掉 `-i` 参数，通过 `http_proxy`/`https_proxy` 环境变量走代理
+>
+> `playwright install chromium` 下载 ~400MB 浏览器二进制文件，网络差时会很慢。如失败可重试（支持断点续传）。
+> 虚拟环境、详细代理配置、版本锁定等详见 `references/installation.md`。
+
+**Step 3 — 运行统一环境检查脚本：**
+
+```bash
+python "$SKILL_DIR/scripts/check_environment.py"
+```
+
+**检查结果分支（Step 3）：**
+- ✅ 全部通过 → 进入 Step 4
+- ❌ **任一失败** → Agent 根据每项失败的 `fix_hint` **自动执行修复命令**，修复后重新运行检查，直至全部通过
+
+**Step 4 — 检查登录凭据：**
+
+```bash
+python "$SKILL_DIR/scripts/check_environment.py" --quick
+```
+
+- ✅ 凭据就绪 + 浏览器正常 → 进入**步骤 1**
+- ❌ 凭据缺失 → 提示用户配置，详见 `references/login_config.md`，用户回复"已配置"后重新检测确认
 
 ### 步骤 1：解析并确认日期范围
 
@@ -57,6 +98,17 @@ metadata:
 python "$SKILL_DIR/scripts/resolve_date_range.py" --help
 ```
 
+**⚠️ Agent 注意：** 只使用脚本支持的标签，不要自行编造。如果用户说了脚本不支持的表述（如"最近一周""近3天"），必须转换为支持的等价标签（如"本周""本月"），或改用 `--start-date`/`--end-date` 直接传日期。
+
+支持的标签类型：
+
+| 类型 | 示例 |
+|------|------|
+| 标准关键词 | 本周、上周、本月、上月、本季度、上季度、今年、去年 |
+| 相对月+日 | 上个月12号到现在、本月10号、上月至今 |
+| 中文日期范围 | 6月1号到6月7号、六月一号到六月七号 |
+| 标准日期 | 2026-06-01 ~ 2026-06-07 |
+
 确认支持的格式后，选择合适的标签传给脚本，用 `--json` 输出解析结果：
 
 ```bash
@@ -65,24 +117,9 @@ python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月到现在" --json
 
 > 输出示例：`{"start": "2026-05-12", "end": "2026-06-12", "range_str": "2026-05-12 ~ 2026-06-12"}`
 >
-> 此步骤用于**确认日期解析是否正确**。Agent 会根据输出的日期值，在**步骤 3** 中直接填入命令，不依赖 Shell 跨步骤变量。
+> 此步骤用于**确认日期解析是否正确**。Agent 会根据输出的日期值，在**步骤 2** 中直接填入命令，不依赖 Shell 跨步骤变量。
 
-### 步骤 2：检查运行环境
-
-确认日期范围后，先检查 DMS 登录凭据和浏览器环境：
-
-```bash
-python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
-```
-
-- 检测来源：当前环境变量、bash 系（.bashrc/.bash_profile/.profile）、zsh 系（.zshenv/.zprofile/.zshrc）、Windows 注册表/PowerShell
-- 同时验证 Playwright Chromium 是否已安装
-
-**检查结果分支：**
-- ✅ 凭据就绪 + 浏览器正常 → 直接进入**步骤 3**
-- ❌ 凭据缺失 → 提示用户配置环境变量 `DMS_USER` / `DMS_PASSWORD`，用户回复“已配置”后重新执行 `dms_credentials.py` 确认，再进入**步骤 3**
-
-### 步骤 3：运行脚本
+### 步骤 2：运行脚本
 
 先用 `--help` 查看 `run_weekly_report.py` 的全部参数说明和使用示例：
 
@@ -99,60 +136,53 @@ SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless
 ```
 
-> **注意：** Agent 会在步骤 1 输出后自动将日期值填入步骤 3 的命令中，用户无需手动操作。
+> **注意：** Agent 会在步骤 1 输出后自动将日期值填入步骤 2 的命令中，用户无需手动操作。
 
 **常用模式速查：**
 
 | 场景 | 命令 |
 |------|------|
-| 本月数据（无头模式） | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-06-01" --end-date "2026-06-12" --headless` |
-| 自定义日期 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless` |
+| 本周数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "本周" --headless` |
 | 上周数据 | `python "$SCRIPT" --output-dir "$PWD" --weeks 1` |
-| 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --start-date "2026-06-01" --end-date "2026-06-12"` |
+| 本月数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "本月" --headless` |
+| 上月数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "上月" --headless` |
+| 本季度数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "本季度" --headless` |
+| 今年数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "今年" --headless` |
+| 自定义日期 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless` |
+| 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --date-label "本月"` |
 
-> **提示：** `--output-dir` 建议用 `"$PWD"` 输出到用户当前目录。
+> **提示：** `--output-dir` 建议用当前工作目录。bash/zsh 用 `"$PWD"`，PowerShell 用 `"$(Get-Location)"`，或直接省略（默认当前目录）。
 >
 > **注意：** 流程编号在 Excel 中显示不正确时，见 FAQ「流程编号显示为不正确的数字」。
 
-### 步骤 4：呈现结果
+### 步骤 3：呈现结果
 
 脚本执行后会在终端打印摘要并生成 Excel，直接向用户报告：
 
 ```
 ✅ 周报生成完成！
 📊 查询范围：2026-06-01 ~ 2026-06-06
-📝 共 12 条询价记录
+📝 共 12 条有效询价记录（另有 5 条作废流程）
 🟢 已下单 5 条 | 🔴 未下单 7 条
 📎 Excel文件已保存到：{output_dir}/询价汇总_{时间戳}.xlsx
 📎 HTML 报表已保存到：{output_dir}/询价周报报表_{时间戳}.html
 ```
 
-### 步骤 5：回顾与反思（流程完成后）
+### 步骤 4：记录执行日志（流程完成后）
 
-周报生成完成后（或过程中出现问题导致卡住时），**agent 主动自我反思本次执行过程**：
+周报生成完成后，Agent **自动记录执行日志**，仅在遇到明显异常时才与用户交互。
 
-**反思清单：**
-1. 本次执行中遇到了哪些问题（脚本报错、数据异常、登录失败、下单检查超时等）？
-2. 数据是否完整合理（提取条数是否符合预期、日期范围是否正确）？
-3. 当前 SKILL.md 的说明是否能覆盖这些场景？
-4. 脚本是否有 bug 或功能缺失（选择器失效、超时过短、并发控制等）？
-5. 用户操作过程中有哪些可以优化的交互点？
+**自动记录内容：**
+- 执行时间、日期范围、提取记录数
+- 遇到的问题（脚本报错、数据异常、登录失败等）
+- 数据完整性检查结果
 
-**将反思结果提炼为具体优化建议，使用 `AskUserQuestion` 主动向用户提出：**
+**异常处理：** 遇到以下情况时，主动告知用户并给出建议：
+- 提取记录数为 0 或明显偏少
+- 登录失败或页面选择器失效
+- 脚本报错无法完成
 
-```markdown
-AskUserQuestion:
-  "本次周报执行中发现了以下问题，建议优化：
-   1. [问题1] → 建议 [优化方案]
-   2. [问题2] → 建议 [优化方案]
-   您是否有补充？确认后我将更新 SKILL.md。"
-```
-
-**根据用户确认/补充后：**
-- ✅ 更新 SKILL.md 中的说明、注意事项、常见错误
-- ✅ 修改脚本或参考文件后，按项目 CLAUDE.md 同步规则复制到对应 skill 目录
-
-> **原则：** 先自行反思提炼，再给用户确认补充。
+> **原则：** 正常执行时静默记录，仅在异常或用户主动询问时才输出详细信息。
 
 ## Quick Reference
 
@@ -195,38 +225,7 @@ python "$SKILL_DIR/scripts/generate_html_report.py" \
 
 ### Excel 列定义
 
-详见 `references/excel_columns.md`。
-
-## 前置依赖
-
-首次使用前安装必要依赖。详见 `references/installation.md`（含环境要求、虚拟环境、代理配置、版本锁定、常见失败处理）：
-
-```bash
-pip install playwright openpyxl && playwright install chromium
-```
-
-## 登录配置
-
-DMS 登录凭据通过环境变量读取，**不硬编码密码**。详见 `references/login_config.md`（含检测顺序、持久化机制）：
-
-```bash
-python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
-```
-
-**配置方式（二选一）：**
-
-```bash
-# 临时（当前会话）
-export DMS_USER="your_email@trinapower.com" DMS_PASSWORD="your_password"
-
-# 永久（推荐）：追加到 ~/.bashrc 后 source
-echo -e 'export DMS_USER="your_email@trinapower.com"\nexport DMS_PASSWORD="your_password"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**检查结果分支：**
-- ✅ 凭据就绪 + 浏览器正常 → 进入**步骤 3**
-- ❌ 凭据缺失 → 提示用户配置，用户回复"已配置"后重新检测确认，再进入**步骤 3**
+列定义详见脚本 `column_definitions.py` 源码。
 
 ## 安全约束
 
@@ -242,10 +241,8 @@ source ~/.bashrc
 ## 常见问题
 
 详见 `references/faq.md`（覆盖：环境变量检测、0 条记录、选择器失效、Excel 保存失败、验证码、流程编号精度丢失）。
-## 脚本架构
 
-核心模块：
-- **完整模式：** 配置 → 登录 → 筛选 → 提取 → 下单检查 → Excel（4 Sheet） → 终端摘要
-- **仅统计模式：** 配置 → 读取已有 Excel → 按日期筛选 → 更新统计 Sheet → 终端输出
+## 登录配置
 
-详细实现见 `scripts/run_weekly_report.py`。
+DMS 登录凭据通过环境变量读取，**不硬编码密码**。详见 `references/login_config.md`。
+

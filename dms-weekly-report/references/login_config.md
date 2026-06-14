@@ -1,13 +1,19 @@
 # 登录配置
 
-> 被 `SKILL.md` 的步骤 2 引用。详细说明 DMS 登录凭据的配置方式和检测逻辑。
+> 被 `SKILL.md` 的步骤 0 引用。详细说明 DMS 登录凭据的配置方式和检测逻辑。
 
 ## 凭据检测
 
-使用 `dms_credentials.py` 检查运行环境：
+使用 `check_environment.py` 检查运行环境（统一入口）：
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/dms-weekly-report"
+SKILL_DIR="$HOME/.codex/skills/dms-weekly-report  # 或 ~/.workbuddy/skills/dms-weekly-report"
+python "$SKILL_DIR/scripts/check_environment.py" --quick
+```
+
+或直接使用底层模块：
+
+```bash
 python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 ```
 
@@ -41,3 +47,5 @@ source ~/.bashrc
 - **首次登录：** 正常输入凭据登录，浏览器上下文持久化
 - **后续运行：** 自动复用持久化会话，无需重复登录
 - **会话过期：** Playwright 自动检测，自动跳转登录页重登
+
+

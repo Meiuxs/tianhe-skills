@@ -2,6 +2,28 @@
 
 > 被 `SKILL.md` 的 FAQ 章节引用。遇到具体问题时查阅，不需要在每次执行时阅读。
 
+### Q: 环境检查失败怎么办？
+
+```
+运行 check_environment.py 查看具体问题：
+  python "$SKILL_DIR/scripts/check_environment.py"
+
+常见失败原因及修复：
+  1. Python 版本过低 → 升级到 3.9+
+  2. 依赖包缺失 → pip install playwright openpyxl
+  3. Chromium 未安装 → playwright install chromium
+  4. 凭据未配置 → 见下方「未配置环境变量」
+```
+
+### Q: 环境检查通过但仍报错？
+
+```
+可能原因：
+  - check_environment.py 使用 --quick 模式跳过了部分检查
+  - 运行完整检查：python check_environment.py（不带 --quick）
+  - 检查 Python 解释器是否在虚拟环境中
+```
+
 ### Q: 脚本报"未配置环境变量"但实际已配置
 
 ```
