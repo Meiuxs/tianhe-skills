@@ -76,6 +76,15 @@ def captured_run(*args, capture_output: bool = True,
 if sys.platform == 'win32':
     import io
 
+    # 设置控制台代码页为 UTF-8，避免 PowerShell error stream 用 cp936 解码
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleOutputCP(65001)
+        kernel32.SetConsoleCP(65001)
+    except Exception:
+        pass
+
     # 修复 stdout / stderr —— 将非 UTF-8 流重包装为 UTF-8
     for name in ('stdout', 'stderr'):
         stream = getattr(sys, name)

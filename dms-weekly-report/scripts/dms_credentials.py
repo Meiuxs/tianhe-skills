@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import glob
+import logging
 import os
 import platform
 import re
@@ -31,19 +32,24 @@ from typing import Callable
 import _compat  # noqa: F401
 from _compat import captured_run
 
+logger = logging.getLogger(__name__)
+
 # ── 模块级常量与缓存 ──
 
 # 预编译正则：匹配 export VAR="val" / VAR='val' / VAR=val（支持尾部 # 注释）
 _ENV_LINE_RE = re.compile(
-    r'^(?:export\s+)?'
-    r'(DMS_USER|DMS_PASSWORD)\s*=\s*'
-    r'(?:'
-    r'"((?:[^"\\]|\\.)*)"'
-    r"|'((?:[^'\\]|\\.)*)'"
-    r'|(\S+)'
-    r')'
-    r'(?:\s+#.*)?\s*$',
-    re.MULTILINE,
+    r"""
+    ^(?:export\s+)?           # 可选 export 前缀
+    (DMS_USER|DMS_PASSWORD)    # 变量名
+    \s*=\s*                    # 等号
+    (?:                        # 值（三种引号格式）
+      "((?:[^"\\]|\\.)*)"     # 双引号
+      | '((?:[^'\\]|\\.)*)'   # 单引号
+      | (\S+)                 # 无引号
+    )
+    (?:\s+\#.*)?\s*$          # 可选尾注释（\# 匹配字面量 #）
+    """,
+    re.MULTILINE | re.VERBOSE,
 )
 
 # 缓存：bash 可用性（只检测一次）、HOME 路径（避免重复 expanduser）
@@ -118,7 +124,7 @@ def _parse_env_from_file(filepath: str) -> tuple[str | None, str | None]:
                 if dq:
                     val = dq.replace('\\"', '"').replace('\\\\', '\\')
                 elif sq:
-                    val = sq.replace("\\'", "'").replace('\\\\', '\\')
+                    pass  # POSIX 单引号内无转义，值已直接获取
                 if val:
                     if name == "DMS_USER":
                         user = val
@@ -187,20 +193,22 @@ def check_powershell() -> tuple[str, str, str] | None:
     """从 Windows 用户环境变量读取。
 
     双层降级：
-      ① Win32 API 直读注册表 HKCU\Environment（~1ms，零进程）
+      ① Win32 API 直读注册表 HKCU\\Environment（~1ms，零进程）
       ② 兜底 PowerShell -NoProfile 子进程（~50-200ms）
     """
+    if platform.system() != "Windows":
+        return None
+
     # ── 快速路径：Win32 API 直读注册表 ──
-    if platform.system() == "Windows":
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
-                user, _ = winreg.QueryValueEx(key, "DMS_USER")
-                password, _ = winreg.QueryValueEx(key, "DMS_PASSWORD")
-                if user and password:
-                    return ("win32_registry", user, password)
-        except (FileNotFoundError, OSError, ImportError):
-            pass
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            user, _ = winreg.QueryValueEx(key, "DMS_USER")
+            password, _ = winreg.QueryValueEx(key, "DMS_PASSWORD")
+            if user and password:
+                return ("win32_registry", user, password)
+    except (FileNotFoundError, OSError, ImportError):
+        pass
 
     # ── 兜底：PowerShell 子进程 ──
     try:
@@ -247,7 +255,7 @@ def get_credentials(
     if not result:
         print("[错误] 未配置 DMS_USER / DMS_PASSWORD 环境变量", file=sys.stderr)
         print("  请参照 SKILL.md 的「凭据配置」节进行设置", file=sys.stderr)
-        raise SystemExit(1)
+        sys.exit(1)
 
     source, user, password = result
     if on_source:
@@ -258,10 +266,11 @@ def get_credentials(
 def check_chromium() -> bool:
     """轻量级 Chromium 检查——filesystem glob，不启动 Playwright 引擎。
 
-    覆盖 Windows / Linux / macOS 三平台安装路径。
+    同时检查 chromium 和 chromium_headless_shell 两个变体。
+    launch_persistent_context 在 Windows 上无论 headless 参数如何都需要 headless-shell。
     """
     home = _get_home()
-    patterns = [
+    chromium_patterns = [
         # Windows: ms-playwright/chromium-*/chrome-win*/chrome.exe
         os.path.join(home, "AppData", "Local", "ms-playwright",
                      "chromium-*", "chrome-win*", "chrome.exe"),
@@ -272,12 +281,30 @@ def check_chromium() -> bool:
         os.path.join(home, "Library", "Caches", "ms-playwright",
                      "chromium-*", "chrome-mac", "Chromium"),
     ]
-    for pattern in patterns:
-        if glob.glob(pattern):
-            print("  [Chromium] ✅ 已安装", file=sys.stderr)
-            return True
+    headless_patterns = [
+        # Windows
+        os.path.join(home, "AppData", "Local", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-win", "headless_shell.exe"),
+        # Linux
+        os.path.join(home, ".cache", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-linux", "headless_shell"),
+        # macOS
+        os.path.join(home, "Library", "Caches", "ms-playwright",
+                     "chromium_headless_shell-*", "chrome-mac", "headless_shell"),
+    ]
 
-    print("  [Chromium] ❌ 未安装", file=sys.stderr)
+    found_chromium = any(glob.glob(p) for p in chromium_patterns)
+    found_headless = any(glob.glob(p) for p in headless_patterns)
+
+    if found_chromium and found_headless:
+        logger.debug("  [Chromium] ✅ 已安装（含 headless-shell）")
+        return True
+
+    if found_chromium and not found_headless:
+        logger.debug("  [Chromium] ⚠️ 已安装但 headless-shell 缺失（launch_persistent_context 需要）")
+        return False
+
+    logger.debug("  [Chromium] ❌ 未安装")
     return False
 
 
@@ -315,6 +342,9 @@ def main() -> None:
     print("NOT_FOUND")
     print("未找到 DMS 登录环境变量", file=sys.stderr)
     sys.exit(1)
+
+
+__all__ = ["get_credentials", "source_label", "check_chromium", "resolve_credentials", "check_current_env", "check_bash_profiles", "check_powershell", "_parse_env_from_file", "_bash_available", "_get_home"]
 
 
 if __name__ == "__main__":
