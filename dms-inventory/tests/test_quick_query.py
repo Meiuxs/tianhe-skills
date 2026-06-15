@@ -309,6 +309,56 @@ class TestEmptyConditionWarning(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════
+# 7. 跨品类搜索
+# ═══════════════════════════════════════════════════════════
+
+class TestCrossCategorySearch(unittest.TestCase):
+    """测试跨品类搜索"""
+
+    def test_search_all_categories(self):
+        """不指定 --category 时应搜索全部品类"""
+        mock_data = {
+            '组件': pd.DataFrame({
+                '物料编号': ['C001'],
+                '物料名称': ['730W组件'],
+                '功率': ['730W'],
+                '可用库存': [100.0],
+                '仓库名称': ['仓A'],
+            }),
+            '逆变器': pd.DataFrame({
+                '物料编号': ['I001'],
+                '物料名称': ['50KW逆变器'],
+                '功率': ['50KW三相'],
+                '可用库存': [10.0],
+                '仓库名称': ['仓B'],
+                '厂家': ['华为'],
+            }),
+            '并网箱': pd.DataFrame({
+                '并网箱类型': ['标准'],
+                '功率': ['50KW三相'],
+                '物料编号': ['B001'],
+                '物料名称': ['并网箱'],
+                '可用库存': [5.0],
+                '仓库名称': ['仓C'],
+            }),
+        }
+
+        # 直接测试 query 函数跨品类
+        results = {}
+        for cat in VALID_CATEGORIES:
+            df = mock_data.get(cat, pd.DataFrame())
+            if df.empty:
+                continue
+            matched = query(df, CATEGORY_META[cat], power="50")
+            if not matched.empty:
+                results[cat] = matched
+
+        # 50KW 应匹配逆变器和并网箱
+        self.assertIn('逆变器', results)
+        self.assertIn('并网箱', results)
+
+
+# ═══════════════════════════════════════════════════════════
 # 入口
 # ═══════════════════════════════════════════════════════════
 
