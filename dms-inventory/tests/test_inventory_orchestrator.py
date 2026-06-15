@@ -611,5 +611,33 @@ class TestRunAnalysisCombinations(unittest.TestCase):
             )
 
 
+class TestJsonSerialization(unittest.TestCase):
+    """测试 JSON 序列化不因 numpy 类型失败"""
+
+    @patch('inventory_orchestrator.load_inventory')
+    def test_numpy_types_in_output(self, mock_load):
+        """输出中即使有 numpy 类型也不应抛出 TypeError"""
+        import numpy as np
+        mock_load.return_value = {
+            '组件': pd.DataFrame({
+                '物料编号': ['TEST001'],
+                '物料名称': ['测试组件'],
+                '功率': ['715W'],
+                '可用库存': [np.int64(100)],
+                '仓库名称': ['测试仓'],
+            }),
+            '逆变器': pd.DataFrame(),
+            '并网箱': pd.DataFrame(),
+        }
+        params = {
+            'requirements': {'components': {'power': 715, 'qty': 100}},
+            'preferences': {},
+        }
+        result = run_analysis(params)
+        # 不应抛出 TypeError
+        output = json.dumps(result, ensure_ascii=False, indent=2)
+        self.assertIsInstance(output, str)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -717,7 +717,7 @@ def main():
     result = run_analysis(params)
 
     # 输出
-    output = json.dumps(result, ensure_ascii=False, indent=2)
+    output = json.dumps(result, ensure_ascii=False, indent=2, default=str)
 
     if args.output_file:
         out_path = os.path.abspath(args.output_file)
