@@ -316,7 +316,7 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
 
     # 2. 查询所有可替代的组件规格（排除指定功率的）
     all_powers = sorted(df['功率'].unique(),
-                        key=lambda x: int(str(x).replace('W', '').replace('+', '')))
+                        key=lambda x: _extract_power_num(x))
     all_power_nums = [_extract_power_num(p) for p in all_powers]
 
     for pn in sorted(all_power_nums, reverse=True):

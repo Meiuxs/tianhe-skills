@@ -673,5 +673,31 @@ class TestBoxesSectionRemarkFilter(unittest.TestCase):
         self.assertIn('BOX002', available_codes)
 
 
+class TestAlternativePowerSorting(unittest.TestCase):
+    """测试替代组件功率排序不因非标准格式崩溃"""
+
+    @patch('inventory_orchestrator.load_inventory')
+    def test_nonstandard_power_format(self, mock_load):
+        """功率列含非标准格式时不应抛出 ValueError"""
+        mock_load.return_value = {
+            '组件': pd.DataFrame({
+                '物料编号': ['C001', 'C002', 'C003'],
+                '物料名称': ['组件A', '组件B', '组件C'],
+                '功率': ['715W', '50KW三相', '多晶'],  # '多晶' 无数字
+                '可用库存': [100.0, 50.0, 0.0],
+                '仓库名称': ['仓A', '仓B', '仓C'],
+            }),
+            '逆变器': pd.DataFrame(),
+            '并网箱': pd.DataFrame(),
+        }
+        params = {
+            'requirements': {'components': {'power': 715, 'qty': 100}},
+            'preferences': {},
+        }
+        # 不应抛出 ValueError
+        result = run_analysis(params)
+        self.assertIsNotNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()
