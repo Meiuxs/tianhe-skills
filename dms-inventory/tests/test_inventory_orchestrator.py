@@ -699,5 +699,32 @@ class TestAlternativePowerSorting(unittest.TestCase):
         self.assertIsNotNone(result)
 
 
+class TestHasStockSemantics(unittest.TestCase):
+    """测试 has_stock 参数语义"""
+
+    @patch('inventory_orchestrator.load_inventory')
+    def test_query_all_includes_zero_stock(self, mock_load):
+        """查询所有组件时应包含零库存物料"""
+        mock_load.return_value = {
+            '组件': pd.DataFrame({
+                '物料编号': ['C001', 'C002'],
+                '物料名称': ['组件A', '组件B'],
+                '功率': ['715W', '715W'],
+                '可用库存': [100.0, 0.0],
+                '仓库名称': ['仓A', '仓B'],
+            }),
+            '逆变器': pd.DataFrame(),
+            '并网箱': pd.DataFrame(),
+        }
+        params = {
+            'requirements': {'components': {'power': 715, 'qty': 100}},
+            'preferences': {},
+        }
+        result = run_analysis(params)
+        # specified_detail 应包含两个物料（含零库存）
+        detail = result['components']['specified_detail']
+        self.assertEqual(len(detail), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

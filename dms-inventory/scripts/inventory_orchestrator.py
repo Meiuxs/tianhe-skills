@@ -257,7 +257,7 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
         return result
 
     # 1. 查询指定功率的组件（含零库存，用于展示零库存候选物料）
-    all_items = query_components(df, power=target_power, has_stock=None)
+    all_items = query_components(df, power=target_power, has_stock=False)
     items_with_stock = all_items[all_items['可用库存'].notna() & (all_items['可用库存'] > 0)]
 
     agg = aggregate_stock(items_with_stock, qty_col='可用库存')
