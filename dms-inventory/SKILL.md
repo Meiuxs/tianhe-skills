@@ -29,7 +29,7 @@ metadata:
 | 项目 | 说明 |
 |:-----|:------|
 | 核心脚本 | `scripts/inventory_orchestrator.py` — 编排器 |
-| 快捷查询 | `scripts/lookup_by_code.py` — 按物料编码/名称查询 |
+| 快捷查询 | `scripts/quick_query.py` — 按物料编码/名称查询 |
 | 架构文档 | `references/inventory-flow.md` |
 | 异常处理 | `references/error-handling.md` |
 | 临时目录 | `TMP_DIR`（跨平台，`tempfile.gettempdir()` 自动适配各系统） |
