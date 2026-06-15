@@ -283,6 +283,32 @@ class TestFormatText(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════
+# 6. 空条件警告
+# ═══════════════════════════════════════════════════════════
+
+class TestEmptyConditionWarning(unittest.TestCase):
+    """测试空条件时输出警告"""
+
+    def test_empty_condition_warning(self):
+        """所有条件都是空字符串时应输出警告到 stderr"""
+        import io
+        from contextlib import redirect_stderr
+
+        df = pd.DataFrame({'物料编号': ['C001'], '物料名称': ['组件A']})
+        meta = CATEGORY_META['组件']
+
+        # code="" 被视为无效条件
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            result = query(df, meta, code="", name="", power="")
+
+        warning = stderr_capture.getvalue()
+        # 应有警告输出
+        self.assertIn("警告", warning)
+        self.assertTrue(result.empty)
+
+
+# ═══════════════════════════════════════════════════════════
 # 入口
 # ═══════════════════════════════════════════════════════════
 

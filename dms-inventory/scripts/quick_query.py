@@ -116,6 +116,7 @@ def query(df: pd.DataFrame, meta: dict,
         满足所有条件的 DataFrame
     """
     if not code and not name and not power:
+        print("[警告] 至少需要提供一个查询条件（--code、--name 或 --power）", file=sys.stderr)
         return pd.DataFrame()
 
     masks = []
