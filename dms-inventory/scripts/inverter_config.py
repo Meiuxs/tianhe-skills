@@ -124,6 +124,9 @@ def find_inverter_combinations(inverters: pd.DataFrame, target_power: float,
                 existing = power_groups[p]
                 if inv['price_rank'] < existing['price_rank']:
                     power_groups[p] = inv
+                elif existing['stock'] <= 0 and inv['stock'] > 0:
+                    # 现有物料无库存时，优先选择有库存的
+                    power_groups[p] = inv
                 elif inv['stock'] > existing['stock']:
                     power_groups[p] = inv
         return power_groups

@@ -195,5 +195,31 @@ class TestFormatCombination(unittest.TestCase):
         self.assertFalse(result['is_same_brand'])
 
 
+class TestPowerGroupStockPreference(unittest.TestCase):
+    """测试同功率去重时优先保留有库存的物料"""
+
+    def test_prefers_in_stock_over_zero_stock(self):
+        """同功率、同价格排序时，应优先保留有库存的物料"""
+        df = pd.DataFrame({
+            "厂家": ["品牌A", "品牌A"],
+            "功率": ["50KW三相", "50KW三相"],
+            "物料编号": ["INV001", "INV002"],
+            "物料名称": ["逆变器A", "逆变器B"],
+            "可用库存": [0.0, 10.0],
+            "备注": [None, None],
+            "价格排序": [1, 1],  # 同价格排序
+        })
+        combos = find_inverter_combinations(
+            df, target_power=50.0, tolerance=0.1,
+            max_combinations=5, same_brand=True, stock_sufficient=False,
+        )
+        self.assertGreater(len(combos), 0)
+        # 应选择有库存的 INV002，而非无库存的 INV001
+        combo = combos[0]
+        codes = [item[0] for item in combo['combo']]
+        self.assertIn('INV002', codes)
+        self.assertNotIn('INV001', codes)
+
+
 if __name__ == "__main__":
     unittest.main()
