@@ -115,9 +115,10 @@ def _get_stock(row) -> int:
 
 def _filter_by_remark(items: pd.DataFrame, preferences: dict) -> dict:
     """按备注过滤物料，返回 {'available': DataFrame, 'excluded': [dict], 'warnings': [dict]}。"""
-    result = {'available': pd.DataFrame(), 'excluded': [], 'warnings': []}
+    result = {'available': [], 'excluded': [], 'warnings': []}
 
     if items.empty:
+        result['available'] = pd.DataFrame()
         return result
 
     exclude_project = preferences.get('exclude_project_specific', True)
@@ -165,6 +166,8 @@ def _filter_by_remark(items: pd.DataFrame, preferences: dict) -> dict:
 
     if available_rows:
         result['available'] = pd.DataFrame(available_rows)
+    else:
+        result['available'] = pd.DataFrame()
     return result
 
 
