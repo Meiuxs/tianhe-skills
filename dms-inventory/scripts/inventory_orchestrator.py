@@ -589,7 +589,9 @@ def query_boxes_section(data: dict, requirements: dict, preferences: dict) -> di
     """查询并网柜库存。"""
     result = {
         'existing': [],
-        'available': []
+        'available': [],
+        'excluded': [],
+        'warnings': [],
     }
 
     box_req = requirements.get('combiner_boxes', {})
@@ -600,21 +602,31 @@ def query_boxes_section(data: dict, requirements: dict, preferences: dict) -> di
     if df.empty:
         return result
 
-    # 查询并网柜（默认 50kW，可通过 requirements.combiner_boxes.power 自定义）
     box_power = box_req.get('power', 50)
     items = query_boxes(df, power=box_power, has_stock=True)
     if items.empty:
         return result
 
     agg = aggregate_stock(items, qty_col='可用库存')
+    if agg.empty:
+        return result
 
-    for _, row in agg.iterrows():
+    # 备注过滤（与组件/逆变器一致）
+    filtered = _filter_by_remark(agg, preferences)
+    result['excluded'] = filtered['excluded']
+    result['warnings'] = filtered['warnings']
+
+    available = filtered['available']
+    if available.empty:
+        return result
+
+    for _, row in available.iterrows():
         result['available'].append({
             'type': str(row.get('并网箱类型', '')),
             'code': row.get('物料编号', ''),
             'name': str(row.get('物料名称', ''))[:60],
             'stock': int(row['库存总量']),
-            'total_stock': int(row['库存总量']),  # 兼容 total_stock 字段名
+            'total_stock': int(row['库存总量']),
         })
 
     return result

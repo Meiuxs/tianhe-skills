@@ -639,5 +639,39 @@ class TestJsonSerialization(unittest.TestCase):
         self.assertIsInstance(output, str)
 
 
+class TestBoxesSectionRemarkFilter(unittest.TestCase):
+    """测试 query_boxes_section 备注过滤"""
+
+    @patch('inventory_orchestrator.load_inventory')
+    def test_boxes_with_project_specific_remark_excluded(self, mock_load):
+        """并网箱含'项目专用'备注时不应出现在 available 中"""
+        mock_load.return_value = {
+            '组件': pd.DataFrame(),
+            '逆变器': pd.DataFrame(),
+            '并网箱': pd.DataFrame({
+                '并网箱类型': ['标准一体式', '标准一体式'],
+                '功率': ['50KW三相', '50KW三相'],
+                '物料编号': ['BOX001', 'BOX002'],
+                '物料名称': ['并网柜A', '并网柜B'],
+                '可用库存': [10.0, 5.0],
+                '仓库名称': ['南宁仓', '郑州仓'],
+                '备注': ['项目专用', None],
+            }),
+        }
+        params = {
+            'requirements': {'combiner_boxes': {'power': 50}},
+            'preferences': {
+                'exclude_project_specific': True,
+                'exclude_unlisted': True,
+            },
+        }
+        result = run_analysis(params)
+        boxes = result['combiner_boxes']
+        # BOX001 含"项目专用"应被排除
+        available_codes = [b['code'] for b in boxes['available']]
+        self.assertNotIn('BOX001', available_codes)
+        self.assertIn('BOX002', available_codes)
+
+
 if __name__ == "__main__":
     unittest.main()
