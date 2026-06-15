@@ -365,13 +365,12 @@ def main():
 
     # --output-file 重定向 stdout
     _output_file = None
-    if args.output_file:
-        out_path = os.path.abspath(args.output_file)
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        _output_file = open(out_path, 'w', encoding='utf-8')
-        sys.stdout = _output_file
-
     try:
+        if args.output_file:
+            out_path = os.path.abspath(args.output_file)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            _output_file = open(out_path, 'w', encoding='utf-8')
+            sys.stdout = _output_file
 
         # 加载数据
         data = load_inventory(args.file, sheet_name=args.sheet)
