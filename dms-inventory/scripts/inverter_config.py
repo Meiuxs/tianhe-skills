@@ -275,7 +275,7 @@ def main():
 
     # 加载库存
     data = load_inventory(args.file)
-    inverters = query_inverters(data["逆变器"], brand=args.brand or "天合", has_stock=True)
+    inverters = query_inverters(data["逆变器"], brand=args.brand, has_stock=True)
 
     if inverters.empty:
         print("[错误] 未找到符合条件的逆变器库存")

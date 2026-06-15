@@ -221,5 +221,27 @@ class TestPowerGroupStockPreference(unittest.TestCase):
         self.assertNotIn('INV001', codes)
 
 
+class TestDefaultBrand(unittest.TestCase):
+    """测试默认品牌行为"""
+
+    def test_default_brand_is_none(self):
+        """未指定 --brand 时应返回全部品牌（brand=None）"""
+        df = pd.DataFrame({
+            "厂家": ["华为", "上能"],
+            "功率": ["50KW三相", "50KW三相"],
+            "物料编号": ["HW001", "SN001"],
+            "物料名称": ["华为逆变器", "上能逆变器"],
+            "可用库存": [10.0, 5.0],
+            "备注": [None, None],
+            "价格排序": [1, 2],
+        })
+        # brand=None 应返回全部品牌
+        combos = find_inverter_combinations(
+            df, target_power=50.0, tolerance=0.1,
+            max_combinations=5, same_brand=False, stock_sufficient=True,
+        )
+        self.assertGreater(len(combos), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
