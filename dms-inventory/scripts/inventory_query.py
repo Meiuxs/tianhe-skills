@@ -332,7 +332,7 @@ def aggregate_stock(df: pd.DataFrame, material_col: str = '物料编号',
     # 如果有多列，保留额外信息（如品牌、功率等）
     extra_cols = [c for c in df.columns if c not in [material_col, name_col, qty_col, warehouse_col]]
     extra_cols_present = [c for c in extra_cols if c in result.columns and c not in agg.columns]
-        # 注意：同一物料编码可能有多个不同的额外列值，.first() 仅取第一个
+    # 注意：同一物料编码可能有多个不同的额外列值，.first() 仅取第一个
     if extra_cols_present:
         extra = result.groupby(material_col, as_index=False, dropna=False)[extra_cols_present].first()
         agg = agg.merge(extra, on=material_col, how='left')
