@@ -147,6 +147,8 @@ def find_inverter_combinations(inverters: pd.DataFrame, target_power: float,
 
             for i in range(start_idx, len(sorted_powers)):
                 power = sorted_powers[i]
+                if power <= 0:
+                    continue  # 跳过功率为 0 的逆变器，防止除零
                 inv = power_groups[power]
                 stock = int(inv['stock']) if inv['stock'] > 0 else 0
 

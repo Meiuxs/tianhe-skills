@@ -243,5 +243,27 @@ class TestDefaultBrand(unittest.TestCase):
         self.assertGreater(len(combos), 0)
 
 
+class TestZeroPowerProtection(unittest.TestCase):
+    """测试 power=0 时不会触发 ZeroDivisionError"""
+
+    def test_zero_power_skipped(self):
+        """power=0 的逆变器应被跳过"""
+        df = pd.DataFrame({
+            "厂家": ["品牌A"],
+            "功率": ["三相"],  # 无数字，extract_power 返回 0
+            "物料编号": ["INV001"],
+            "物料名称": ["逆变器A"],
+            "可用库存": [10.0],
+            "备注": [None],
+            "价格排序": [1],
+        })
+        # 不应抛出 ZeroDivisionError
+        combos = find_inverter_combinations(
+            df, target_power=50.0, tolerance=0.1,
+            max_combinations=5, same_brand=True, stock_sufficient=True,
+        )
+        self.assertEqual(len(combos), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
