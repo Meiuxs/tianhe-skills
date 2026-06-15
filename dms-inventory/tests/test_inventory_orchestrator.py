@@ -37,6 +37,7 @@ from inventory_orchestrator import (
     _get_stock,
     _filter_by_remark,
     _extract_power_num,
+    _safe_str,
     _calc_dc_ac_ratio,
     _calc_existing_kw,
 _serializable,
@@ -724,6 +725,31 @@ class TestHasStockSemantics(unittest.TestCase):
         # specified_detail 应包含两个物料（含零库存）
         detail = result['components']['specified_detail']
         self.assertEqual(len(detail), 2)
+
+
+class TestSafeStr(unittest.TestCase):
+    """测试 _safe_str 辅助函数"""
+
+    def test_none_returns_default(self):
+        self.assertEqual(_safe_str(None), '')
+
+    def test_nan_returns_default(self):
+        self.assertEqual(_safe_str(float('nan')), '')
+
+    def test_string_returns_string(self):
+        self.assertEqual(_safe_str('hello'), 'hello')
+
+    def test_number_returns_string(self):
+        self.assertEqual(_safe_str(42), '42')
+
+    def test_with_default(self):
+        self.assertEqual(_safe_str(None, default=''), '')
+
+    def test_with_custom_default(self):
+        self.assertEqual(_safe_str(None, default='N/A'), 'N/A')
+
+    def test_none_with_none_default(self):
+        self.assertIsNone(_safe_str(None, default=None))
 
 
 if __name__ == "__main__":

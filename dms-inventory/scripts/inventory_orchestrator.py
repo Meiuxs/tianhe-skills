@@ -142,11 +142,11 @@ def _filter_by_remark(items: pd.DataFrame, preferences: dict) -> dict:
             if should_exclude:
                 result['excluded'].append({
                     'code': row.get('物料编号', ''),
-                    'name': str(row.get('物料名称', '')),
-                    'power': str(row.get('功率', '')),
+                    'name': _safe_str(row.get('物料名称')),
+                    'power': _safe_str(row.get('功率')),
                     'stock': stock,
                     'reason': parsed['reason'],
-                    'remark': str(remark) if pd.notna(remark) else ''
+                    'remark': _safe_str(remark)
                 })
                 continue
 
@@ -154,11 +154,11 @@ def _filter_by_remark(items: pd.DataFrame, preferences: dict) -> dict:
             # 不排除，但记录警告
             result['warnings'].append({
                 'code': row.get('物料编号', ''),
-                'name': str(row.get('物料名称', '')),
-                'power': str(row.get('功率', '')),
+                'name': _safe_str(row.get('物料名称')),
+                'power': _safe_str(row.get('功率')),
                 'stock': stock,
                 'reason': parsed['reason'],
-                'remark': str(remark) if pd.notna(remark) else ''
+                'remark': _safe_str(remark)
             })
 
         available_rows.append(row)
@@ -174,6 +174,13 @@ def _extract_power_num(power_str) -> int:
         return 0
     match = re.search(r'(\d+)', str(power_str))
     return int(match.group(1)) if match else 0
+
+
+def _safe_str(val, default: str = '') -> str:
+    """安全地将值转为字符串，NaN/None 返回默认值。"""
+    if pd.isna(val) or val is None:
+        return default
+    return str(val)
 
 
 def _calc_dc_ac_ratio(component_kw: float, inverter_kw: float) -> float:
@@ -270,14 +277,14 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
     for _, row in all_items.iterrows():
         stock = _get_stock(row)
         remark_raw = row.get('备注', None)
-        remark_str = str(remark_raw) if pd.notna(remark_raw) else None
+        remark_str = _safe_str(remark_raw) or None
         parsed = _parse_remark(remark_raw) if pd.notna(remark_raw) else {'level': 'none'}
         entry = {
             'code': row.get('物料编号', ''),
-            'name': str(row.get('物料名称', '')),
+            'name': _safe_str(row.get('物料名称')),
             'stock': stock,
             'remark': remark_str,
-            'warehouse': str(row.get('仓库名称', ''))
+            'warehouse': _safe_str(row.get('仓库名称'))
         }
         detail_rows.append(entry)
         # 零库存且未被备注排除 → 作为候选
@@ -338,8 +345,8 @@ def query_components_section(data: dict, requirements: dict, preferences: dict) 
         if not alt_available.empty:
             # 取库存最多的物料
             best = alt_available.iloc[0]
-            alt_entry['best_code'] = str(best.get('物料编号', ''))
-            alt_entry['best_name'] = str(best.get('物料名称', ''))[:80]
+            alt_entry['best_code'] = _safe_str(best.get('物料编号'))
+            alt_entry['best_name'] = _safe_str(best.get('物料名称'))[:80]
 
         result['alternatives'].append(alt_entry)
 
@@ -415,11 +422,11 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
                     if stock_val == 0 and _is_usable(row):
                         zero_stock_inverters.append({
                             'code': row.get('物料编号', ''),
-                            'name': str(row.get('物料名称', '')),
-                            'power': str(row.get('功率', '')),
+                            'name': _safe_str(row.get('物料名称')),
+                            'power': _safe_str(row.get('功率')),
                             'power_num': _extract_power_num(row.get('功率', '')),
-                            'brand': str(row.get('厂家', '')) if pd.notna(row.get('厂家')) else '',
-                            'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+                            'brand': _safe_str(row.get('厂家'), default=''),
+                            'remark': _safe_str(row.get('备注')) or None,
                         })
     # 也查一下首选品牌型号的零库存情况（未指定 required_new 时）
     if not zero_stock_inverters and preferences.get('prefer_brand'):
@@ -431,11 +438,11 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
                 if stock_val == 0 and _is_usable(row):
                     zero_stock_inverters.append({
                         'code': row.get('物料编号', ''),
-                        'name': str(row.get('物料名称', '')),
-                        'power': str(row.get('功率', '')),
+                        'name': _safe_str(row.get('物料名称')),
+                        'power': _safe_str(row.get('功率')),
                         'power_num': _extract_power_num(row.get('功率', '')),
-                        'brand': str(row.get('厂家', '')) if pd.notna(row.get('厂家')) else '',
-                        'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+                        'brand': _safe_str(row.get('厂家'), default=''),
+                        'remark': _safe_str(row.get('备注')) or None,
                     })
     result['zero_stock_candidates'] = zero_stock_inverters
 
@@ -468,7 +475,7 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
         keyword = prefer_material
         matched_codes = set()
         for _, row in raw_items.iterrows():
-            name = str(row.get('物料名称', ''))
+            name = _safe_str(row.get('物料名称'))
             if keyword in name:
                 matched_codes.add(row['物料编号'])
         if matched_codes:
@@ -482,17 +489,17 @@ def query_inverters_section(data: dict, requirements: dict, preferences: dict) -
     if '厂家' in raw_items_filtered.columns:
         for _, row in raw_items_filtered.iterrows():
             code = row.get('物料编号', '')
-            brand = str(row.get('厂家', '未知'))
+            brand = _safe_str(row.get('厂家'), default='未知')
             if brand not in brand_groups:
                 brand_groups[brand] = []
             item = {
                 'code': code,
                 'power': _extract_power_num(row.get('功率', '')),
-                'power_label': str(row.get('功率', '')),
-                'name': str(row.get('物料名称', '')[:60]),
+                'power_label': _safe_str(row.get('功率')),
+                'name': _safe_str(row.get('物料名称'))[:60],
                 'stock': int(stock_lookup.get(code, 0)),
                 'price_rank': row.get('价格排序', None),
-                'remark': str(row.get('备注', '')) if pd.notna(row.get('备注')) else None,
+                'remark': _safe_str(row.get('备注')) or None,
                 'brand': brand,
             }
             # 同品牌同物料只保留一条（取首个仓库行）
@@ -622,9 +629,9 @@ def query_boxes_section(data: dict, requirements: dict, preferences: dict) -> di
 
     for _, row in available.iterrows():
         result['available'].append({
-            'type': str(row.get('并网箱类型', '')),
+            'type': _safe_str(row.get('并网箱类型')),
             'code': row.get('物料编号', ''),
-            'name': str(row.get('物料名称', ''))[:60],
+            'name': _safe_str(row.get('物料名称'))[:60],
             'stock': int(row['库存总量']),
             'total_stock': int(row['库存总量']),
         })
