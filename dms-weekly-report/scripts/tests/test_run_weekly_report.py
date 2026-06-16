@@ -139,6 +139,9 @@ mock_col_defs.STATUS_CHECK_FAILED = "检查失败"
 mock_col_defs.ORDER_CHECK_EXTEND_DAYS = 31
 mock_col_defs.TARGET_FLOW_TYPE = "户用小型工商业询价流程"
 mock_col_defs.FILTER_PAGE_SIZE = 10
+mock_col_defs.API_FILTER_PAGE_SIZE = 500
+mock_col_defs.DMS_API_BASE = "https://apigw.trinablue.com"
+mock_col_defs.DMS_FLOW_LIST_API = f"{mock_col_defs.DMS_API_BASE}/dms-admin/newFlow/newFlowList"
 sys.modules["column_definitions"] = mock_col_defs
 
 # ==================== 导入 core 模块 ====================
