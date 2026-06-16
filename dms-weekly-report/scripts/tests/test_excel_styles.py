@@ -1,8 +1,12 @@
 """excel_styles.py 单元测试。"""
 
+import sys
+from pathlib import Path
 import unittest
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from excel_styles import (
     Colors,
     FONT_TITLE, FONT_SECTION, FONT_HEADER, FONT_DATA,

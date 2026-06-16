@@ -1,9 +1,12 @@
 """resolve_date_range.py 单元测试。"""
 
+import sys
+from pathlib import Path
 import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from resolve_date_range import resolve_date_range
 
 FIXED_TODAY = date(2026, 6, 14)

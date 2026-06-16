@@ -23,6 +23,9 @@ class MockPlaywrightTimeout(Exception):
     pass
 mock_playwright.async_api.TimeoutError = MockPlaywrightTimeout
 mock_playwright.async_api.async_playwright = None
+mock_playwright.async_api.Page = type("Page", (), {})
+mock_playwright.async_api.BrowserContext = type("BrowserContext", (), {})
+mock_playwright.async_api.Response = type("Response", (), {})
 
 mock_playwright_impl = types.ModuleType("playwright._impl")
 mock_playwright_impl._errors = types.ModuleType("playwright._impl._errors")
@@ -134,6 +137,8 @@ mock_col_defs.STATUS_ORDERED = "已下单"
 mock_col_defs.STATUS_NOT_ORDERED = "未下单"
 mock_col_defs.STATUS_CHECK_FAILED = "检查失败"
 mock_col_defs.ORDER_CHECK_EXTEND_DAYS = 31
+mock_col_defs.TARGET_FLOW_TYPE = "户用小型工商业询价流程"
+mock_col_defs.FILTER_PAGE_SIZE = 10
 sys.modules["column_definitions"] = mock_col_defs
 
 # ==================== 导入 core 模块 ====================

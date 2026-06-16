@@ -1,6 +1,10 @@
 """column_definitions.py 单元测试。"""
 
+import sys
+from pathlib import Path
 import unittest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from column_definitions import (
     HEADERS,
     COL_FLOW_ID, COL_PROJECT_NAME, COL_AGENT_CODE, COL_AGENT_NAME,
