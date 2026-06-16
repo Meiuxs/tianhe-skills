@@ -47,7 +47,7 @@ from column_definitions import (
 )
 from core.dms_browser import (
     FlowRecord, TableProcessResult,
-    do_login, filter_and_get_flow_ids,
+    do_login, filter_and_get_flow_ids, filter_and_get_flow_ids_via_api,
     extract_all_parallel, get_week_range,
     is_on_login_page,
 )
@@ -200,8 +200,23 @@ async def run(args: argparse.Namespace) -> None:
             else:
                 logger.info("会话有效（已复用缓存）")
 
-            # 2. 筛选
-            filter_result = await filter_and_get_flow_ids(page, start_date, end_date)
+            # 2. 筛选（优先 API 方式，失败时回退到 HTML 解析）
+            filter_result = None
+            try:
+                logger.info("尝试 API 方式筛选流程列表...")
+                filter_result = await filter_and_get_flow_ids_via_api(context, start_date, end_date)
+                if filter_result and filter_result.flow_ids:
+                    logger.info("API 筛选成功，获取 %d 个流程", len(filter_result.flow_ids))
+                else:
+                    logger.info("API 筛选返回空结果，回退到 HTML 解析")
+                    filter_result = None
+            except Exception as e:
+                logger.warning("API 筛选失败（%s），回退到 HTML 解析", e)
+                filter_result = None
+
+            if not filter_result:
+                filter_result = await filter_and_get_flow_ids(page, start_date, end_date)
+
             flow_ids = filter_result.flow_ids
             if not flow_ids:
                 logger.info("本周无已办询价记录")

@@ -68,6 +68,15 @@ RETRY_BASE_DELAY = 2.0  # 秒，指数退避基数
 DMS_URL = "https://dms-admin.trinapower.com"
 LOGIN_CHECK_DOMAIN = "iauth.trinapower.com"
 
+# 流程筛选常量
+TARGET_FLOW_TYPE = "户用小型工商业询价流程"
+FILTER_PAGE_SIZE = 10        # DOM 翻页每页条数（与 DMS 页面一致）
+API_FILTER_PAGE_SIZE = 500   # API 筛选每页条数，增大以减少请求次数
+
+# API 端点
+DMS_API_BASE = "https://apigw.trinablue.com"
+DMS_FLOW_LIST_API = f"{DMS_API_BASE}/dms-admin/newFlow/newFlowList"
+
 # ==================== 下单检查配置 ====================
 
 ORDER_CHECK_EXTEND_DAYS = 31  # 下单检查日期范围扩展天数（覆盖审批周期）
