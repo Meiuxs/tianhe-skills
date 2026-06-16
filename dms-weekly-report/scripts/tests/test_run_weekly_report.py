@@ -149,9 +149,9 @@ sys.modules["column_definitions"] = mock_col_defs
 from core.dms_browser import (
     FlowRecord, TableProcessResult,
     is_on_login_page, get_week_range,
-    _extract_from_html, _split_agent,
     retry_async,
 )
+from core.html_parser import extract_from_html, split_agent
 from core.bom_parser import BOMItem, extract_power, extract_capacity
 from core.excel_generator import (
     generate_excel,
@@ -202,41 +202,41 @@ class TestGetWeekRange:
 class TestExtractFromHtml:
     def test_direct_match(self):
         html = '<th>项目名称:</th><td>天合光能项目</td>'
-        assert _extract_from_html(html, "项目名称") == "天合光能项目"
+        assert extract_from_html(html, "项目名称") == "天合光能项目"
 
     def test_nested_match(self):
         html = '<th>项目名称:</th><th><div>天合光能项目</div></th>'
-        assert _extract_from_html(html, "项目名称") == "天合光能项目"
+        assert extract_from_html(html, "项目名称") == "天合光能项目"
 
     def test_not_found(self):
         html = '<th>其他字段:</th><td>值</td>'
-        assert _extract_from_html(html, "不存在的字段") == "--"
+        assert extract_from_html(html, "不存在的字段") == "--"
 
     def test_label_with_colon(self):
         html = '<th>省公司:</th><td>江苏</td>'
-        assert _extract_from_html(html, "省公司") == "江苏"
+        assert extract_from_html(html, "省公司") == "江苏"
 
     def test_colon_in_label(self):
         html = '<th>瓦单价(元/瓦):</th><td>1.25</td>'
-        assert _extract_from_html(html, "瓦单价(元/瓦)") == "1.25"
+        assert extract_from_html(html, "瓦单价(元/瓦)") == "1.25"
 
     def test_empty_html(self):
-        assert _extract_from_html("", "字段") == "--"
+        assert extract_from_html("", "字段") == "--"
 
 
 class TestSplitAgent:
     def test_code_and_name(self):
-        assert _split_agent("AG001 天合代理商") == ("AG001", "天合代理商")
+        assert split_agent("AG001 天合代理商") == ("AG001", "天合代理商")
 
     def test_code_only(self):
-        assert _split_agent("AG001") == ("AG001", "--")
+        assert split_agent("AG001") == ("AG001", "--")
 
     def test_empty(self):
-        assert _split_agent("") == ("--", "--")
-        assert _split_agent("--") == ("--", "--")
+        assert split_agent("") == ("--", "--")
+        assert split_agent("--") == ("--", "--")
 
     def test_multi_word_name(self):
-        assert _split_agent("AG002 天合光能有限公司") == ("AG002", "天合光能有限公司")
+        assert split_agent("AG002 天合光能有限公司") == ("AG002", "天合光能有限公司")
 
 
 class TestExtractPower:

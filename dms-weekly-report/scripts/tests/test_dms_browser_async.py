@@ -16,14 +16,14 @@ from core.dms_browser import (
     get_access_token,
     do_login,
     ensure_logged_in,
-    extract_detail_by_url,
     extract_all_parallel,
-    _extract_bom,
-    _extract_approval_info,
-    _process_table_rows,
     filter_and_get_flow_ids,
     filter_and_get_flow_ids_via_api,
 )
+from core.detail_extractor import extract_detail_by_url
+from core.html_parser import extract_bom
+from core.detail_extractor import extract_approval_info
+from core.filtering import _process_table_rows
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 from column_definitions import DMS_URL, LOGIN_CHECK_DOMAIN, TARGET_FLOW_TYPE
@@ -140,8 +140,8 @@ class TestExtractDetailByUrl:
         sem = asyncio.Semaphore(5)
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.dms_browser._extract_bom", return_value=[]):
-                with patch("core.dms_browser._extract_approval_info", return_value={
+            with patch("core.html_parser.extract_bom", return_value=[]):
+                with patch("core.detail_extractor.extract_approval_info", return_value={
                     "submit_time": "2026-06-01",
                     "province_processor": "--",
                     "province_status": "--",
@@ -180,8 +180,8 @@ class TestExtractDetailByUrl:
         sem = asyncio.Semaphore(5)
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.dms_browser._extract_bom", return_value=[]):
-                with patch("core.dms_browser._extract_approval_info", return_value={
+            with patch("core.html_parser.extract_bom", return_value=[]):
+                with patch("core.detail_extractor.extract_approval_info", return_value={
                     "submit_time": "--",
                     "province_processor": "--",
                     "province_status": "--",
@@ -263,7 +263,7 @@ class TestExtractDetailByUrl:
         sem = asyncio.Semaphore(5)
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.dms_browser._extract_bom", return_value=[]):
+            with patch("core.html_parser.extract_bom", return_value=[]):
                 rec = await extract_detail_by_url(context, "20260616000000001", sem)
 
         assert rec is not None
@@ -330,8 +330,8 @@ class TestExtractDetailByUrl:
         sem = asyncio.Semaphore(5)
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.dms_browser._extract_bom", return_value=[]):
-                with patch("core.dms_browser._extract_approval_info", return_value={
+            with patch("core.html_parser.extract_bom", return_value=[]):
+                with patch("core.detail_extractor.extract_approval_info", return_value={
                     "submit_time": "2026-06-01",
                     "province_processor": "--",
                     "province_status": "--",
@@ -580,12 +580,12 @@ class TestEnsureLoggedIn:
         page.goto.assert_called_once_with(target_url, timeout=30000)
 
 
-# ==================== _extract_bom 测试 ====================
+# ==================== extract_bom 测试 ====================
 
 
 @pytest.mark.asyncio
 class TestExtractBom:
-    """测试 _extract_bom 函数。"""
+    """测试 extract_bom 函数。"""
 
     async def test_api_bom_data(self):
         """API BOM 数据可用时正确提取。"""
@@ -600,7 +600,7 @@ class TestExtractBom:
                 }
             }
         }
-        bom_items = await _extract_bom(page, api_detail_data=api_data)
+        bom_items = await extract_bom(page, api_detail_data=api_data)
 
         assert len(bom_items) == 2
         assert bom_items[0].code == "M001"
@@ -611,13 +611,13 @@ class TestExtractBom:
     async def test_api_bom_empty(self):
         """API 无 BOM 数据时返回空列表。"""
         page = make_mock_page()
-        bom_items = await _extract_bom(page, api_detail_data={"jsonDate": {}})
+        bom_items = await extract_bom(page, api_detail_data={"jsonDate": {}})
         assert bom_items == []
 
     async def test_api_bom_none(self):
         """api_detail_data 为 None 时返回空列表。"""
         page = make_mock_page()
-        bom_items = await _extract_bom(page, api_detail_data=None)
+        bom_items = await extract_bom(page, api_detail_data=None)
         assert bom_items == []
 
     async def test_api_bom_duplicate_dedup(self):
@@ -633,7 +633,7 @@ class TestExtractBom:
                 }
             }
         }
-        bom_items = await _extract_bom(page, api_data)
+        bom_items = await extract_bom(page, api_data)
         assert len(bom_items) == 1
         assert bom_items[0].code == "M001"
 
@@ -649,7 +649,7 @@ class TestExtractBom:
                 }
             }
         }
-        bom_items = await _extract_bom(page, api_data)
+        bom_items = await extract_bom(page, api_data)
         assert len(bom_items) == 0
 
     async def test_api_bom_missing_code(self):
@@ -664,7 +664,7 @@ class TestExtractBom:
                 }
             }
         }
-        bom_items = await _extract_bom(page, api_data)
+        bom_items = await extract_bom(page, api_data)
         assert bom_items == []
 
     async def test_api_bom_float_qty(self):
@@ -679,7 +679,7 @@ class TestExtractBom:
                 }
             }
         }
-        bom_items = await _extract_bom(page, api_data)
+        bom_items = await extract_bom(page, api_data)
         assert len(bom_items) == 1
         # round(10.5) = 10（Python 银行家舍入），round(10.6) = 11
         assert bom_items[0].qty == 10
@@ -696,27 +696,27 @@ class TestExtractBom:
                 }
             }
         }
-        bom_items = await _extract_bom(page, api_data)
+        bom_items = await extract_bom(page, api_data)
         assert len(bom_items) == 1
         assert bom_items[0].qty == 11
 
 
-# ==================== _extract_approval_info 测试 ====================
+# ==================== extract_approval_info 测试 ====================
 
 
 @pytest.mark.asyncio
 class TestExtractApprovalInfo:
-    """测试 _extract_approval_info 函数。"""
+    """测试 extract_approval_info 函数。"""
 
     async def test_calls_approval_parser(self):
-        """验证 _extract_approval_info 调用 approval_parser 并返回其结果。"""
+        """验证 extract_approval_info 调用 approval_parser 并返回其结果。"""
         page = make_mock_page()
         expected = {"submit_time": "2026-01-01", "province_processor": "王五"}
 
-        # _extract_approval 在 _extract_approval_info 内部 from core.approval_parser 导入
+        # _extract_approval 在 extract_approval_info 内部 from core.approval_parser 导入
         # patch 导入目标（被 patch 的模块位置）
         with patch("core.approval_parser.extract_approval_info", new_callable=AsyncMock, return_value=expected):
-            result = await _extract_approval_info(page)
+            result = await extract_approval_info(page)
             assert result == expected
 
 
@@ -1380,7 +1380,7 @@ class TestRemoveListenerException:
         sem = asyncio.Semaphore(5)
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.dms_browser._extract_bom", return_value=[]):
+            with patch("core.html_parser.extract_bom", return_value=[]):
                 rec = await extract_detail_by_url(context, "20260616000000001", sem)
 
         # 即使 remove_listener 抛出异常，提取仍应成功

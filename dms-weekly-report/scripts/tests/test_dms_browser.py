@@ -11,16 +11,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.dms_browser import (
     is_on_login_page,
     get_week_range,
-    _extract_from_html,
-    _split_agent,
-    _fill_record_from_api,
-    _fill_record_from_html,
-    _fill_approval_from_nodes,
-    _fill_approval_from_dict,
     FlowRecord,
     TableProcessResult,
-    _parse_json_date,
     retry_async,
+)
+from core.html_parser import extract_from_html, split_agent
+from core.api_parser import (
+    fill_record_from_api,
+    fill_record_from_html,
+    fill_approval_from_nodes,
+    fill_approval_from_dict,
+    parse_json_date,
 )
 from column_definitions import LOGIN_CHECK_DOMAIN
 
@@ -119,78 +120,78 @@ class TestGetWeekRange:
 
 
 class TestExtractFromHtml:
-    """测试 _extract_from_html 函数。"""
+    """测试 extract_from_html 函数。"""
 
     def test_direct_match(self):
         html = '<th>项目名称</th><td>测试项目</td>'
-        assert _extract_from_html(html, "项目名称") == "测试项目"
+        assert extract_from_html(html, "项目名称") == "测试项目"
 
     def test_nested_match(self):
         html = '<th>项目名称</th><th><div>嵌套值</div></th>'
-        result = _extract_from_html(html, "项目名称")
+        result = extract_from_html(html, "项目名称")
         assert result == "嵌套值"
 
     def test_not_found(self):
         html = '<th>其他字段</th><td>其他值</td>'
-        assert _extract_from_html(html, "项目名称") == "--"
+        assert extract_from_html(html, "项目名称") == "--"
 
     def test_label_with_colon(self):
         html = '<th>项目名称:</th><td>有冒号的值</td>'
-        assert _extract_from_html(html, "项目名称") == "有冒号的值"
+        assert extract_from_html(html, "项目名称") == "有冒号的值"
 
     def test_empty_html(self):
-        assert _extract_from_html("", "项目名称") == "--"
+        assert extract_from_html("", "项目名称") == "--"
 
     def test_special_chars(self):
         html = '<th>瓦单价(元/瓦)</th><td>1.25</td>'
-        assert _extract_from_html(html, "瓦单价(元/瓦)") == "1.25"
+        assert extract_from_html(html, "瓦单价(元/瓦)") == "1.25"
 
     def test_cross_row_no_match(self):
         """跨 <tr> 边界时不应匹配到下一行的值。"""
         html = '<th>项目名称</th></tr><tr><th>其他字段</th><td>其他值</td>'
-        assert _extract_from_html(html, "项目名称") == "--"
+        assert extract_from_html(html, "项目名称") == "--"
 
     def test_cross_row_td_no_match(self):
         """跨 <tr> 边界时，下一行的 <td> 不应被匹配。"""
         html = '<th>项目名称</th></tr><tr><td></td><td>下一行的值</td>'
-        assert _extract_from_html(html, "项目名称") == "--"
+        assert extract_from_html(html, "项目名称") == "--"
 
     def test_multiline_nested_value(self):
         """多行嵌套结构中正确提取值。"""
         html = '<th>项目名称</th><th>\n  <div>\n    多行值\n  </div>\n</th>'
-        result = _extract_from_html(html, "项目名称")
+        result = extract_from_html(html, "项目名称")
         assert result == "多行值"
 
     def test_value_with_html_entities(self):
         """值中包含 HTML 实体时应被正确处理。"""
         html = '<th>项目名称</th><td>项目&nbsp;A&amp;B</td>'
-        result = _extract_from_html(html, "项目名称")
+        result = extract_from_html(html, "项目名称")
         # HTML 标签被移除，但 &nbsp; 等实体保留原样（不解析）
         assert "项目" in result
 
 
 class TestSplitAgent:
-    """测试 _split_agent 函数。"""
+    """测试 split_agent 函数。"""
 
     def test_code_and_name(self):
-        assert _split_agent("AGENT-001 某公司") == ("AGENT-001", "某公司")
+        assert split_agent("AGENT-001 某公司") == ("AGENT-001", "某公司")
 
     def test_code_only(self):
-        assert _split_agent("AGENT-001") == ("AGENT-001", "--")
+        assert split_agent("AGENT-001") == ("AGENT-001", "--")
 
     def test_empty(self):
-        assert _split_agent("") == ("--", "--")
+        assert split_agent("") == ("--", "--")
 
     def test_dash(self):
-        assert _split_agent("--") == ("--", "--")
+        assert split_agent("--") == ("--", "--")
 
     def test_multi_word_name(self):
-        code, name = _split_agent("AG-001 深圳 天合 光能")
+        code, name = split_agent("AG-001 深圳 天合 光能")
         assert code == "AG-001"
         assert name == "深圳 天合 光能"
 
     def test_none_input(self):
-        assert _split_agent(None) == ("--", "--")
+        assert split_agent(None) == ("--", "--")
 
 
 class TestFlowRecord:
@@ -250,13 +251,13 @@ class TestTableProcessResult:
 
 
 class TestFillRecordFromApi:
-    """测试 _fill_record_from_api 函数（API 数据解析）。"""
+    """测试 fill_record_from_api 函数（API 数据解析）。"""
 
     def test_basic_fields(self):
         """从 API 数据正确解析基本字段。"""
         api_data = _make_api_data()
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.project_name == "测试项目"
         assert rec.agent_code == "C001"
         assert rec.agent_name == "测试公司"
@@ -267,7 +268,7 @@ class TestFillRecordFromApi:
         """解析定价信息。"""
         api_data = _make_api_data(watt_price=3.5, total_price=50000.0)
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.unit_price == "3.5"
         assert rec.total_price == "50000.0"
 
@@ -275,7 +276,7 @@ class TestFillRecordFromApi:
         """req 为空时使用默认值。"""
         api_data = {"jsonDate": {}, "nodeList": []}
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.project_name == "--"
         assert rec.agent_code == "--"
         assert rec.province == "--"
@@ -285,7 +286,7 @@ class TestFillRecordFromApi:
         # 模拟 API 返回空 req（projectName/province/salesperson 均为空）
         api_data = {"jsonDate": {"req": {}}, "nodeList": []}
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         # 验证 API 填充结果为空
         assert rec.project_name == "--"
         assert rec.province == "--"
@@ -302,7 +303,7 @@ class TestFillRecordFromApi:
         """customerName 没有编号前缀时完整保留。"""
         api_data = _make_api_data(customer_no="", customer_name="某公司名称")
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.agent_code == "--"
         assert rec.agent_name == "某公司名称"
 
@@ -310,14 +311,14 @@ class TestFillRecordFromApi:
         """业务员没有编号时只保留姓名。"""
         api_data = _make_api_data(salesman_no="", salesman_name="李四")
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.salesperson == "李四"
 
     def test_missing_json_date(self):
         """jsonDate 为空时使用默认值。"""
         api_data = {"nodeList": []}
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.project_name == "--"
         assert rec.unit_price == "--"
 
@@ -331,7 +332,7 @@ class TestFillRecordFromApi:
             "nodeList": [],
         }
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.unit_price == "3.5"
         assert rec.total_price == "50000.0"
 
@@ -345,13 +346,13 @@ class TestFillRecordFromApi:
             "nodeList": [],
         }
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.unit_price == "--"
         assert rec.total_price == "--"
 
 
 class TestFillApprovalFromNodes:
-    """测试 _fill_approval_from_nodes 函数（审批链解析）。"""
+    """测试 fill_approval_from_nodes 函数（审批链解析）。"""
 
     def test_full_approval_chain(self):
         """完整审批链解析。"""
@@ -361,7 +362,7 @@ class TestFillApprovalFromNodes:
             {"roleName": "采购审批", "uname": "赵六", "statusName": "审批通过", "updateTime": "2026-01-03 12:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_nodes(rec, nodes)
+        fill_approval_from_nodes(rec, nodes)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "王五"
         assert rec.province_status == "审批通过"
@@ -372,7 +373,7 @@ class TestFillApprovalFromNodes:
     def test_empty_nodes(self):
         """空节点列表使用默认值。"""
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_nodes(rec, [])
+        fill_approval_from_nodes(rec, [])
         assert rec.submit_time == "--"
         assert rec.province_processor == "--"
         assert rec.final_approval_time == "--"
@@ -383,7 +384,7 @@ class TestFillApprovalFromNodes:
             {"roleName": "流程发起人提交审核", "uname": "李四", "statusName": "提交审核", "updateTime": "2026-01-01 10:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_nodes(rec, nodes)
+        fill_approval_from_nodes(rec, nodes)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "--"
         assert rec.purchase_processor == "--"
@@ -396,7 +397,7 @@ class TestFillApprovalFromNodes:
             {"roleName": "采购审批", "uname": "C", "statusName": "审批通过", "updateTime": "2026-01-03 10:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_nodes(rec, nodes)
+        fill_approval_from_nodes(rec, nodes)
         # 省总 01-05 比采购 01-03 晚，最终完成时间应取 01-05
         assert rec.final_approval_time == "2026-01-05 10:00:00"
 
@@ -406,12 +407,12 @@ class TestFillApprovalFromNodes:
             {"roleName": "省总审批", "uname": None, "userName": "王五", "statusName": "审批通过", "updateTime": "2026-01-02 11:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_nodes(rec, nodes)
+        fill_approval_from_nodes(rec, nodes)
         assert rec.province_processor == "王五"
 
 
 class TestFillRecordFromHtml:
-    """测试 _fill_record_from_html 函数（HTML 回退解析）。"""
+    """测试 fill_record_from_html 函数（HTML 回退解析）。"""
 
     def test_basic_html(self):
         """从 HTML 正确解析基本字段。"""
@@ -424,7 +425,7 @@ class TestFillRecordFromHtml:
         <th>总价(元)</th><td>62298.2</td>
         """
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_html(rec, html)
+        fill_record_from_html(rec, html)
         assert rec.project_name == "测试项目"
         assert rec.agent_code == "AG-001"
         assert rec.agent_name == "测试代理商"
@@ -437,7 +438,7 @@ class TestFillRecordFromHtml:
         """HTML 中缺少字段时使用默认值。"""
         html = "<th>其他</th><td>其他值</td>"
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_html(rec, html)
+        fill_record_from_html(rec, html)
         assert rec.project_name == "--"
         assert rec.unit_price == "--"
 
@@ -465,38 +466,38 @@ class TestFilterAndGetFlowIds:
 
 
 class TestParseJsonDate:
-    """测试 _parse_json_date 辅助函数。"""
+    """测试 parse_json_date 辅助函数。"""
 
     def test_string_json_date(self):
         detail = {"jsonDate": '{"key": "value"}'}
-        _parse_json_date(detail)
+        parse_json_date(detail)
         assert isinstance(detail["jsonDate"], dict)
         assert detail["jsonDate"]["key"] == "value"
 
     def test_already_dict(self):
         detail = {"jsonDate": {"key": "value"}}
-        _parse_json_date(detail)
+        parse_json_date(detail)
         assert isinstance(detail["jsonDate"], dict)
 
     def test_empty_string(self):
         detail = {"jsonDate": ""}
-        _parse_json_date(detail)
+        parse_json_date(detail)
         assert detail["jsonDate"] == ""
 
     def test_invalid_json_logs_warning(self):
         import io, logging
         detail = {"jsonDate": "not valid json{{{"}
-        _parse_json_date(detail)
+        parse_json_date(detail)
         # 不应抛出异常，只应记录警告
 
     def test_missing_key(self):
         detail = {}
-        _parse_json_date(detail)
+        parse_json_date(detail)
         assert "jsonDate" not in detail
 
 
 class TestFillApprovalFromDict:
-    """测试 _fill_approval_from_dict 函数。"""
+    """测试 fill_approval_from_dict 函数。"""
 
     def test_full_dict(self):
         approval = {
@@ -508,7 +509,7 @@ class TestFillApprovalFromDict:
             "final_approval_time": "2026-01-03 12:00:00",
         }
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_dict(rec, approval)
+        fill_approval_from_dict(rec, approval)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "王五"
         assert rec.final_approval_time == "2026-01-03 12:00:00"
@@ -520,7 +521,7 @@ class TestFillApprovalFromDict:
             # province_processor, province_status 等缺失
         }
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_dict(rec, approval)
+        fill_approval_from_dict(rec, approval)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "--"
         assert rec.province_status == "--"
@@ -531,23 +532,23 @@ class TestFillApprovalFromDict:
     def test_empty_dict(self):
         """空 dict 时全部使用默认值。"""
         rec = FlowRecord(flow_id="test")
-        _fill_approval_from_dict(rec, {})
+        fill_approval_from_dict(rec, {})
         assert rec.submit_time == "--"
         assert rec.province_processor == "--"
         assert rec.final_approval_time == "--"
 
 
 class TestSplitAgentRobust:
-    """测试 _split_agent 的健壮性（多空格、Tab 分隔）。"""
+    """测试 split_agent 的健壮性（多空格、Tab 分隔）。"""
 
     def test_multiple_spaces(self):
-        assert _split_agent("C001  某公司") == ("C001", "某公司")
+        assert split_agent("C001  某公司") == ("C001", "某公司")
 
     def test_tab_separated(self):
-        assert _split_agent("C001\t某公司") == ("C001", "某公司")
+        assert split_agent("C001\t某公司") == ("C001", "某公司")
 
     def test_leading_trailing_spaces(self):
-        code, name = _split_agent("  C001  某公司  ")
+        code, name = split_agent("  C001  某公司  ")
         assert code == "C001"
         assert name == "某公司"
 
@@ -700,32 +701,32 @@ class TestRetryAsync:
 
 
 class TestSalespersonLogic:
-    """测试 _fill_record_from_api 中业务员名称逻辑。"""
+    """测试 fill_record_from_api 中业务员名称逻辑。"""
 
     def test_salesman_name_empty_string(self):
         """salesman_name 为空字符串时应使用默认值 '--'。"""
         api_data = _make_api_data(salesman_no="G0001", salesman_name="")
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.salesperson == "--"
 
     def test_salesman_name_and_no_both_present(self):
         """salesman_name 和 salesman_no 都存在时应拼接。"""
         api_data = _make_api_data(salesman_no="G0001", salesman_name="张三")
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.salesperson == "张三(G0001)"
 
     def test_salesman_no_only(self):
         """只有 salesman_no 时应显示 '--'。"""
         api_data = _make_api_data(salesman_no="G0001", salesman_name="--")
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.salesperson == "--"
 
     def test_salesman_name_only(self):
         """只有 salesman_name 时应只显示姓名。"""
         api_data = _make_api_data(salesman_no="", salesman_name="张三")
         rec = FlowRecord(flow_id="test")
-        _fill_record_from_api(rec, api_data, "test")
+        fill_record_from_api(rec, api_data, "test")
         assert rec.salesperson == "张三"
