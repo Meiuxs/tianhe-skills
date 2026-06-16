@@ -1,10 +1,10 @@
-"""DMS 浏览器自动化模块。
+"""DMS 浏览器自动化模块（薄封装入口）。
 
-包含 Playwright 浏览器操作的核心功能：
-  - 数据类: FlowRecord, TableProcessResult
-  - 登录: is_on_login_page, ensure_logged_in, do_login
-  - 筛选: _navigate_to_process_center, _process_table_rows, filter_and_get_flow_ids
-  - 提取: _extract_from_html, _split_agent, _extract_bom, extract_detail_by_url, extract_all_parallel
+保留所有公开 API 和 re-export 兼容层，具体实现拆分到：
+  - core.filtering: 流程筛选的 DOM 操作
+  - core.html_parser: HTML 页面解析与 BOM 提取
+  - core.api_parser: API 响应数据的解析与 FlowRecord 填充
+  - core.detail_extractor: 单条询价详情提取的编排层
 """
 
 from __future__ import annotations
@@ -17,8 +17,6 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse, parse_qs
 
 from column_definitions import (
@@ -32,10 +30,14 @@ from dms_credentials import get_credentials as _get_dms_credentials, source_labe
 from playwright.async_api import (
     Page,
     BrowserContext,
-    Response,
     TimeoutError as PlaywrightTimeout,
 )
-from playwright._impl._errors import TargetClosedError
+
+# 新模块导入（用于 re-export 兼容层）
+from core import filtering as _filtering_mod
+from core import html_parser as _html_parser_mod
+from core import api_parser as _api_parser_mod
+from core import detail_extractor as _detail_extractor_mod
 
 logger = logging.getLogger("dms_report")
 
@@ -162,37 +164,12 @@ def retry_async(max_retries: int = MAX_RETRIES, base_delay: float = RETRY_BASE_D
     return decorator
 
 
-def _parse_json_date(detail: dict) -> None:
-    """将 detail['jsonDate'] 从 JSON 字符串解析为 dict（如需要）。"""
-    json_date_str = detail.get("jsonDate", "")
-    if isinstance(json_date_str, str) and json_date_str:
-        try:
-            detail["jsonDate"] = json.loads(json_date_str)
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning("jsonDate 解析失败: %s", e)
-
-
 # ==================== 工具函数 ====================
 
 
 def is_on_login_page(url: str) -> bool:
     """判断当前 URL 是否为登录页面。"""
     return LOGIN_CHECK_DOMAIN in url
-
-
-def _mask_salesperson(s: str) -> str:
-    """对业务员信息进行脱敏处理。
-
-    只显示姓名首字 + 工号后4位，例如 "张三(G0001)" → "张***(G001)"。
-    """
-    if not s or s == "--":
-        return "--"
-    # 只显示姓名首字 + 工号后4位
-    if "(" in s:
-        name_part, no_part = s.split("(", 1)
-        no_part = no_part.rstrip(")")
-        return f"{name_part[0]}***({no_part[-4:]})" if len(no_part) > 4 else f"{name_part[0]}***({no_part})"
-    return s[0] + "***" if len(s) > 1 else s
 
 
 async def ensure_logged_in(page: Page, target_url: str) -> None:
@@ -435,80 +412,6 @@ async def do_login(page: Page) -> None:
 # ==================== 筛选 ====================
 
 
-@retry_async(max_retries=2)
-async def _navigate_to_process_center(page: Page) -> None:
-    """导航到流程中心页面，处理登录重定向。"""
-    target = f"{DMS_URL}/#/process/process_center"
-    # 确保已登录（只在第一次调用时触发登录，重试时跳过）
-    if is_on_login_page(page.url):
-        await do_login(page)
-    # 导航到目标页面
-    if page.url != target:
-        await page.goto(target, timeout=NAV_TIMEOUT)
-    await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
-    await page.wait_for_timeout(WAIT_SHORT)
-
-
-async def _process_table_rows(
-    page: Page,
-    result: TableProcessResult,
-) -> TableProcessResult:
-    """处理当前页面的表格行，提取有效流程编号。
-
-    每行至少需要 2 列（流程编号 + 流程类型）才能被视为有效。
-    """
-    rows = await page.locator(SELECTORS["table_body"]).first.locator(SELECTORS["table_tbody"]).all()
-    logger.debug("找到 %d 行", len(rows))
-    if not rows:
-        # 回退策略：直接用 tr 选择器查找表格行
-        fallback_rows = await page.locator(SELECTORS["table_body"] + " tr").all()
-        logger.debug("回退选择器找到 %d 行", len(fallback_rows))
-        if fallback_rows:
-            rows = fallback_rows
-
-    for row in rows:
-        # 批量获取所有 cell 文本，减少 CDP 调用次数（从 N 次降为 1 次）
-        cell_texts = await row.locator("td").all_text_contents()
-        if len(cell_texts) < 2:
-            logger.debug("跳过列数不足的行: %d 列", len(cell_texts))
-            continue
-
-        cell_texts = [t.strip().strip('"') for t in cell_texts]
-        flow_text = cell_texts[0] if cell_texts else ""
-
-        # 流程编号未匹配（至少 15 位数字），跳过
-        if not re.match(r"^\d{15,}$", flow_text):
-            logger.debug("跳过非数字流程编号: %s", flow_text)
-            continue
-
-        # 按流程类型筛选：仅保留目标流程类型
-        flow_type = cell_texts[1] if len(cell_texts) > 1 else ""
-        if TARGET_FLOW_TYPE not in flow_type:
-            result.skipped_wrong_type += 1
-            logger.debug("跳过非目标流程类型: %s (%s)", flow_text, flow_type)
-            continue
-
-        status_text = ""
-        for t in cell_texts[-3:]:
-            if any(k in t for k in ("作废", "驳回", "通过", "审批")):
-                status_text = t
-                break
-
-        if "作废" in status_text:
-            result.skipped_invalid += 1
-            logger.debug("跳过作废流程: %s", flow_text)
-            continue
-
-        if flow_text in result.seen_ids:
-            result.skipped_dup += 1
-            logger.debug("跳过重复流程: %s", flow_text)
-            continue
-
-        result.add_flow_id(flow_text)
-
-    return result
-
-
 async def filter_and_get_flow_ids(page: Page, start_date: str, end_date: str) -> TableProcessResult:
     """在已办流程中按日期筛选，返回有效流程编号列表（支持多页翻页）。"""
     logger.info("筛选日期范围: %s ~ %s", start_date, end_date)
@@ -575,410 +478,25 @@ async def filter_and_get_flow_ids(page: Page, start_date: str, end_date: str) ->
     return result
 
 
-# ==================== HTML 提取工具 ====================
-
-
-def _extract_from_html(html: str, label: str) -> str:
-    """从 HTML 中按字段 label 提取值。
-
-    匹配策略（按优先级）:
-      1. <th>label</th><td>value</td> — 标准表格结构
-      2. <th>label</th><th>...<div>value</div></th> — 嵌套结构
-    未找到时返回 "--"。
-    """
-    escaped = re.escape(label)
-
-    # 策略 1: label</th><td>value</td> 或 label</th><th>value</th>
-    # 支持标签内任意属性，值直接出现在单元格内
-    pattern1 = escaped + r"[:：]?\s*</(?:th|td)>\s*<(?:th|td)>\s*(.*?)\s*</(?:td|th)>"
-    m = re.search(pattern1, html)
-    if m:
-        val = re.sub(r"<[^>]+>", "", m.group(1)).strip()
-        if val:
-            return val
-
-    # 策略 2: 宽泛匹配 — label 后第一个 </th|td> 到下一个 </ 开始之间的内容
-    # 用于处理 <th><div>嵌套值</div></th> 这类结构
-    # 使用非贪婪匹配 (.*?)，re.DOTALL 下 . 匹配换行符
-    # 用 [^<]*(?:<(?!/)[^<]*)* 替代 .*? 防止大 HTML 上的 regex backtracking
-    # 该模式匹配：不含 < 的文本，或不含 </ 的标签 — 即停在第一个闭合标签前
-    pattern2 = escaped + r"[:：]?\s*</(?:th|td)>\s*([^<]*(?:<(?!/)[^<]*)*)"
-    m = re.search(pattern2, html, re.DOTALL)
-    if m:
-        val = re.sub(r"<[^>]+>", "", m.group(1)).strip()
-        if val:
-            return val
-
-    return "--"
-
-
-def _split_agent(agent_raw: str | None) -> tuple[str, str]:
-    """拆分代理商字段为（编号, 名称）。
-
-    支持的分隔符：单个空格、多个空格、Tab。
-    如果无法拆分，编号为整个字符串，名称为 "--"。
-    """
-    if not agent_raw or agent_raw == "--":
-        return "--", "--"
-    # 先按连续空白分割
-    parts = agent_raw.split()
-    if len(parts) >= 2:
-        return parts[0].strip(), " ".join(parts[1:]).strip()
-    return parts[0].strip(), "--"
-
-
-# ==================== BOM 提取（Playwright 操作部分） ====================
-
-
-async def _extract_bom(page: Page, api_detail_data: dict | None = None) -> list[BOMItem]:
-    """从详情页提取 BOM 清单。
-
-    优先通过 flowDetails API 的 jsonDate.bomList 获取完整 BOM 数据
-    （一次请求返回全部物料，无需翻页）。
-    API 不可用时回退到 HTML 表格解析（仅第一页）。
-
-    Args:
-        page: Playwright Page 对象（HTML 回退时需要）。
-        api_detail_data: 已捕获的 flowDetails API 响应数据。
-
-    Returns:
-        BOMItem 列表（BOMItem 定义在 bom_parser 模块）。
-    """
-    from core.bom_parser import BOMItem
-
-    items: list[BOMItem] = []
-
-    # ---- 方案 A：从 API 响应中获取 BOM 数据 ----
-    # flowDetails 接口的 jsonDate 字段包含 productInfo.bomList
-    # 其中的字段映射：materialNo=物料编号, materialName=物料名称, num=数量, unitName=单位
-    api_bom_data = None
-    if api_detail_data:
-        json_date = api_detail_data.get('jsonDate') or {}
-        if isinstance(json_date, dict):
-            product_info = json_date.get('productInfo') or {}
-            api_bom_data = product_info.get('bomList')
-
-    if api_bom_data:
-        try:
-            for entry in api_bom_data:
-                code = str(entry.get('materialNo', ''))
-                name = str(entry.get('materialName', ''))
-                qty_raw = entry.get('num', 0)
-                unit = str(entry.get('unitName', ''))
-                if not code or not name:
-                    continue
-                try:
-                    qty = round(float(qty_raw))
-                except (ValueError, TypeError):
-                    continue
-                items.append(BOMItem(code=code, name=name, qty=qty, unit=unit))
-            logger.debug("BOM 从 API 获取 %d 条物料", len(items))
-        except Exception as e:
-            logger.warning("API BOM 数据解析失败，回退到 HTML 解析: %s", e)
-            items = []
-
-    # ---- 方案 B（回退）：从 HTML 表格提取（仅第一页） ----
-    if not items:
-        logger.debug("BOM 回退到 HTML 表格解析")
-        processed_tables: set[str] = set()
-        try:
-            tables = await page.locator("table").all()
-            for table in tables:
-                thead = table.locator("thead")
-                if await thead.count() > 0 and "物料编号" in ((await thead.text_content()) or ""):
-                    # 使用更精确的选择器：查找紧跟在 thead 表格后的 tbody 表格
-                    # 优先查找同级的下一个表格，避免匹配到远处的表格
-                    body_table = table.locator("xpath=./following-sibling::table[.//tbody][1]")
-                    if await body_table.count() == 0:
-                        # 回退到原来的 following 选择器
-                        body_table = table.locator("xpath=./following::table[.//tbody][1]")
-                    if await body_table.count() > 0:
-                        body_text = (await body_table.text_content()) or ""
-                        table_fingerprint = body_text.strip()[:200]
-                        if table_fingerprint in processed_tables:
-                            continue
-                        processed_tables.add(table_fingerprint)
-                        for row in await body_table.locator("tbody tr").all():
-                            cells = await row.locator("td").all()
-                            if len(cells) >= 4:
-                                code = ((await cells[0].text_content()) or "").strip().strip('"')
-                                name = ((await cells[1].text_content()) or "").strip()
-                                qty_str = ((await cells[2].text_content()) or "").strip().strip('"')
-                                unit = ((await cells[3].text_content()) or "").strip()
-                                if not code or not name:
-                                    continue
-                                try:
-                                    qty = round(float(qty_str))
-                                except (ValueError, TypeError):
-                                    # 数量字段非数字（如 "2 台"、"--"），跳过该行
-                                    logger.debug("BOM 数量解析失败，跳过物料 %s: %s", code, qty_str)
-                                    continue
-                                items.append(BOMItem(code=code, name=name, qty=qty, unit=unit))
-        except Exception as e:
-            logger.warning("HTML BOM 提取异常: %s", e)
-
-    # 去重（基于物料编号）
-    seen: set[str] = set()
-    deduped: list[BOMItem] = []
-    for item in items:
-        if item.code not in seen:
-            seen.add(item.code)
-            deduped.append(item)
-    return deduped
-
-
-# ==================== 审批信息提取（Playwright 操作部分） ====================
-
-
-async def _extract_approval_info(page: Page) -> dict[str, str]:
-    """从审批历史表提取完整的审批链信息。"""
-    from core.approval_parser import extract_approval_info as _extract_approval
-    return await _extract_approval(page)
-
-
-# ==================== API/HTML 解析辅助函数 ====================
-
-
-def _fill_record_from_api(rec: FlowRecord, api_data: dict, flow_id: str) -> None:
-    """从 flowDetails API 响应数据中填充 FlowRecord。
-
-    解析 jsonDate.req（项目信息）、jsonDate.projectManagementPricing（定价）、nodeList（审批链）。
-
-    注意：调用方已确保 jsonDate 已被 _parse_json_date 解析为 dict，此处不再二次解析。
-    """
-    json_date = api_data.get("jsonDate") or {}
-    if not isinstance(json_date, dict):
-        logger.warning("api_data['jsonDate'] 不是 dict，使用空字典: flow_id=%s", flow_id)
-        json_date = {}
-
-    # req: 项目基本信息（嵌套在 jsonDate 内）
-    req = json_date.get("req") or {}
-    if not isinstance(req, dict):
-        logger.warning("jsonDate.req 不是 dict，类型=%s: flow_id=%s", type(req).__name__, flow_id)
-        req = {}
-
-    rec.project_name = req.get("projectName") or "--"
-
-    # 代理商：customerNo + customerName
-    customer_no = req.get("customerNo") or ""
-    customer_name = req.get("customerName") or ""
-    if customer_no and customer_name:
-        rec.agent_code = customer_no
-        # customerName 格式: "C0021933 徐州辰海星新能源有限公司"
-        _, rec.agent_name = _split_agent(customer_name)
-    elif customer_name:
-        rec.agent_code = "--"
-        rec.agent_name = customer_name
-    else:
-        rec.agent_code = "--"
-        rec.agent_name = "--"
-
-    rec.province = req.get("provincialCompanyName") or "--"
-
-    # 业务员：salesmanNo + salesmanName
-    salesman_no = req.get("salesmanNo") or ""
-    salesman_name = req.get("salesmanName") or ""
-    if salesman_no and salesman_name and salesman_name != "--":
-        rec.salesperson = f"{salesman_name}({salesman_no})"
-    elif salesman_name and salesman_name != "--":
-        rec.salesperson = salesman_name
-    else:
-        rec.salesperson = "--"
-
-    # 定价信息（嵌套在 jsonDate 内）
-    pricing = json_date.get("projectManagementPricing") or {}
-    # 兼容 pricing 为 JSON 字符串的情况（类似 jsonDate 的双重编码）
-    if isinstance(pricing, str):
-        try:
-            pricing = json.loads(pricing)
-        except (json.JSONDecodeError, TypeError):
-            pricing = {}
-    if isinstance(pricing, dict):
-        watt_price = pricing.get("wattUnitPrice")
-        rec.unit_price = str(watt_price) if watt_price is not None else "--"
-        total_price = pricing.get("totalPrice")
-        rec.total_price = str(total_price) if total_price is not None else "--"
-    else:
-        rec.unit_price = "--"
-        rec.total_price = "--"
-
-    # 审批链：从 nodeList 提取
-    node_list = api_data.get("nodeList") or []
-    _fill_approval_from_nodes(rec, node_list)
-
-    # 调试日志：API 返回的关键字段摘要（脱敏处理）
-    logger.debug(
-        "API flow_id=%s | project=%r | province=%r | salesman=%r | price=%.2f/%s | pricing_keys=%s",
-        flow_id,
-        req.get("projectName") or "--",
-        req.get("provincialCompanyName") or "--",
-        _mask_salesperson(rec.salesperson),
-        float(pricing.get("wattUnitPrice") or 0) if isinstance(pricing, dict) else 0,
-        rec.total_price,
-        list(pricing.keys()) if isinstance(pricing, dict) else [],
-    )
-
-
-
-def _fill_approval_from_nodes(rec: FlowRecord, node_list: list) -> None:
-    """从 API nodeList 填充审批信息。"""
-    submit_time = "--"
-    province_processor = "--"
-    province_status = "--"
-    purchase_processor = "--"
-    purchase_status = "--"
-    final_approval_time = "--"
-
-    for node in node_list:
-        role_name = node.get("roleName") or ""
-        user_name = node.get("uname") or node.get("userName") or "--"
-        status_name = node.get("statusName") or "--"
-        update_time = node.get("updateTime") or "--"
-
-        if "流程发起人" in role_name and "提交审核" in status_name:
-            submit_time = update_time
-        elif "省总" in role_name or "省公司" in role_name:
-            province_processor = user_name
-            province_status = status_name
-        elif "采购" in role_name or "商务" in role_name:
-            purchase_processor = user_name
-            purchase_status = status_name
-
-        if "通过" in status_name and update_time and update_time not in ("--", ""):
-            # 注意：此处使用字符串字典序比较，依赖 DMS 返回 ISO 8601 格式时间
-            #（如 "2026-01-03 10:00:00"），其字典序与时间顺序一致。
-            # 若 DMS 返回非 ISO 格式，此比较可能产生错误结果。
-            if final_approval_time in ("--", "") or update_time > final_approval_time:
-                final_approval_time = update_time
-
-    rec.submit_time = submit_time
-    rec.province_processor = province_processor
-    rec.province_status = province_status
-    rec.purchase_processor = purchase_processor
-    rec.purchase_status = purchase_status
-    rec.final_approval_time = final_approval_time
-
-
-def _fill_record_from_html(rec: FlowRecord, html: str) -> None:
-    """从 HTML 页面解析字段（回退方案）。"""
-    rec.project_name = _extract_from_html(html, "项目名称")
-    agent_raw = _extract_from_html(html, "代理商")
-    rec.agent_code, rec.agent_name = _split_agent(agent_raw)
-    rec.province = _extract_from_html(html, "省公司")
-    rec.salesperson = _extract_from_html(html, "业务员")
-    rec.unit_price = _extract_from_html(html, "瓦单价(元/瓦)")
-    rec.total_price = _extract_from_html(html, "总价(元)")
-
-
-def _fill_approval_from_dict(rec: FlowRecord, approval: dict) -> None:
-    """从审批解析结果 dict 填充到 FlowRecord。
-
-    使用 .get() 防御性读取，避免因缺少键导致 KeyError。
-    """
-    rec.submit_time = approval.get("submit_time", "--")
-    rec.province_processor = approval.get("province_processor", "--")
-    rec.province_status = approval.get("province_status", "--")
-    rec.purchase_processor = approval.get("purchase_processor", "--")
-    rec.purchase_status = approval.get("purchase_status", "--")
-    rec.final_approval_time = approval.get("final_approval_time", "--")
-
-
-# ==================== 详情提取 ====================
-
-
-async def extract_detail_by_url(
-    context: BrowserContext, flow_id: str, sem: asyncio.Semaphore,
-) -> FlowRecord | None:
-    """提取单条询价详情。
-
-    流程：
-      1. 打开页面，监听 flowDetails API 响应，捕获 jsonDate
-      2. 从 API 数据解析项目信息、定价、审批链
-      3. API 数据为空时回退到 HTML 解析
-      4. BOM 数据来自 API（jsonDate.productInfo.bomList）
-    """
-    from core.bom_parser import calc_module_power, calc_inverter_power, calc_battery_capacity, build_remark
-
-    page = None
-    try:
-        async with sem:
-            page = await context.new_page()
-            captured_data = None
-
-            async def _capture_detail_api(response: Response) -> None:
-                nonlocal captured_data
-                if "flowDetails" not in response.url:
-                    return
-                try:
-                    body = await response.json()
-                    detail = body.get("data")
-                    if detail:
-                        _parse_json_date(detail)
-                        captured_data = detail
-                        logger.debug("页面拦截到 flowDetails API: %s", response.url)
-                        try:
-                            page.remove_listener("response", _capture_detail_api)
-                        except TargetClosedError:
-                            pass
-                except Exception as e:
-                    logger.warning("拦截 flowDetails 响应失败: %s", e)
-
-            page.on("response", _capture_detail_api)
-            url = f"{DMS_URL}/#/process/process_detail?bizFlowId={flow_id}&flowStatus=1"
-            await page.goto(url, timeout=NAV_TIMEOUT)
-            await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
-            await page.wait_for_timeout(WAIT_SHORT)
-            await ensure_logged_in(page, url)
-
-            api_data = captured_data
-
-            # ===== 填充 record =====
-            rec = FlowRecord(flow_id=flow_id)
-
-            if api_data:
-                _fill_record_from_api(rec, api_data, flow_id)
-
-                # API 返回的项目信息为空时，回退到 HTML 解析
-                if (rec.project_name in ("--", "")
-                        and rec.province in ("--", "")
-                        and rec.salesperson in ("--", "")):
-                    logger.warning(
-                        "API 返回的项目信息为空（project_name=%s, province=%s, salesperson=%s），"
-                        "回退到 HTML 解析补充: flow_id=%s",
-                        rec.project_name, rec.province, rec.salesperson, flow_id,
-                    )
-                    html = await page.content()
-                    _fill_record_from_html(rec, html)
-                    approval = await _extract_approval_info(page)
-                    _fill_approval_from_dict(rec, approval)
-            else:
-                # API 完全失败，回退到 HTML 页面解析
-                logger.debug("API 数据未获取到，回退到 HTML 解析: flow_id=%s", flow_id)
-                html = await page.content()
-                _fill_record_from_html(rec, html)
-                approval = await _extract_approval_info(page)
-                _fill_approval_from_dict(rec, approval)
-
-            # ===== BOM 提取（API 优先，HTML 回退） =====
-            bom_items = await _extract_bom(page, api_data)
-            rec.module_kw = calc_module_power(bom_items)
-            rec.inverter_kw = calc_inverter_power(bom_items)
-            rec.battery_kwh = calc_battery_capacity(bom_items)
-            rec.remark = build_remark(bom_items)
-
-            return rec
-    except PlaywrightTimeout as e:
-        logger.warning("%s: 页面操作超时 %s", flow_id, e)
-        return None
-    except TargetClosedError as e:
-        logger.warning("%s: 页面已关闭 %s", flow_id, e)
-        return None
-    except Exception as e:
-        logger.error("%s: 未预期的异常 %s (请报告 Bug)", flow_id, e, exc_info=True)
-        return None
-    finally:
-        if page:
-            await page.close()
+# ==================== re-export 兼容层 ====================
+# 保持测试文件导入路径不变（_extract_from_html, _split_agent 等带下划线前缀）
+
+extract_detail_by_url = _detail_extractor_mod.extract_detail_by_url
+_extract_from_html = _html_parser_mod.extract_from_html
+_split_agent = _html_parser_mod.split_agent
+_extract_bom = _html_parser_mod.extract_bom
+_extract_approval_info = _detail_extractor_mod.extract_approval_info
+_fill_record_from_api = _api_parser_mod.fill_record_from_api
+_fill_record_from_html = _api_parser_mod.fill_record_from_html
+_fill_approval_from_nodes = _api_parser_mod.fill_approval_from_nodes
+_fill_approval_from_dict = _api_parser_mod.fill_approval_from_dict
+_parse_json_date = _api_parser_mod.parse_json_date
+_mask_salesperson = _api_parser_mod.mask_salesperson
+_process_table_rows = _filtering_mod._process_table_rows
+_navigate_to_process_center = _filtering_mod._navigate_to_process_center
+
+
+# ==================== 并行编排 ====================
 
 
 async def extract_all_parallel(
