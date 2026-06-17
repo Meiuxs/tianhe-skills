@@ -11,9 +11,31 @@
 5. **所有测试全部通过后，才向用户返回结果**
 6. 任何测试失败时，先修复问题再重新运行，不得跳过失败测试
 
+## Skill 编写规范
+
+涉及编写或修改 SKILL.md 时，必须参考 [SKILL-WRITING-GUIDE.md](./SKILL-WRITING-GUIDE.md) 中的规范，包括：
+
+### 核心原则
+
+1. **精准触发描述** — `description` 字段必须包含中英文触发关键词，并明确排除不适用场景
+2. **傻瓜化工作流** — 使用编号步骤（步骤 1、步骤 2……），关键决策点写明条件分支
+3. **模块化设计** — 主文件控制在 300 行以内，复杂内容拆分到 `references/`、`scripts/` 子目录
+4. **表格承载结构化信息** — 参数说明、错误码等用 Markdown 表格，不用段落描述
+5. **持续迭代优化** — 每次执行后回顾反思，更新 SKILL.md
+
+### 自查清单（编写后必须逐项检查）
+
+- [ ] 有 YAML Frontmatter，description 包含触发关键词和否定排除
+- [ ] Workflow 使用编号步骤，附带可执行的命令
+- [ ] 参数说明使用表格
+- [ ] 有异常处理 / FAQ 章节
+- [ ] 有安全约束，明确允许和禁止的操作
+- [ ] 主文件不超过 300 行
+- [ ] 脚本路径使用绝对路径
+
 ## Git 提交规范
 
-如果需要提交代码，分功能小步提交，采用约定式提交（Conventional Commits）格式：
+如果需要提交代码，采用约定式提交（Conventional Commits）格式：
 
 ```text
 <type>(<scope>): <简短描述>
@@ -50,3 +72,12 @@ feat(inventory): 支持按物料编码聚合所有仓库的库存总量
 refactor(credentials): 提取 DMS 凭据检测为独立共享模块
 docs(skill): 更新周报反思流程和 headless 模式说明
 ```
+
+---
+
+## ⚠️ Shell 环境检测
+
+执行任何命令前，**必须先确认当前运行环境**：
+
+- **Windows** → shell 为 **PowerShell**，语法与 bash 差异大，禁止直接套用 bash 习惯
+- **Linux / macOS** → shell 为 **bash / zsh**
