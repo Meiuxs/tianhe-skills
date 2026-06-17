@@ -65,7 +65,7 @@ class TestFetchOrderedFlowIds(unittest.TestCase):
 
         call_count = [0]
 
-        async def mock_post(url, data=None, headers=None):
+        async def mock_post(url, data=None, headers=None, timeout=None):
             call_count[0] += 1
             page_num = data.get("pageNum", 1)
             total = 1579

@@ -19,7 +19,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from column_definitions import ORDER_CHECK_EXTEND_DAYS
+from column_definitions import ORDER_CHECK_EXTEND_DAYS, NAV_TIMEOUT
 from core.dms_browser import get_access_token
 
 logger = logging.getLogger("dms_report")
@@ -69,6 +69,7 @@ async def _fetch_one_page(
                     "pageSize": PAGE_SIZE,
                 },
                 headers=headers,
+                timeout=NAV_TIMEOUT,
             )
             data = await resp.json()
             if data.get("code") != 1:
