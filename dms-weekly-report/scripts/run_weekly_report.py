@@ -33,6 +33,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from playwright.async_api import async_playwright
 from playwright._impl._errors import TargetClosedError
@@ -45,6 +46,7 @@ from column_definitions import (
     STATUS_ORDERED, STATUS_NOT_ORDERED, STATUS_CHECK_FAILED,
     STATUS_YES, STATUS_NO, STATUS_NONE, STATUS_DASH, SHEET_DATA,
     COL_FLOW_ID, COL_SUBMIT_TIME, COL_ORDERED, COL_SALESPERSON,
+    COL_PROVINCE_PROCESSOR,
     FLOW_ID_PATTERN,
 )
 from core.dms_browser import (
@@ -325,29 +327,27 @@ async def run(args: argparse.Namespace) -> None:
         flow_ids = filter_result.flow_ids
         if not flow_ids:
             logger.info("本周无已办询价记录")
-            return
+        else:
+            # 提取详情 + 下单查询（并发）
+            all_details, ordered_ids, order_api_total = await _extract_and_check(
+                context, flow_ids, start_date, end_date, args.workers,
+                flow_status=filter_result.flow_status,
+            )
+            if not all_details:
+                logger.info("未能提取到任何详情")
+            else:
+                # 标注下单状态
+                for rec in all_details:
+                    rec.ordered = "是" if rec.flow_id in ordered_ids else "否"
+                ordered_count = sum(1 for r in all_details if r.ordered == "是")
+                logger.info("下单检查完成：%d 条已下单，%d 条未下单",
+                            ordered_count, len(all_details) - ordered_count)
+                records = all_details
 
-        # 提取详情 + 下单查询（并发）
-        all_details, ordered_ids, order_api_total = await _extract_and_check(
-            context, flow_ids, start_date, end_date, args.workers,
-            flow_status=filter_result.flow_status,
-        )
-        if not all_details:
-            logger.info("未能提取到任何详情")
-            return
-
-        # 标注下单状态
-        for rec in all_details:
-            rec.ordered = "是" if rec.flow_id in ordered_ids else "否"
-        ordered_count = sum(1 for r in all_details if r.ordered == "是")
-        logger.info("下单检查完成：%d 条已下单，%d 条未下单",
-                    ordered_count, len(all_details) - ordered_count)
-        records = all_details
-
-        # 生成 Excel 报表
-        excel_path, rows_data, order_date_range = _generate_excel_report(
-            records, output_dir, start_date, end_date, timestamp_str,
-        )
+                # 生成 Excel 报表
+                excel_path, rows_data, order_date_range = _generate_excel_report(
+                    records, output_dir, start_date, end_date, timestamp_str,
+                )
 
     except KeyboardInterrupt:
         logger.info("用户中断执行")
@@ -442,9 +442,11 @@ def stats_from_excel(args: argparse.Namespace) -> None:
             cell.border = THIN_BORDER
             cell.alignment = ALIGN_HEADER
 
-    # 清除旧数据并补充辅助列
+    # 清除旧数据并补充辅助列（1-based 列号：COL_PURCHASE_PROCESSOR+1 到 T 列）
+    _clear_start = COL_PROVINCE_PROCESSOR + 1  # openpyxl 1-based
+    _clear_end = 20  # T 列（日期序列号辅助列）
     for r in range(2, data_ws.max_row + 1):
-        for c in range(15, 20):
+        for c in range(_clear_start, _clear_end + 1):
             data_ws.cell(row=r, column=c).value = None
     _fill_date_helper_column(data_ws)
 
