@@ -103,8 +103,12 @@ def generate_excel(
         _init_worksheet(ws)
         next_row = 2
 
+    # 长文本列（项目名称、代理商名称）左对齐，其余居中
+    _TEXT_LEFT_COLS = (COL_PROJECT_NAME, COL_AGENT_NAME)
+
     for i, row_data in enumerate(rows_data):
-        apply_data_row(ws, next_row, row_data, is_alt=(i % 2 == 1))
+        apply_data_row(ws, next_row, row_data, is_alt=(i % 2 == 1),
+                       left_align_cols=_TEXT_LEFT_COLS)
         ws.row_dimensions[next_row].height = ROW_HEIGHT_DATA
         next_row += 1
 
@@ -172,6 +176,24 @@ def _deduplicate_rows(wb: openpyxl.Workbook, rows_data: list[list[Any]]) -> list
     if skipped:
         logger.info("跳过 %d 条重复记录", skipped)
     return new_rows
+
+
+def _read_data_rows(data_ws: Any, max_cols: int = 19) -> list[list[Any]]:
+    """从询价汇总 Sheet 读取数据行（跳过表头），供多个 Sheet 生成函数复用。
+
+    Args:
+        data_ws: 询价汇总 worksheet。
+        max_cols: 读取的列数（默认 19 列，即 A-S）。
+
+    Returns:
+        二维列表，每行为一条记录。
+    """
+    last_data_row = max(data_ws.max_row, 2)
+    rows_data: list[list[Any]] = []
+    for r in range(2, last_data_row + 1):
+        row = [data_ws.cell(r, c).value for c in range(1, max_cols + 1)]
+        rows_data.append(row)
+    return rows_data
 
 
 def _fill_date_helper_column(ws: Any) -> None:
@@ -296,14 +318,7 @@ def _update_summary_sheet(
 def _create_date_query_sheet_v2(wb: Any) -> None:
     """创建「日期查询」交互 Sheet — 紧凑布局，从 A 列开始。"""
     data_ws = wb["询价汇总"]
-    last_data_row = max(data_ws.max_row, 2)
-
-    rows_data: list[list[Any]] = []
-    for r in range(2, last_data_row + 1):
-        row = []
-        for c in range(1, 20):
-            row.append(data_ws.cell(r, c).value)
-        rows_data.append(row)
+    rows_data = _read_data_rows(data_ws)
 
     def excel_serial(d: dt_date) -> int:
         return d.toordinal() - EXCEL_SERIAL_OFFSET
@@ -342,7 +357,12 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
             fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
             if not re.match(FLOW_ID_PATTERN, fid):
                 continue
+            # 按提交日期过滤当前时间段
             o = parse_date(row[COL_SUBMIT_TIME] if len(row) > COL_SUBMIT_TIME else None)
+            if o is not None and (o < s or o > e):
+                continue  # 有日期但不在当前时间段内，跳过
+            if o is None and name != "全部":
+                continue  # 无法解析日期的行仅纳入"全部"统计
             cnt += 1
             if len(row) > COL_MODULE_KW and isinstance(row[COL_MODULE_KW], (int, float)):
                 mod += float(row[COL_MODULE_KW])
@@ -472,7 +492,7 @@ def _create_report_dashboard(wb: Any) -> None:
     ws = wb.create_sheet("数据看板")
 
     data_ws = wb["询价汇总"]
-    last_data_row = max(data_ws.max_row, 2)
+    rows_data = _read_data_rows(data_ws)
 
     ws.column_dimensions["A"].width = 24
     ws.column_dimensions["B"].width = 28
@@ -481,13 +501,6 @@ def _create_report_dashboard(wb: Any) -> None:
     ws.column_dimensions["E"].width = 18
     ws.column_dimensions["F"].width = 18
     ws.column_dimensions["G"].width = 18
-
-    rows_data: list[list[Any]] = []
-    for r in range(2, last_data_row + 1):
-        row = []
-        for c in range(1, 20):
-            row.append(data_ws.cell(r, c).value)
-        rows_data.append(row)
 
     r = 1
     # 标题
