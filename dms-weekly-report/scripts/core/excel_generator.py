@@ -58,18 +58,21 @@ def generate_excel(
     file_path = os.path.join(output_dir, f"询价汇总_{ts}.xlsx")
     backup_path = os.path.join(output_dir, f"询价汇总_{ts}_v2.xlsx")
 
-    if os.path.exists(file_path):
+    # 检查文件是否已存在（非本次运行创建），且可读写
+    file_already_exists = os.path.exists(file_path)
+    if file_already_exists:
         try:
-            with open(file_path, "a"):
-                pass
-        except PermissionError:
+            with open(file_path, "rb") as f:
+                f.read(1)
+        except (PermissionError, OSError):
             logger.warning("%s 被占用，使用备用文件名", file_path)
             file_path = backup_path
+            file_already_exists = False
 
     # 构建行数据（19 列，含审批链信息）
     rows_data = _build_rows_data(records)
 
-    if os.path.exists(file_path):
+    if file_already_exists and os.path.exists(file_path):
         try:
             wb = openpyxl.load_workbook(file_path)
             ws = wb.active
@@ -79,25 +82,16 @@ def generate_excel(
             logger.warning("Excel 文件读取失败 (%s)，将重新创建: %s", file_path, e)
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = "询价汇总"
-            apply_header_style(ws, 1, HEADERS)
-            for i, w in enumerate(COLUMN_WIDTHS):
-                ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
-            ws.row_dimensions[1].height = ROW_HEIGHT_HEADER
+            _init_worksheet(ws)
             next_row = 2
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "询价汇总"
-        apply_header_style(ws, 1, HEADERS)
-        for i, w in enumerate(COLUMN_WIDTHS):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
-        ws.row_dimensions[1].height = ROW_HEIGHT_HEADER
+        _init_worksheet(ws)
         next_row = 2
 
     for i, row_data in enumerate(rows_data):
-        is_alt = (i % 2 == 1)
-        apply_data_row(ws, next_row, row_data, is_alt=is_alt)
+        apply_data_row(ws, next_row, row_data, is_alt=(i % 2 == 1))
         ws.row_dimensions[next_row].height = ROW_HEIGHT_DATA
         next_row += 1
 
@@ -125,11 +119,19 @@ def generate_excel(
 # ==================== 辅助函数 ====================
 
 
+def _init_worksheet(ws: Any) -> None:
+    """初始化询价汇总 Sheet（表头、列宽、行高）。"""
+    ws.title = "询价汇总"
+    apply_header_style(ws, 1, HEADERS)
+    for i, w in enumerate(COLUMN_WIDTHS):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
+    ws.row_dimensions[1].height = ROW_HEIGHT_HEADER
+
+
 def _build_rows_data(records: list) -> list[list[Any]]:
     """从 FlowRecord 列表构建 19 列行数据。"""
-    rows_data: list[list[Any]] = []
-    for r in records:
-        rows_data.append([
+    return [
+        [
             r.flow_id, r.project_name,
             r.agent_code, r.agent_name,
             r.province, r.salesperson,
@@ -139,8 +141,9 @@ def _build_rows_data(records: list) -> list[list[Any]]:
             r.province_processor, r.province_status,
             r.purchase_processor, r.purchase_status,
             r.final_approval_time,
-        ])
-    return rows_data
+        ]
+        for r in records
+    ]
 
 
 def _deduplicate_rows(wb: openpyxl.Workbook, rows_data: list[list[Any]]) -> list[list[Any]]:
