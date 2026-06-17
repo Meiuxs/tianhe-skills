@@ -49,25 +49,69 @@ class TestFetchOrderedFlowIds(unittest.TestCase):
                     {"bizFlowId": "FLOW002"},
                     {"bizFlowId": "FLOW003"},
                 ],
+                "total": 3,
+                "pages": 1,
             },
         })
 
         import asyncio
-        result = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+        ordered_ids, api_total = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+        self.assertEqual(ordered_ids, {"FLOW001", "FLOW002", "FLOW003"})
+        self.assertEqual(api_total, 3)
 
-        self.assertEqual(result, {"FLOW001", "FLOW002", "FLOW003"})
+    def test_multi_page_partial_last(self):
+        """多页拉取：后端返回 pages=4，只拉第 2~4 页。"""
+        import asyncio
+
+        call_count = [0]
+
+        async def mock_post(url, data=None, headers=None):
+            call_count[0] += 1
+            page_num = data.get("pageNum", 1)
+            total = 1579
+            pages = 4
+
+            if page_num == 1:
+                records = [{"bizFlowId": f"FLOW{i:04d}"} for i in range(1, 499 + 1)]
+            elif page_num == 2:
+                records = [{"bizFlowId": f"FLOW{i:04d}"} for i in range(499 + 1, 499 + 500 + 1)]
+            elif page_num == 3:
+                records = [{"bizFlowId": f"FLOW{i:04d}"} for i in range(999 + 1, 999 + 500 + 1)]
+            elif page_num == 4:
+                records = [{"bizFlowId": f"FLOW{i:04d}"} for i in range(1499 + 1, 1499 + 81 + 1)]
+            else:
+                raise AssertionError(f"不应请求第 {page_num} 页（后端 pages={pages}）")
+
+            mock_resp = AsyncMock()
+            mock_resp.json = AsyncMock(return_value={
+                "code": 1,
+                "data": {"records": records, "total": total, "pages": pages},
+            })
+            return mock_resp
+
+        ctx = _make_mock_context(post_result=None)
+        ctx.request.post = mock_post
+
+        ordered_ids, api_total = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+
+        self.assertEqual(api_total, 1579)
+        expected_count = 499 + 500 + 500 + 81
+        self.assertEqual(len(ordered_ids), expected_count)
+        for i in range(1, expected_count + 1):
+            self.assertIn(f"FLOW{i:04d}", ordered_ids)
+        self.assertEqual(call_count[0], 4)
 
     def test_empty_response(self):
         """无订单数据返回空集合。"""
         ctx = _make_mock_context(post_result={
             "code": 1,
-            "data": {"records": []},
+            "data": {"records": [], "total": 0, "pages": 0},
         })
 
         import asyncio
-        result = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
-
-        self.assertEqual(result, set())
+        ordered_ids, api_total = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+        self.assertEqual(ordered_ids, set())
+        self.assertEqual(api_total, 0)
 
     def test_api_error_code(self):
         """API 返回错误 code 时返回空集合并记录日志。"""
@@ -77,9 +121,9 @@ class TestFetchOrderedFlowIds(unittest.TestCase):
         })
 
         import asyncio
-        result = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
-
-        self.assertEqual(result, set())
+        ordered_ids, api_total = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+        self.assertEqual(ordered_ids, set())
+        self.assertEqual(api_total, 0)
 
     def test_exception_returns_empty_set(self):
         """网络异常时返回空集合（不崩溃）。"""
@@ -90,9 +134,9 @@ class TestFetchOrderedFlowIds(unittest.TestCase):
         ctx.request.post = AsyncMock(side_effect=Exception("Connection failed"))
 
         import asyncio
-        result = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
-
-        self.assertEqual(result, set())
+        ordered_ids, api_total = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+        self.assertEqual(ordered_ids, set())
+        self.assertEqual(api_total, 0)
 
     def test_no_token_returns_empty(self):
         """无 access_token 时返回空集合。"""
@@ -100,9 +144,9 @@ class TestFetchOrderedFlowIds(unittest.TestCase):
         ctx.cookies = AsyncMock(return_value=[])  # 无 cookie
 
         import asyncio
-        result = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
-
-        self.assertEqual(result, set())
+        ordered_ids, api_total = asyncio.run(fetch_ordered_flow_ids(ctx, "2026-06-01", "2026-06-07"))
+        self.assertEqual(ordered_ids, set())
+        self.assertEqual(api_total, 0)
 
     def test_extended_end_date(self):
         """验证日期扩展逻辑正确。"""
@@ -111,7 +155,8 @@ class TestFetchOrderedFlowIds(unittest.TestCase):
 
         end_date = "2026-06-07"
         extended = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=ORDER_CHECK_EXTEND_DAYS)).strftime("%Y-%m-%d")
-        self.assertIn("2026-07-", extended)
+        # ORDER_CHECK_EXTEND_DAYS=14，2026-06-07 + 14 = 2026-06-21
+        self.assertEqual(extended, "2026-06-21")
 
 
 class TestCheckOrdersParallel(unittest.TestCase):

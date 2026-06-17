@@ -75,7 +75,7 @@ class TestExtractDetailByUrl:
                     "purchase_status": "--",
                     "final_approval_time": "--",
                 }):
-                    rec = await extract_detail_by_url(context, "12345678901234567", sem)
+                    rec = await extract_detail_by_url(context, "12345678901234567", sem, page=page)
 
         assert rec is not None
         assert rec.flow_id == "12345678901234567"
@@ -89,32 +89,8 @@ class TestExtractDetailByUrl:
         context.new_page = AsyncMock(return_value=page)
 
         sem = asyncio.Semaphore(5)
-        rec = await extract_detail_by_url(context, "12345678901234567", sem)
+        rec = await extract_detail_by_url(context, "12345678901234567", sem, page=page)
         assert rec is None
-
-    async def test_page_closed_after_extraction(self):
-        context = make_mock_context()
-        page = make_mock_page()
-        context.new_page = AsyncMock(return_value=page)
-
-        page.content = AsyncMock(return_value="<html></html>")
-        page.locator.return_value.all = AsyncMock(return_value=[])
-
-        sem = asyncio.Semaphore(5)
-
-        with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.html_parser.extract_bom", return_value=[]):
-                with patch("core.detail_extractor.extract_approval_info", return_value={
-                    "submit_time": "--",
-                    "province_processor": "--",
-                    "province_status": "--",
-                    "purchase_processor": "--",
-                    "purchase_status": "--",
-                    "final_approval_time": "--",
-                }):
-                    await extract_detail_by_url(context, "12345678901234567", sem)
-
-        page.close.assert_called_once()
 
     async def test_api_data_path(self):
         context = make_mock_context()
@@ -168,7 +144,7 @@ class TestExtractDetailByUrl:
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
             with patch("core.html_parser.extract_bom", return_value=[]):
-                rec = await extract_detail_by_url(context, "20260616000000001", sem)
+                rec = await extract_detail_by_url(context, "20260616000000001", sem, page=page)
 
         assert rec is not None
         assert rec.project_name == "API项目"

@@ -125,85 +125,9 @@ class TestExtractDetailByUrl:
         page = make_mock_page()
         context.new_page = AsyncMock(return_value=page)
 
-        # Mock HTML content with fields
-        html = """
-        <th>项目名称:</th><td>测试项目</td>
-        <th>代理商:</th><td>AGENT-001 某公司</td>
-        <th>省公司:</th><td>广东</td>
-        <th>业务员:</th><td>张三</td>
-        <th>瓦单价(元/瓦):</th><td>1.2</th>
-        <th>总价(元):</th><td>10000</td>
-        """
-        page.content = AsyncMock(return_value=html)
-        page.locator.return_value.all = AsyncMock(return_value=[])
-
-        sem = asyncio.Semaphore(5)
-
-        with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.html_parser.extract_bom", return_value=[]):
-                with patch("core.detail_extractor.extract_approval_info", return_value={
-                    "submit_time": "2026-06-01",
-                    "province_processor": "--",
-                    "province_status": "--",
-                    "purchase_processor": "--",
-                    "purchase_status": "--",
-                    "final_approval_time": "--",
-                }):
-                    rec = await extract_detail_by_url(context, "12345678901234567", sem)
-
-        assert rec is not None
-        assert rec.flow_id == "12345678901234567"
-        assert rec.project_name == "测试项目"
-        assert rec.province == "广东"
-        assert rec.salesperson == "张三"
-        assert rec.unit_price == "1.2"
-        assert rec.total_price == "10000"
-
-    async def test_returns_none_on_network_error(self):
-        context = make_mock_context()
-        page = make_mock_page()
-        page.goto = AsyncMock(side_effect=Exception("Network error"))
-        context.new_page = AsyncMock(return_value=page)
-
-        sem = asyncio.Semaphore(5)
-        rec = await extract_detail_by_url(context, "12345678901234567", sem)
-        assert rec is None
-
-    async def test_page_closed_after_extraction(self):
-        context = make_mock_context()
-        page = make_mock_page()
-        context.new_page = AsyncMock(return_value=page)
-
-        page.content = AsyncMock(return_value="<html></html>")
-        page.locator.return_value.all = AsyncMock(return_value=[])
-
-        sem = asyncio.Semaphore(5)
-
-        with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
-            with patch("core.html_parser.extract_bom", return_value=[]):
-                with patch("core.detail_extractor.extract_approval_info", return_value={
-                    "submit_time": "--",
-                    "province_processor": "--",
-                    "province_status": "--",
-                    "purchase_processor": "--",
-                    "purchase_status": "--",
-                    "final_approval_time": "--",
-                }):
-                    await extract_detail_by_url(context, "12345678901234567", sem)
-
-        # 验证页面最终被关闭
-        page.close.assert_called_once()
-
-    async def test_api_data_path(self):
-        """API 数据可用时走 API 优先路径。"""
-        context = make_mock_context()
-        page = make_mock_page()
-        context.new_page = AsyncMock(return_value=page)
-
-        # 模拟 API 响应通过 response 事件触发
+        # Mock API response
         api_response_data = {
             "data": {
-                "bizFlowId": "20260616000000001",
                 "jsonDate": {
                     "req": {
                         "projectName": "API项目",
@@ -230,30 +154,14 @@ class TestExtractDetailByUrl:
         mock_resp.url = f"{DMS_URL}/api/newFlow/flowDetails"
         mock_resp.json = AsyncMock(return_value=api_response_data)
 
-        # 让 page.on("response", ...) 的回调能捕获到 mock response
-        # 通过 side_effect 在 goto 时触发回调
-        async def goto_side_effect(url, **kwargs):
-            # 模拟 response 事件触发
-            handlers = page._response_handlers if hasattr(page, '_response_handlers') else []
-            for handler in handlers:
-                await handler(mock_resp)
-
-        page.goto = AsyncMock(side_effect=goto_side_effect)
-        page.content = AsyncMock(return_value="<html></html>")
-        page.locator.return_value.all = AsyncMock(return_value=[])
-
-        # 捕获 response 事件处理器
         captured_handlers = []
-        original_on = page.on
 
         def capture_on(event, handler):
             if event == "response":
                 captured_handlers.append(handler)
-            return original_on(event, handler)
 
         page.on = capture_on
 
-        # 重写 goto 以触发 response handler
         async def goto_and_trigger(url, **kwargs):
             for handler in captured_handlers:
                 await handler(mock_resp)
@@ -264,7 +172,7 @@ class TestExtractDetailByUrl:
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
             with patch("core.html_parser.extract_bom", return_value=[]):
-                rec = await extract_detail_by_url(context, "20260616000000001", sem)
+                rec = await extract_detail_by_url(context, "20260616000000001", sem, page=page)
 
         assert rec is not None
         assert rec.flow_id == "20260616000000001"
@@ -339,7 +247,7 @@ class TestExtractDetailByUrl:
                     "purchase_status": "--",
                     "final_approval_time": "--",
                 }):
-                    rec = await extract_detail_by_url(context, "20260616000000001", sem)
+                    rec = await extract_detail_by_url(context, "20260616000000001", sem, page=page)
 
         assert rec is not None
         # API 项目信息为空，应回退到 HTML 解析
@@ -357,28 +265,21 @@ class TestProcessTableRows:
 
     async def test_batch_cell_fetch(self):
         """验证 all_text_contents 被调用（而非逐个 text_content）。"""
-        from core.dms_browser import _process_table_rows, TableProcessResult
+        from core.dms_browser import _process_table_rows, TableProcessResult, SELECTORS
         from column_definitions import TARGET_FLOW_TYPE
 
-        # 构建 mock 链: page.locator("table.el-table__body").first.locator("tbody tr").all()
         td_locator = MagicMock()
         td_locator.all_text_contents = AsyncMock(return_value=["123456789012345", TARGET_FLOW_TYPE])
 
-        mock_row = MagicMock()  # 用普通 MagicMock，它的 all_text_contents 是 MagicMock 不是 coroutine
+        mock_row = MagicMock()
         mock_row.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else MagicMock(return_value=[]))
 
-        # all() 应返回 [mock_row]，这里 mock_row 本身不需要 await
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        # filtering.py 直接调用 page.locator(SELECTORS["table_tbody"]).all()
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row])
 
         page = MagicMock()
-        page.locator = MagicMock(return_value=table_body_locator)
+        page.locator = MagicMock(return_value=table_tbody_locator)
 
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
@@ -417,7 +318,7 @@ class TestExtractAllParallel:
         context = make_mock_context()
         mock_rec = FlowRecord(flow_id="11111111111111111")
 
-        async def mock_extract(ctx, fid, sem):
+        async def mock_extract(ctx, fid, sem, **kwargs):
             if fid == "11111111111111111":
                 return mock_rec
             return None
@@ -433,7 +334,7 @@ class TestExtractAllParallel:
     async def test_exception_in_task(self):
         context = make_mock_context()
 
-        async def mock_extract(ctx, fid, sem):
+        async def mock_extract(ctx, fid, sem, **kwargs):
             if fid == "11111111111111111":
                 raise Exception("Unexpected error")
             return FlowRecord(flow_id=fid)
@@ -735,17 +636,11 @@ class TestProcessTableRowsEdgeCases:
         mock_row = MagicMock()
         mock_row.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else MagicMock())
 
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row])
 
         page = MagicMock()
-        page.locator = MagicMock(return_value=table_body_locator)
+        page.locator = MagicMock(return_value=table_tbody_locator)
 
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
@@ -765,17 +660,11 @@ class TestProcessTableRowsEdgeCases:
         mock_row = MagicMock()
         mock_row.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else MagicMock())
 
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row])
 
         page = MagicMock()
-        page.locator = MagicMock(return_value=table_body_locator)
+        page.locator = MagicMock(return_value=table_tbody_locator)
 
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
@@ -795,17 +684,11 @@ class TestProcessTableRowsEdgeCases:
         mock_row2 = MagicMock()
         mock_row2.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else MagicMock())
 
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row1, mock_row2])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row1, mock_row2])
 
         page = MagicMock()
-        page.locator = MagicMock(return_value=table_body_locator)
+        page.locator = MagicMock(return_value=table_tbody_locator)
 
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
@@ -821,17 +704,11 @@ class TestProcessTableRowsEdgeCases:
         mock_row = MagicMock()
         mock_row.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else MagicMock())
 
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row])
 
         page = MagicMock()
-        page.locator = MagicMock(return_value=table_body_locator)
+        page.locator = MagicMock(return_value=table_tbody_locator)
 
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
@@ -859,20 +736,14 @@ class TestFilterAndGetFlowIds:
         total_el_mock.first = total_el_mock
         total_el_mock.text_content = AsyncMock(return_value="共 0 条记录")
 
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[])
 
         def locator_side_effect(sel):
             if "共.*条记录" in sel or "text=" in sel:
                 return total_el_mock
             if "el-table__body" in sel:
-                return table_body_locator
+                return table_tbody_locator
             return MagicMock()
 
         page.locator = MagicMock(side_effect=locator_side_effect)
@@ -904,20 +775,14 @@ class TestFilterAndGetFlowIds:
         mock_row = MagicMock()
         mock_row.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else MagicMock())
 
-        tbody_rows_locator = MagicMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row])
-
-        tbody_locator_first = MagicMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = MagicMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = MagicMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row])
 
         def locator_side_effect(sel):
             if "共.*条记录" in sel or "text=" in sel:
                 return total_el_mock
             if "el-table__body" in sel:
-                return table_body_locator
+                return table_tbody_locator
             return MagicMock()
 
         page.locator = MagicMock(side_effect=locator_side_effect)
@@ -954,35 +819,32 @@ class TestFilterAndGetFlowIds:
         pagination_locator = MagicMock()
         pagination_locator.get_by_text = MagicMock(return_value=page_2_btn)
 
-        # 翻页后 table_tbody 的 first.wait_for
-        tbody_first = AsyncMock()
-        tbody_first.wait_for = AsyncMock()
-
         # 用 side_effect 来区分翻页前后的 locator 调用
-        # 第 1 次调用 locator("table.el-table__body") → 第 1 页数据
+        # 第 1 次调用 locator("table.el-table__body tbody") → 第 1 页数据
         # 翻页后再次调用 → 第 2 页数据
-        page_call_count = {"table_body": 0}
+        page_call_count = {"table_tbody": 0}
 
-        def make_table_body_locator(flow_id):
-            """为指定 flow_id 创建完整的 table_body mock 链。"""
+        def make_table_tbody_locator(flow_id):
+            """为指定 flow_id 创建 table_tbody mock（直接有 .all() 和 .first.wait_for()）。"""
             td = AsyncMock()
             td.all_text_contents = AsyncMock(return_value=[flow_id, TARGET_FLOW_TYPE, "进行中"])
 
             row = AsyncMock()
             row.locator = MagicMock(side_effect=lambda sel: td if sel == "td" else AsyncMock(return_value=[]))
 
-            rows = AsyncMock()
-            rows.all = AsyncMock(return_value=[row])
+            rows_locator = AsyncMock()
+            rows_locator.all = AsyncMock(return_value=[row])
 
-            first = AsyncMock()
-            first.locator = MagicMock(return_value=rows)
+            tbody_first = AsyncMock()
+            tbody_first.wait_for = AsyncMock()
 
             body = AsyncMock()
-            body.first = first
+            body.all = AsyncMock(return_value=[row])
+            body.first = tbody_first
             return body
 
-        tb1 = make_table_body_locator("20260616000000001")
-        tb2 = make_table_body_locator("20260616000000002")
+        tb1 = make_table_tbody_locator("20260616000000001")
+        tb2 = make_table_tbody_locator("20260616000000002")
 
         def locator_side_effect(sel):
             if "共.*条记录" in sel or "text=" in sel:
@@ -990,13 +852,10 @@ class TestFilterAndGetFlowIds:
             if "el-pager" in sel:
                 return pagination_locator
             if "el-table__body" in sel:
-                page_call_count["table_body"] += 1
-                if page_call_count["table_body"] <= 1:
+                page_call_count["table_tbody"] += 1
+                if page_call_count["table_tbody"] <= 1:
                     return tb1
                 return tb2
-            if "el-table__body tbody" in sel:
-                # 翻页后的 wait_for
-                return tbody_first
             return AsyncMock()
 
         page.locator = MagicMock(side_effect=locator_side_effect)
@@ -1040,14 +899,10 @@ class TestFilterAndGetFlowIds:
         mock_row = AsyncMock()
         mock_row.locator = MagicMock(side_effect=lambda sel: td_locator if sel == "td" else AsyncMock(return_value=[]))
 
-        tbody_rows_locator = AsyncMock()
-        tbody_rows_locator.all = AsyncMock(return_value=[mock_row])
-
-        tbody_locator_first = AsyncMock()
-        tbody_locator_first.locator = MagicMock(return_value=tbody_rows_locator)
-
-        table_body_locator = AsyncMock()
-        table_body_locator.first = tbody_locator_first
+        table_tbody_locator = AsyncMock()
+        table_tbody_locator.all = AsyncMock(return_value=[mock_row])
+        table_tbody_locator.first = AsyncMock()
+        table_tbody_locator.first.wait_for = AsyncMock()
 
         # 翻页按钮点击时抛出超时
         page_2_btn = AsyncMock()
@@ -1060,7 +915,9 @@ class TestFilterAndGetFlowIds:
                 return total_el_mock
             if "el-pager" in sel:
                 return pagination_locator
-            return table_body_locator
+            if "el-table__body" in sel:
+                return table_tbody_locator
+            return AsyncMock()
 
         page.locator = MagicMock(side_effect=locator_side_effect)
 
@@ -1381,7 +1238,7 @@ class TestRemoveListenerException:
 
         with patch("core.dms_browser._load_dms_credentials", return_value=("user", "pass")):
             with patch("core.html_parser.extract_bom", return_value=[]):
-                rec = await extract_detail_by_url(context, "20260616000000001", sem)
+                rec = await extract_detail_by_url(context, "20260616000000001", sem, page=page)
 
         # 即使 remove_listener 抛出异常，提取仍应成功
         assert rec is not None
@@ -1399,7 +1256,7 @@ class TestExtractAllParallelErrorStats:
         """验证错误任务被正确统计。"""
         context = make_mock_context()
 
-        async def mock_extract(ctx, fid, sem):
+        async def mock_extract(ctx, fid, sem, **kwargs):
             if fid == "11111111111111111":
                 raise Exception("Unexpected error")
             return FlowRecord(flow_id=fid)

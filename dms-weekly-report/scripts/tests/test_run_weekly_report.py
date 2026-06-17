@@ -142,6 +142,7 @@ mock_col_defs.FILTER_PAGE_SIZE = 10
 mock_col_defs.API_FILTER_PAGE_SIZE = 500
 mock_col_defs.DMS_API_BASE = "https://apigw.trinablue.com"
 mock_col_defs.DMS_FLOW_LIST_API = f"{mock_col_defs.DMS_API_BASE}/dms-admin/newFlow/newFlowList"
+mock_col_defs.DMS_FLOW_DETAILS_API = f"{mock_col_defs.DMS_API_BASE}/dms-admin/newFlow/flowDetails"
 sys.modules["column_definitions"] = mock_col_defs
 
 # ==================== 导入 core 模块 ====================
