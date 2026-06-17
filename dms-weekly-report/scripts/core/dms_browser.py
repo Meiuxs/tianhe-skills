@@ -112,6 +112,7 @@ class TableProcessResult:
     skipped_wrong_type: int = 0
     skipped_invalid: int = 0
     skipped_dup: int = 0
+    flow_status: int = 1  # 流程状态，用于 flowDetails API 请求参数
 
     @property
     def valid_rows(self) -> int:
@@ -501,13 +502,29 @@ _navigate_to_process_center = _filtering_mod._navigate_to_process_center
 
 async def extract_all_parallel(
     context: BrowserContext, flow_ids: list[str], workers: int,
+    flow_status: int = 1,
 ) -> list[FlowRecord]:
-    """并行提取所有流程详情。"""
+    """并行提取所有流程详情（页面池复用模式）。"""
     total = len(flow_ids)
     logger.info("并行提取 %d 条（%d 并发）...", total, workers)
+
+    # 预创建页面池，避免每条都 new_page/close 的开销
+    pages = [await context.new_page() for _ in range(min(workers, total))]
     sem = asyncio.Semaphore(workers)
-    tasks = [extract_detail_by_url(context, fid, sem) for fid in flow_ids]
+
+    async def _extract_with_page(ctx, fid, s, pg):
+        return await extract_detail_by_url(ctx, fid, s, page=pg, flow_status=flow_status)
+
+    tasks = [_extract_with_page(context, flow_ids[i], sem, pages[i % len(pages)])
+             for i in range(total)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # 统一关闭页面池
+    for pg in pages:
+        try:
+            await pg.close()
+        except Exception:
+            pass
 
     records: list[FlowRecord] = []
     error_count = 0
