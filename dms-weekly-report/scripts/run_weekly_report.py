@@ -44,6 +44,8 @@ from column_definitions import (
     DMS_URL, NAV_TIMEOUT, LOAD_TIMEOUT, accumulate_power,
     STATUS_ORDERED, STATUS_NOT_ORDERED, STATUS_CHECK_FAILED,
     STATUS_YES, STATUS_NO, STATUS_NONE, STATUS_DASH, SHEET_DATA,
+    COL_FLOW_ID, COL_SUBMIT_TIME, COL_ORDERED, COL_SALESPERSON,
+    FLOW_ID_PATTERN,
 )
 from core.dms_browser import (
     FlowRecord, TableProcessResult,
@@ -143,11 +145,144 @@ def print_summary(
 # ==================== 主流程编排 ====================
 
 
+async def _launch_browser_context(args: argparse.Namespace):
+    """启动 Playwright 持久化浏览器上下文。
+
+    Returns:
+        (playwright, context, page) 或抛出 RuntimeError
+    """
+    headless_shell = _find_headless_shell()
+    if not headless_shell:
+        raise RuntimeError(
+            "未找到 Playwright headless shell，请执行: playwright install chromium"
+        )
+    logger.debug("Headless shell: %s", headless_shell)
+
+    p = await async_playwright().start()
+    context = await p.chromium.launch_persistent_context(
+        executable_path=headless_shell,
+        user_data_dir=str(USER_DATA_DIR),
+        headless=args.headless,
+        no_viewport=True,
+        locale="zh-CN",
+        ignore_https_errors=True,
+        args=["--start-maximized"],
+    )
+    page = await context.new_page()
+    return p, context, page
+
+
+async def _login_and_filter(
+    page: Any, context: Any,
+    start_date: str, end_date: str,
+) -> Any:
+    """登录 DMS 并筛选流程列表。
+
+    Returns:
+        filter_result（含 flow_ids 和 flow_status）
+    """
+    # 1. 登录
+    await page.goto(DMS_URL, timeout=NAV_TIMEOUT)
+    await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
+    if is_on_login_page(page.url):
+        await do_login(page)
+    else:
+        logger.info("会话有效（已复用缓存）")
+
+    # 2. 筛选（优先 API 方式，失败时回退到 HTML 解析）
+    filter_result = None
+    try:
+        logger.info("尝试 API 方式筛选流程列表...")
+        filter_result = await filter_and_get_flow_ids_via_api(context, start_date, end_date)
+        if filter_result and filter_result.flow_ids:
+            logger.info("API 筛选成功，获取 %d 个流程", len(filter_result.flow_ids))
+        else:
+            logger.info("API 筛选返回空结果，回退到 HTML 解析")
+            filter_result = None
+    except Exception as e:
+        logger.warning("API 筛选失败（%s），回退到 HTML 解析", e)
+        filter_result = None
+
+    if not filter_result:
+        filter_result = await filter_and_get_flow_ids(page, start_date, end_date)
+
+    return filter_result
+
+
+async def _extract_and_check(
+    context: Any,
+    flow_ids: list[str],
+    start_date: str, end_date: str,
+    workers: int,
+    flow_status: dict | None = None,
+) -> tuple[list[FlowRecord], set[str], int]:
+    """并行提取详情 + 查询下单状态。
+
+    Returns:
+        (records, ordered_ids, order_api_total)
+    """
+    from core.orders_checker import fetch_ordered_flow_ids
+
+    all_details, (ordered_ids, order_api_total) = await asyncio.gather(
+        extract_all_parallel(context, flow_ids, workers, flow_status=flow_status),
+        fetch_ordered_flow_ids(context, start_date, end_date),
+    )
+    return all_details, ordered_ids, order_api_total
+
+
+def _generate_excel_report(
+    records: list[FlowRecord],
+    output_dir: str,
+    start_date: str, end_date: str,
+    timestamp_str: str,
+) -> tuple[str, Any, str]:
+    """生成 Excel 报表。
+
+    Returns:
+        (excel_path, rows_data, order_date_range)
+    """
+    from core.excel_generator import generate_excel
+    from column_definitions import ORDER_CHECK_EXTEND_DAYS
+    from datetime import datetime as _dt, timedelta as _td
+
+    query_range = f"{start_date} ~ {end_date}"
+    excel_path, rows_data = generate_excel(
+        records, output_dir,
+        query_range=query_range,
+        timestamp_str=timestamp_str,
+    )
+
+    # 订单查询日期范围（含扩展天数）
+    order_end_dt = _dt.strptime(end_date, "%Y-%m-%d") + _td(days=ORDER_CHECK_EXTEND_DAYS)
+    order_date_range = f"{start_date} ~ {order_end_dt.strftime('%Y-%m-%d')}"
+
+    return excel_path, rows_data, order_date_range
+
+
+def _generate_html_report(
+    rows_data: Any,
+    query_range: str,
+    output_dir: str,
+    timestamp_str: str,
+) -> str | None:
+    """生成 HTML 报表（独立后处理步骤，不依赖浏览器）。
+
+    Returns:
+        html_path 或 None（失败时）
+    """
+    try:
+        from generate_html_report import generate_html_report as _gen_html
+        html_path = os.path.join(output_dir, f"询价周报报表_{timestamp_str}.html")
+        _gen_html(rows_data, query_range, html_path)
+        logger.info("HTML 报表已生成: %s", html_path)
+        return html_path
+    except Exception as html_e:
+        logger.warning("HTML 报表生成失败（不影响 Excel）: %s", html_e)
+        return None
+
+
 async def run(args: argparse.Namespace) -> None:
     """完整模式主流程：登录 → 筛选 → 提取 → 检查下单 → 生成报表。"""
-    from core.orders_checker import check_orders_parallel
-    from core.excel_generator import generate_excel
-
     output_dir = args.output_dir or os.getcwd()
 
     if args.start_date:
@@ -170,6 +305,9 @@ async def run(args: argparse.Namespace) -> None:
     order_api_total: int = 0
     order_date_range: str = ""
     filter_result = None
+    rows_data: Any = None
+    p = None
+    context = None
 
     try:
         USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -177,117 +315,68 @@ async def run(args: argparse.Namespace) -> None:
         logger.error("无权限写入目录: %s，请检查权限或设置别的路径", USER_DATA_DIR)
         sys.exit(1)
 
-    # 查找 headless shell 可执行文件
-    headless_shell = _find_headless_shell()
-    if not headless_shell:
-        raise RuntimeError(
-            "未找到 Playwright headless shell，请执行: playwright install chromium"
+    try:
+        # 启动浏览器
+        p, context, page = await _launch_browser_context(args)
+
+        # 登录 + 筛选
+        filter_result = await _login_and_filter(page, context, start_date, end_date)
+
+        flow_ids = filter_result.flow_ids
+        if not flow_ids:
+            logger.info("本周无已办询价记录")
+            return
+
+        # 提取详情 + 下单查询（并发）
+        all_details, ordered_ids, order_api_total = await _extract_and_check(
+            context, flow_ids, start_date, end_date, args.workers,
+            flow_status=filter_result.flow_status,
         )
-    logger.debug("Headless shell: %s", headless_shell)
+        if not all_details:
+            logger.info("未能提取到任何详情")
+            return
 
-    async with async_playwright() as p:
-        context = await p.chromium.launch_persistent_context(
-            executable_path=headless_shell,
-            user_data_dir=str(USER_DATA_DIR),
-            headless=args.headless,
-            no_viewport=True,
-            locale="zh-CN",
-            ignore_https_errors=True,
-            args=["--start-maximized"],
+        # 标注下单状态
+        for rec in all_details:
+            rec.ordered = "是" if rec.flow_id in ordered_ids else "否"
+        ordered_count = sum(1 for r in all_details if r.ordered == "是")
+        logger.info("下单检查完成：%d 条已下单，%d 条未下单",
+                    ordered_count, len(all_details) - ordered_count)
+        records = all_details
+
+        # 生成 Excel 报表
+        excel_path, rows_data, order_date_range = _generate_excel_report(
+            records, output_dir, start_date, end_date, timestamp_str,
         )
-        page = await context.new_page()
 
-        try:
-            # 1. 登录
-            await page.goto(DMS_URL, timeout=NAV_TIMEOUT)
-            await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
-            if is_on_login_page(page.url):
-                await do_login(page)
-            else:
-                logger.info("会话有效（已复用缓存）")
-
-            # 2. 筛选（优先 API 方式，失败时回退到 HTML 解析）
-            filter_result = None
-            try:
-                logger.info("尝试 API 方式筛选流程列表...")
-                filter_result = await filter_and_get_flow_ids_via_api(context, start_date, end_date)
-                if filter_result and filter_result.flow_ids:
-                    logger.info("API 筛选成功，获取 %d 个流程", len(filter_result.flow_ids))
-                else:
-                    logger.info("API 筛选返回空结果，回退到 HTML 解析")
-                    filter_result = None
-            except Exception as e:
-                logger.warning("API 筛选失败（%s），回退到 HTML 解析", e)
-                filter_result = None
-
-            if not filter_result:
-                filter_result = await filter_and_get_flow_ids(page, start_date, end_date)
-
-            flow_ids = filter_result.flow_ids
-            if not flow_ids:
-                logger.info("本周无已办询价记录")
-                return
-
-            # 3. 并行提取详情 + 并行启动下单查询
-            from core.orders_checker import fetch_ordered_flow_ids
-            from column_definitions import ORDER_CHECK_EXTEND_DAYS
-
-            all_details, (ordered_ids, order_api_total) = await asyncio.gather(
-                extract_all_parallel(context, flow_ids, args.workers, flow_status=filter_result.flow_status),
-                fetch_ordered_flow_ids(context, start_date, end_date),
-            )
-            if not all_details:
-                logger.info("未能提取到任何详情")
-                return
-
-            # 4. 下单检查（ordered_ids 已在步骤 3 并发获取）
-            for rec in all_details:
-                rec.ordered = "是" if rec.flow_id in ordered_ids else "否"
-            ordered_count = sum(1 for r in all_details if r.ordered == "是")
-            logger.info("下单检查完成：%d 条已下单，%d 条未下单",
-                        ordered_count, len(all_details) - ordered_count)
-            records = all_details
-
-            # 订单查询日期范围（含扩展天数）
-            from datetime import datetime as _dt, timedelta as _td
-            order_end_dt = _dt.strptime(end_date, "%Y-%m-%d") + _td(days=ORDER_CHECK_EXTEND_DAYS)
-            order_date_range = f"{start_date} ~ {order_end_dt.strftime('%Y-%m-%d')}"
-
-            # 5. 生成 Excel
-            query_range = f"{start_date} ~ {end_date}"
-            excel_path, rows_data = generate_excel(
-                all_details, output_dir,
-                query_range=query_range,
-                timestamp_str=timestamp_str,
-            )
-
-            # 6. 生成 HTML 报表（不影响主流程）
-            try:
-                from generate_html_report import generate_html_report as _gen_html
-                html_path = os.path.join(output_dir, f"询价周报报表_{timestamp_str}.html")
-                _gen_html(rows_data, query_range, html_path)
-                logger.info("HTML 报表已生成: %s", html_path)
-            except Exception as html_e:
-                logger.warning("HTML 报表生成失败（不影响 Excel）: %s", html_e)
-
-        except KeyboardInterrupt:
-            logger.info("用户中断执行")
-            error_msg = "用户中断"
-            discarded = filter_result.skipped_invalid if filter_result else 0
-            print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded, order_count=order_api_total, order_date_range=order_date_range)
-            raise
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("执行异常: %s", e)
-            traceback.print_exc()
-        finally:
+    except KeyboardInterrupt:
+        logger.info("用户中断执行")
+        error_msg = "用户中断"
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        logger.error("执行异常: %s", e)
+        traceback.print_exc()
+    finally:
+        if context:
             try:
                 await context.close()
             except Exception as e:
                 logger.debug("浏览器上下文关闭时异常，忽略: %s", e)
+        if p:
+            try:
+                await p.stop()
+            except Exception:
+                pass
+
+    # HTML 报表生成（独立后处理，不依赖浏览器，在浏览器关闭后执行）
+    if rows_data is not None and excel_path is not None:
+        _generate_html_report(rows_data, f"{start_date} ~ {end_date}", output_dir, timestamp_str)
 
     discarded = filter_result.skipped_invalid if filter_result else 0
-    print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded, order_count=order_api_total, order_date_range=order_date_range)
+    print_summary(start_time, start_date, end_date, flow_ids, records, excel_path,
+                  error=error_msg, discarded=discarded,
+                  order_count=order_api_total, order_date_range=order_date_range)
 
 
 def stats_from_excel(args: argparse.Namespace) -> None:
@@ -362,10 +451,10 @@ def stats_from_excel(args: argparse.Namespace) -> None:
     # 按日期范围筛选
     filtered_rows: list = []
     for row in data_ws.iter_rows(min_row=2, values_only=True):
-        flow_id = str(row[0]) if row[0] else ""
-        if not re.match(r"^\d{15,}$", flow_id):
+        flow_id = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
+        if not re.match(FLOW_ID_PATTERN, flow_id):
             continue
-        submit_time = str(row[11]) if row[11] else ""
+        submit_time = str(row[COL_SUBMIT_TIME]) if row[COL_SUBMIT_TIME] else ""
         if submit_time not in ("--", "无", ""):
             date_match = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
             if date_match:
@@ -380,12 +469,12 @@ def stats_from_excel(args: argparse.Namespace) -> None:
     salesperson_set: set[str] = set()
 
     for row in filtered_rows:
-        ordered = str(row[13] if row[13] else "")
+        ordered = str(row[COL_ORDERED] if row[COL_ORDERED] else "")
         if ordered == STATUS_YES:
             ordered_count += 1
         else:
             not_ordered_count += 1
-        sp = str(row[5] if row[5] else "")
+        sp = str(row[COL_SALESPERSON] if row[COL_SALESPERSON] else "")
         if sp not in (STATUS_DASH, STATUS_NONE, ""):
             salesperson_set.add(sp)
 
@@ -471,6 +560,8 @@ def main() -> None:
     parser.add_argument("--this-month", action="store_true",
                         help="快捷统计本月（仅配合 --stats-only 使用），"
                              "等价于 --stats-only --date-label \"本月\"")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="预演模式：打印完整执行计划（日期范围、输出路径、参数）但不启动浏览器")
     args = parser.parse_args()
 
     configure_logging(args.verbose)
@@ -519,6 +610,28 @@ def main() -> None:
         except Exception as e:
             logger.error("日期标签解析失败 '%s': %s", args.date_label, e)
             sys.exit(1)
+
+    # ───── dry-run 模式：打印执行计划但不执行 ─────
+    if args.dry_run:
+        output_dir = args.output_dir or os.getcwd()
+        if args.start_date:
+            start_date = args.start_date
+            end_date = args.end_date or datetime.now().strftime("%Y-%m-%d")
+        else:
+            start_date, end_date = get_week_range(args.weeks)
+        query_range = f"{start_date} ~ {end_date}"
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        print("========== DRY RUN ==========")
+        print(f"  日期范围    {query_range}")
+        print(f"  输出目录    {output_dir}")
+        print(f"  并发数      {args.workers}")
+        print(f"  无头模式    {args.headless}")
+        print(f"  Excel路径   {output_dir}/询价汇总_{timestamp_str}.xlsx")
+        print(f"  HTML路径    {output_dir}/询价周报报表_{timestamp_str}.html")
+        print(f"  统计模式    {args.stats_only}")
+        print("==============================")
+        print("以上为执行计划，未启动浏览器。去掉 --dry-run 后重新运行以实际执行。")
+        sys.exit(0)
 
     if args.stats_only:
         stats_from_excel(args)
