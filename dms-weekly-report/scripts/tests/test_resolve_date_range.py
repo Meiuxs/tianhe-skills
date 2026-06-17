@@ -204,6 +204,69 @@ class TestResolveDateRange(unittest.TestCase):
         self.assertEqual(result["start"], "2026-06-01")
         self.assertEqual(result["end"], "2026-06-14")
 
+    # ─── 新功能：最近 N 天 / 近 N 天 / 过去 N 天 ───
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_days_arabic(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("最近20天")
+        self.assertEqual(result["start"], "2026-05-26")
+        self.assertEqual(result["end"], "2026-06-14")
+        self.assertEqual(result["label"], "最近20天")
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_days_chinese_numeral(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("最近二十天")
+        self.assertEqual(result["start"], "2026-05-26")
+        self.assertEqual(result["end"], "2026-06-14")
+        self.assertEqual(result["label"], "最近20天")
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_days_short_form(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("近3天")
+        self.assertEqual(result["start"], "2026-06-12")
+        self.assertEqual(result["end"], "2026-06-14")
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_days_past_form(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("过去七天")
+        self.assertEqual(result["start"], "2026-06-08")
+        self.assertEqual(result["end"], "2026-06-14")
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_days_ri_suffix(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("最近30日")
+        self.assertEqual(result["start"], "2026-05-16")
+        self.assertEqual(result["end"], "2026-06-14")
+
+    # ─── 新功能：最近 N 周 / 近 N 周 / 过去 N 周 ───
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_weeks_arabic(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("最近2周")
+        self.assertEqual(result["start"], "2026-06-01")
+        self.assertEqual(result["end"], "2026-06-14")
+        self.assertEqual(result["label"], "最近2周")
+
+    @patch("resolve_date_range.date")
+    def test_recent_n_weeks_chinese_numeral(self, mock_date):
+        mock_date.today.return_value = FIXED_TODAY
+        mock_date.side_effect = lambda *a, **k: date(*a, **k)
+        result = resolve_date_range("过去两周")
+        self.assertEqual(result["start"], "2026-06-01")
+        self.assertEqual(result["end"], "2026-06-14")
+
 
 if __name__ == "__main__":
     unittest.main()

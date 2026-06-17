@@ -12,6 +12,8 @@
   - 日期范围: YYYY-MM-DD ~ YYYY-MM-DD
   - 中文日期: 6月1号到6月7号, 6月十二号到现在
   - 相对月+日: 上个月12号, 上月十二号, 上个月12号至今
+  - 最近N天: 最近20天, 近3天, 过去七天（支持中文数字）
+  - 最近N周: 最近2周, 近两周, 过去三周
   - 单日期:   2026-06-01
 
 用法:
@@ -38,7 +40,7 @@ import _compat  # noqa: F401
 # ==================== 中文数字转换 ====================
 
 _CN_DIGITS = {
-    '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
+    '零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
     '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
 }
 _CN_TEN = '十'
@@ -300,6 +302,30 @@ def resolve_date_range(label: str) -> dict[str, str]:
                 return {"start": "", "end": "", "label": raw,
                         "range_str": f"❌ 日期无效：{e}"}
 
+    # ─── 最近 N 天 / 近 N 天 / 过去 N 天 ───
+    # 匹配: 最近20天, 最近二十天, 近3天, 近三天, 过去7天, 过去七天, 最近30日
+    m = re.match(
+        r'^(最近|近|过去)(\d{1,3}|[一二两三四五六七八九十百]+)[天日]$',
+        raw,
+    )
+    if m:
+        n = _cn_digit_to_int(m.group(2))
+        if n and 1 <= n <= 365:
+            sd = today - timedelta(days=n - 1)
+            return _make_result(sd, today, f"最近{n}天")
+
+    # ─── 最近 N 周 / 近 N 周 / 过去 N 周 ───
+    # 匹配: 最近2周, 近两周, 过去三周
+    m = re.match(
+        r'^(最近|近|过去)(\d{1,2}|[一二两三四五六七八九十]+)[周]$',
+        raw,
+    )
+    if m:
+        n = _cn_digit_to_int(m.group(2))
+        if n and 1 <= n <= 52:
+            sd = today - timedelta(weeks=n) + timedelta(days=1)
+            return _make_result(sd, today, f"最近{n}周")
+
     # ─── fallback ───
     return {"start": "", "end": "", "label": raw, "range_str": f"? {raw}"}
 
@@ -329,17 +355,16 @@ def main() -> None:
   本月10号到现在        → 本月10日 ~ 今天
   5月12号到现在         → 今年5月12日 ~ 今天
   六月一号到六月七号    → 今年6月1日 ~ 6月7号
+  最近20天              → 20天前 ~ 今天（支持中文数字：最近二十天）
+  近3天                 → 3天前 ~ 今天
+  过去两周              → 14天前 ~ 今天
 
 标准格式:
   YYYY-MM-DD ~ YYYY-MM-DD
   YYYY-MM-DD
 
 不支持的表述（需转换）:
-  "最近一周" → 用 "本周"
-  "最近一个月" → 用 "本月"
-  "近3天" → 用 --start-date/--end-date 指定具体日期
-  "上上周" → 用 --weeks 2
-  "过去两周" → 用 --start-date/--end-date 指定
+  "上上周" → 用 "最近两周" 或 --start-date/--end-date 指定
 """,
     )
     parser.add_argument("label", nargs="*", help="时段标签（如 本周，本月，上周，上个月12号到现在）")
