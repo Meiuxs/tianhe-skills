@@ -37,25 +37,28 @@ from column_definitions import (
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
+    FLOW_ID_PATTERN,
 )
 class RowDetail(TypedDict):
-    """单条询价数据行的类型定义，对应前端 ROWS_DETAIL 数组元素。"""
-    fid: str
-    project_name: str
+    """单条询价数据行的类型定义，对应前端 ROWS_DETAIL 数组元素。
+
+    注意：实际输出使用 camelCase 键（与前端 JS 保持一致），
+    此处 TypedDict 也使用 camelCase 以匹配实际数据。
+    """
+    flowId: str
+    projectName: str
     province: str
     salesperson: str
-    module_kw: float
-    inverter_kw: float
-    battery_kwh: float
-    submit_time: str
-    ordered: bool
-    province_processor: str
-    province_status: str
-    purchase_processor: str
-    purchase_status: str
-    final_time: str
-    has_province_approval: bool
-    has_purchase_approval: bool
+    modulePower: float
+    inverterPower: float
+    batteryCapacity: float
+    ordered: str
+    submitDate: str
+    finalDate: str
+    procurementApprover: str
+    procurementStatus: str
+    provinceApprover: str
+    provinceStatus: str
 
 
 
@@ -156,7 +159,7 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
                 continue
         else:
             fid = str(raw_fid)
-        if not re.match(r"^\d{15,}$", fid):
+        if not re.match(FLOW_ID_PATTERN, fid):
             continue
         submit_time = _format_datetime(row[COL_SUBMIT_TIME])
         final_raw = _format_datetime(row[COL_FINAL_APPROVAL_TIME])

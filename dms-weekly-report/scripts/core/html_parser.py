@@ -116,12 +116,12 @@ async def extract_bom(page: Page, api_detail_data: dict | None = None) -> list:
                 if await body_table.count() == 0:
                     body_table = table.locator("xpath=./following::table[.//tbody][1]")
                 if await body_table.count() > 0:
-                        body_text = (await body_table.text_content()) or ""
-                        table_fingerprint = body_text.strip()[:200]
-                        if table_fingerprint in processed_tables:
-                            continue
-                        processed_tables.add(table_fingerprint)
-                        for row in await body_table.locator("tbody tr").all():
+                    body_text = (await body_table.text_content()) or ""
+                    table_fingerprint = body_text.strip()[:200]
+                    if table_fingerprint in processed_tables:
+                        continue
+                    processed_tables.add(table_fingerprint)
+                    for row in await body_table.locator("tbody tr").all():
                             cells = await row.locator("td").all()
                             if len(cells) >= 4:
                                 code = ((await cells[0].text_content()) or "").strip().strip('"')

@@ -190,11 +190,12 @@ async def check_orders_parallel(
     """
     logger.info("下单检查 %d 条（API 批量模式）...", len(records))
 
-    ordered_ids = await fetch_ordered_flow_ids(context, start_date, end_date)
+    ordered_ids, _ = await fetch_ordered_flow_ids(context, start_date, end_date)
+    ordered_set = ordered_ids  # fetch_ordered_flow_ids 返回 (set[str], int)
 
     for record in records:
         flow_id = getattr(record, "flow_id", "")
-        record.ordered = "是" if flow_id in ordered_ids else "否"
+        record.ordered = "是" if flow_id in ordered_set else "否"
 
     ordered_count = sum(1 for r in records if r.ordered == "是")
     logger.info("下单检查完成：%d 条已下单，%d 条未下单", ordered_count, len(records) - ordered_count)

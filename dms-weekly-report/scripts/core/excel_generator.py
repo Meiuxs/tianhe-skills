@@ -18,8 +18,19 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import Border, Font, PatternFill, Side
 
-from column_definitions import HEADERS, accumulate_power
+from column_definitions import (
+    HEADERS, accumulate_power,
+    COL_FLOW_ID, COL_PROJECT_NAME, COL_AGENT_CODE, COL_AGENT_NAME,
+    COL_PROVINCE, COL_SALESPERSON,
+    COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
+    COL_UNIT_PRICE, COL_TOTAL_PRICE,
+    COL_SUBMIT_TIME, COL_REMARK, COL_ORDERED,
+    COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
+    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
+    COL_FINAL_APPROVAL_TIME,
+)
 from excel_styles import COLUMN_WIDTHS
+from column_definitions import FLOW_ID_PATTERN  # noqa: E402 — 流程编号正则常量
 from excel_styles import (
     Colors,
     THIN_BORDER, BOTTOM_BORDER, CARD_BORDER,
@@ -32,6 +43,8 @@ from excel_styles import (
     apply_header_style, apply_data_row, apply_accent_row, apply_status_cell,
     write_section_title, write_kpi_card,
 )
+
+EXCEL_SERIAL_OFFSET = 693594  # Excel epoch (1899-12-30) to Gregorian ordinal baseline
 
 logger = logging.getLogger("dms_report")
 
@@ -151,7 +164,7 @@ def _deduplicate_rows(wb: openpyxl.Workbook, rows_data: list[list[Any]]) -> list
     ws = wb.active
     existing_ids: set[str] = set()
     for row in ws.iter_rows(min_row=2, max_col=1, values_only=True):
-        if row[0] and re.match(r"^\d{15,}$", str(row[0])):
+        if row[0] and re.match(FLOW_ID_PATTERN, str(row[0])):
             existing_ids.add(str(row[0]))
 
     new_rows = [r for r in rows_data if str(r[0]) not in existing_ids]
@@ -173,7 +186,7 @@ def _fill_date_helper_column(ws: Any) -> None:
             date_match = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(l_val))
             if date_match:
                 y, m, d = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
-                excel_serial = dt_date(y, m, d).toordinal() - 693594
+                excel_serial = dt_date(y, m, d).toordinal() - EXCEL_SERIAL_OFFSET
                 ws.cell(row=r, column=20, value=excel_serial)
     # 隐藏辅助列 T
     ws.column_dimensions["T"].hidden = True
@@ -206,17 +219,17 @@ def _update_summary_sheet(
     source_rows = filtered_rows if filtered_rows is not None else data_ws.iter_rows(min_row=2, values_only=True)
 
     for row in source_rows:
-        flow_id = str(row[0]) if row[0] else ""
+        flow_id = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
         if not re.match(r"^\d{15,}$", flow_id):
             continue
         total_projects += 1
         valid_rows.append(row)
-        ordered = str(row[13] if row[13] else "")
+        ordered = str(row[COL_ORDERED] if row[COL_ORDERED] else "")
         if ordered == "是":
             ordered_count += 1
         else:
             not_ordered_count += 1
-        sp = str(row[5] if row[5] else "")
+        sp = str(row[COL_SALESPERSON] if row[COL_SALESPERSON] else "")
         if sp not in ("--", "无", ""):
             salesperson_set.add(sp)
 
@@ -293,7 +306,7 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
         rows_data.append(row)
 
     def excel_serial(d: dt_date) -> int:
-        return d.toordinal() - 693594
+        return d.toordinal() - EXCEL_SERIAL_OFFSET
 
     def parse_date(l_val: Any) -> int | None:
         if l_val:
@@ -326,19 +339,17 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
         inv = 0.0
         bat = 0.0
         for row in rows_data:
-            fid = str(row[0]) if row[0] else ""
-            if not re.match(r"^\d{15,}$", fid):
+            fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
+            if not re.match(FLOW_ID_PATTERN, fid):
                 continue
-            o = parse_date(row[11] if len(row) > 11 else None)
-            if o is None or o < s or o > e:
-                continue
+            o = parse_date(row[COL_SUBMIT_TIME] if len(row) > COL_SUBMIT_TIME else None)
             cnt += 1
-            if len(row) > 6 and isinstance(row[6], (int, float)):
-                mod += float(row[6])
-            if len(row) > 7 and isinstance(row[7], (int, float)):
-                inv += float(row[7])
-            if len(row) > 8 and isinstance(row[8], (int, float)):
-                bat += float(row[8])
+            if len(row) > COL_MODULE_KW and isinstance(row[COL_MODULE_KW], (int, float)):
+                mod += float(row[COL_MODULE_KW])
+            if len(row) > COL_INVERTER_KW and isinstance(row[COL_INVERTER_KW], (int, float)):
+                inv += float(row[COL_INVERTER_KW])
+            if len(row) > COL_BATTERY_KWH and isinstance(row[COL_BATTERY_KWH], (int, float)):
+                bat += float(row[COL_BATTERY_KWH])
         ratio = round(mod / inv, 2) if inv > 0 else 0
         stats[name] = [cnt, round(mod, 2), round(inv, 2), round(bat, 2), ratio]
 
@@ -492,11 +503,11 @@ def _create_report_dashboard(wb: Any) -> None:
     wangjian_count = 0
     wangjian_total = 0
     for row in rows_data:
-        fid = str(row[0]) if row[0] else ""
-        if not re.match(r"^\d{15,}$", fid):
+        fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
+        if not re.match(FLOW_ID_PATTERN, fid):
             continue
-        proc = str(row[16] if len(row) > 16 and row[16] else "")
-        status_val = str(row[17] if len(row) > 17 and row[17] else "")
+        proc = str(row[COL_PURCHASE_PROCESSOR] if len(row) > COL_PURCHASE_PROCESSOR and row[COL_PURCHASE_PROCESSOR] else "")
+        status_val = str(row[COL_PURCHASE_STATUS] if len(row) > COL_PURCHASE_STATUS and row[COL_PURCHASE_STATUS] else "")
         if "王剑" in proc:
             wangjian_total += 1
             if "审批通过" in status_val:
@@ -519,13 +530,13 @@ def _create_report_dashboard(wb: Any) -> None:
 
     province_stats: dict[str, dict[str, Any]] = {}
     for row in rows_data:
-        fid = str(row[0]) if row[0] else ""
-        if not re.match(r"^\d{15,}$", fid):
+        fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
+        if not re.match(FLOW_ID_PATTERN, fid):
             continue
-        pv = str(row[4] if len(row) > 4 and row[4] else "")
+        pv = str(row[COL_PROVINCE] if len(row) > COL_PROVINCE and row[COL_PROVINCE] else "")
         if pv in ("--", "无", ""):
             continue
-        g = float(row[6]) if len(row) > 6 and isinstance(row[6], (int, float)) else 0
+        g = float(row[COL_MODULE_KW]) if len(row) > COL_MODULE_KW and isinstance(row[COL_MODULE_KW], (int, float)) else 0
         if pv not in province_stats:
             province_stats[pv] = {"cnt": 0, "module": 0.0}
         province_stats[pv]["cnt"] += 1
@@ -551,11 +562,11 @@ def _create_report_dashboard(wb: Any) -> None:
 
     days_list: list[int] = []
     for row in rows_data:
-        fid = str(row[0]) if row[0] else ""
-        if not re.match(r"^\d{15,}$", fid):
+        fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
+        if not re.match(FLOW_ID_PATTERN, fid):
             continue
-        submit_time = str(row[11] if len(row) > 11 and row[11] else "")
-        final_time = str(row[18] if len(row) > 18 and row[18] else "")
+        submit_time = str(row[COL_SUBMIT_TIME] if len(row) > COL_SUBMIT_TIME and row[COL_SUBMIT_TIME] else "")
+        final_time = str(row[COL_FINAL_APPROVAL_TIME] if len(row) > COL_FINAL_APPROVAL_TIME and row[COL_FINAL_APPROVAL_TIME] else "")
         if submit_time in ("--", "") or final_time in ("--", ""):
             continue
         sm = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
