@@ -88,9 +88,9 @@ python "$SKILL_DIR/scripts/check_environment.py" --quick
 
 ### 步骤 1：解析日期范围（仅非标表述时执行）
 
-**标准关键词无需预解析：** `run_weekly_report.py` 已内置 `--date-label` 参数，会自动调用 `resolve_date_range.py` 解析。标准关键词（本周/上周/本月/上月/本季度/上季度/今年/去年）直接在步骤 2 中使用 `--date-label` 即可。
+**标准关键词无需预解析：** `run_weekly_report.py` 已内置 `--date-label` 参数，会自动调用 `resolve_date_range.py` 解析。标准关键词（本周/上周/本月/上月/本季度/上季度/今年/去年）以及"最近N天/周"（如"最近20天""近两周"）直接在步骤 2 中使用 `--date-label` 即可。
 
-**仅当用户说了非标表述（如"最近一周""近3天""上个月12号到现在"）时执行本步骤**，确认转换结果：
+**仅当用户说了脚本无法解析的非标表述时执行本步骤**，手动确认后传入日期：
 
 ```bash
 python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月12号到现在" --json
@@ -103,6 +103,8 @@ python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月12号到现在" --js
 | 类型 | 示例 |
 |------|------|
 | 标准关键词 | 本周、上周、本月、上月、本季度、上季度、今年、去年 |
+| 相对天数 | 最近20天、近3天、过去七天、最近三十日（支持中文数字和"两"） |
+| 相对周数 | 最近2周、近两周、过去三周 |
 | 相对月+日 | 上个月12号到现在、本月10号、上月至今 |
 | 中文日期范围 | 6月1号到6月7号、六月一号到六月七号 |
 | 标准日期 | 2026-06-01 ~ 2026-06-07 |
@@ -134,6 +136,8 @@ python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-
 | 本季度数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "本季度" --headless` |
 | 今年数据 | `python "$SCRIPT" --output-dir "$PWD" --date-label "今年" --headless` |
 | 自定义日期 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless` |
+| 最近N天 | `python "$SCRIPT" --output-dir "$PWD" --date-label "最近20天" --headless` |
+| 最近N周 | `python "$SCRIPT" --output-dir "$PWD" --date-label "最近两周" --headless` |
 | 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --date-label "本月"` |
 
 ---
@@ -151,18 +155,31 @@ python "$SKILL_DIR/scripts/run_weekly_report.py" --output-dir "$PWD" --date-labe
 
 > **提示：** `--output-dir` 建议用当前工作目录。bash/zsh 用 `"$PWD"`，PowerShell 用 `"$(Get-Location)"`，或直接省略（默认当前目录）。
 
-### 步骤 3：呈现结果	
+### 步骤 3：呈现结果
 
-脚本执行后会在终端打印摘要并生成 Excel，直接向用户报告：
+脚本执行后会在终端打印摘要并生成 Excel，直接向用户报告。
+
+**标准呈现格式（推荐）：**
 
 ```
 ✅ 周报生成完成！
-📊 查询范围：2026-06-01 ~ 2026-06-06
-📝 共 12 条有效询价记录（另有 5 条作废流程）
-🟢 已下单 5 条 | 🔴 未下单 7 条
-📎 Excel文件已保存到：{output_dir}/询价汇总_{时间戳}.xlsx
-📎 HTML 报表已保存到：{output_dir}/询价周报报表_{时间戳}.html
+
+📊 查询范围：{start_date} ~ {end_date}
+📁 输出文件：询价汇总_{时间戳}.xlsx
+
+| 指标 | 数值 |
+|------|------|
+| 有效询价 | {有效数} 条 |
+| 作废流程 | {作废数} 条 |
+| 已下单 | {已下单数} 条 🟢 |
+| 未下单 | {未下单数} 条 🔴 |
+| 下单率 | {下单率}% |
+
+📎 Excel：{output_dir}/询价汇总_{时间戳}.xlsx
+📎 HTML：{output_dir}/询价周报报表_{时间戳}.html
 ```
+
+> **说明：** 下单率 = 已下单数 / 有效询价数。若数据为 0 或明显偏少，主动提示用户确认日期范围是否合理。
 
 ### 步骤 3 附：错误恢复决策树
 
