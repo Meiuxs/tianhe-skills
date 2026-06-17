@@ -19,24 +19,25 @@ class BOMItem:
     unit: str
 
 
+_RE_POWER_UNDERSCORE = re.compile(r"_(\d+(?:\.\d+)?)_?([kK]?[Ww])\s*_")
+_RE_POWER_FALLBACK = re.compile(r"(\d+(?:\.\d+)?)\s*(k?W)(?![a-zA-Z])", re.IGNORECASE)
+_RE_CAPACITY_UNDERSCORE = re.compile(r"_(\d+(?:\.\d+)?)_?([kK]?[Ww][Hh])\s*_")
+_RE_CAPACITY_FALLBACK = re.compile(r"(\d+(?:\.\d+)?)\s*(k?Wh)(?![a-zA-Z])", re.IGNORECASE)
+
+
 def extract_power(name: str) -> float | None:
     """从物料名称中提取功率（kW）。"""
     if not name:
         return None
 
-    # 下划线包裹格式: _550kW_ 或 _50_kW_ 或 _50000_W_（先排除 kWh 误匹配）
-    m = re.search(r"_(\d+(?:\.\d+)?)_?([kK]?[Ww])\s*_", name)
+    m = _RE_POWER_UNDERSCORE.search(name)
     if m:
-        # 如果匹配到 W 但后面跟着 H（如 Wh），不是功率，跳过
         unit_lower = m.group(2).lower()
         if unit_lower == "w" or unit_lower == "kw":
             val = float(m.group(1))
             return val / 1000 if unit_lower == "w" else val
 
-    # 回退：匹配任意位置的 kW 或 W
-    # 注意：不能用 \b 结尾，因为 _ 在正则中属于 \w（单词字符），
-    # 逆变器名称如 "110kW_9路" 中 kW 后跟 _ 时 \b 不匹配。
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?W)(?![a-zA-Z])", name, re.IGNORECASE)
+    m = _RE_POWER_FALLBACK.search(name)
     if m and "h" not in m.group(2).lower():
         val = float(m.group(1))
         return val / 1000 if m.group(2).lower() == "w" else val
@@ -49,15 +50,12 @@ def extract_capacity(name: str) -> float | None:
     if not name:
         return None
 
-    # 下划线包裹格式: _9.8kWh_ 或 _9.8_kWh_ 或 _9800_Wh_
-    m = re.search(r"_(\d+(?:\.\d+)?)_?([kK]?[Ww][Hh])\s*_", name)
+    m = _RE_CAPACITY_UNDERSCORE.search(name)
     if m:
         val = float(m.group(1))
         return val / 1000 if m.group(2).lower() == "wh" else val
 
-    # 回退：匹配任意位置的 kWh 或 Wh
-    # 注意：不能用 \b 结尾，因为 _ 在正则中属于 \w（单词字符）
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(k?Wh)(?![a-zA-Z])", name, re.IGNORECASE)
+    m = _RE_CAPACITY_FALLBACK.search(name)
     if m:
         val = float(m.group(1))
         return val / 1000 if m.group(2).lower() == "wh" else val
