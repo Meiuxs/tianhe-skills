@@ -97,8 +97,9 @@ if sys.platform == 'win32':
                     errors='backslashreplace'
                 ))
     # 修复 stdin —— 确保 input() 能正确读取中文输入
+    # 仅对交互式终端（TTY）重包装；管道/重定向场景跳过，避免断开管道
     stream = getattr(sys, 'stdin', None)
-    if stream and hasattr(stream, 'buffer'):
+    if stream and hasattr(stream, 'buffer') and stream.isatty():
         encoding = stream.encoding or ''
         if encoding.upper() not in ('UTF-8', 'UTF8'):
             setattr(sys, 'stdin', io.TextIOWrapper(

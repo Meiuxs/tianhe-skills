@@ -34,10 +34,10 @@ from __future__ import annotations
 
 import _compat  # noqa: F401 — 必须最先导入，修复 Windows 中文乱码
 
-# PowerShell error stream 用 cp936 解码导致乱码，统一走 stdout
+# 注意：不要将 sys.stderr 重定向到 sys.stdout（模块顶层全局副作用）。
+# 原有逻辑是为了规避 PowerShell cp936 解码乱码，现改为在 print_results()
+# 中显式指定 file=sys.stderr，既保留 stderr 分流能力，又避免全局副作用。
 import sys
-sys.stderr = sys.stdout
-
 import argparse
 import json
 import os
@@ -165,135 +165,44 @@ def check_packages() -> CheckResult:
 def check_chromium() -> CheckResult:
     """检查 Playwright Chromium 浏览器是否已安装。
 
-    跨平台路径检测，不启动 Playwright 引擎（轻量级）。
-    同时检查 chromium 和 chromium_headless_shell 两个变体。
-    launch_persistent_context 在 Windows 上无论 headless 参数如何都需要 headless-shell。
+    统一入口：复用 dms_credentials 中的 check_chromium() 实现，
+    将 bool 结果转换为 CheckResult。
     """
-    import glob
-
-    home = os.path.expanduser("~")
-    system = platform.system()
-
-    # 两个变体都要检查
-    variant_patterns: dict[str, list[str]] = {
-        "chromium": [],
-        "chromium_headless_shell": [],
-    }
-
-    if system == "Windows":
-        pw_dir = os.path.join(home, "AppData", "Local", "ms-playwright")
-        variant_patterns["chromium"] = [
-            os.path.join(pw_dir, "chromium-*", "chrome-win*", "chrome.exe"),
-        ]
-        variant_patterns["chromium_headless_shell"] = [
-            os.path.join(pw_dir, "chromium_headless_shell-*", "chrome-win", "headless_shell.exe"),
-        ]
-    elif system == "Darwin":
-        pw_dir = os.path.join(home, "Library", "Caches", "ms-playwright")
-        variant_patterns["chromium"] = [
-            os.path.join(pw_dir, "chromium-*", "chrome-mac", "Chromium"),
-        ]
-        variant_patterns["chromium_headless_shell"] = [
-            os.path.join(pw_dir, "chromium_headless_shell-*", "chrome-mac", "headless_shell"),
-        ]
-    elif system == "Linux":
-        pw_dir = os.path.join(home, ".cache", "ms-playwright")
-        variant_patterns["chromium"] = [
-            os.path.join(pw_dir, "chromium-*", "chrome-linux", "chrome"),
-        ]
-        variant_patterns["chromium_headless_shell"] = [
-            os.path.join(pw_dir, "chromium_headless_shell-*", "chrome-linux", "headless_shell"),
-        ]
-
-    found_chromium = any(glob.glob(p) for p in variant_patterns["chromium"])
-    found_headless = any(glob.glob(p) for p in variant_patterns["chromium_headless_shell"])
-
-    if found_chromium and found_headless:
-        return CheckResult(
-            name="chromium",
-            passed=True,
-            message=f"Chromium + headless-shell 已安装 ({pw_dir})",
-            details={"platform": system, "chromium": True, "headless_shell": True},
-        )
-
-    _MIRROR_HINT = (
-        "set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
-        f" && {sys.executable} -m playwright install chromium"
-    )
-
-    if found_chromium and not found_headless:
-        return CheckResult(
-            name="chromium",
-            passed=False,
-            message=f"Chromium 已安装但 headless-shell 缺失，安装目录: {pw_dir}",
-            fix_hint=_MIRROR_HINT,
-            details={"platform": system, "chromium": True, "headless_shell": False},
-        )
-
-    # 检查目录是否存在但浏览器未下载
-    if os.path.isdir(pw_dir):
-        return CheckResult(
-            name="chromium",
-            passed=False,
-            message=f"Playwright 目录已存在但浏览器未下载: {pw_dir}",
-            fix_hint=_MIRROR_HINT,
-            details={"platform": system, "chromium": False, "headless_shell": False},
-        )
-
-    return CheckResult(
-        name="chromium",
-        passed=False,
-        message=f"Playwright Chromium 未安装，预期目录: {pw_dir}",
-        fix_hint=_MIRROR_HINT,
-        details={"platform": system, "chromium": False, "headless_shell": False},
-    )
-
-
-def check_chromium_v2() -> CheckResult:
-    """检查 Playwright Chromium —— 使用 dms_credentials 中的实现。
-
-    如果 dms_credentials 模块可用，复用其 check_chromium()；
-    否则回退到本地 glob 检测。
-    """
-    home = os.path.expanduser("~")
-    system = platform.system()
-    if system == "Windows":
-        pw_dir = os.path.join(home, "AppData", "Local", "ms-playwright")
-    elif system == "Darwin":
-        pw_dir = os.path.join(home, "Library", "Caches", "ms-playwright")
-    else:
-        pw_dir = os.path.join(home, ".cache", "ms-playwright")
-
     try:
         from dms_credentials import check_chromium as _check
         ok = _check()
+        # 构造与 dms_credentials 实现一致的修复提示
+        _MIRROR_HINT = (
+            "set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
+            f" && {sys.executable} -m playwright install chromium"
+        )
         if ok:
             return CheckResult(
                 name="chromium",
                 passed=True,
-                message=f"Chromium 已安装 ({pw_dir})",
-            )
-        if os.path.isdir(pw_dir):
-            return CheckResult(
-                name="chromium",
-                passed=False,
-                message=f"Playwright 目录已存在但浏览器未下载: {pw_dir}",
-                fix_hint=(
-                    "set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
-                    f" && {sys.executable} -m playwright install chromium"
-                ),
+                message="Chromium + headless-shell 已安装",
             )
         return CheckResult(
             name="chromium",
             passed=False,
-            message=f"Playwright Chromium 未安装，预期目录: {pw_dir}",
+            message="Chromium 未安装或 headless-shell 缺失",
+            fix_hint=_MIRROR_HINT,
+        )
+    except ImportError:
+        # dms_credentials 不可用时，给予通用提示
+        return CheckResult(
+            name="chromium",
+            passed=False,
+            message="无法检查 Chromium（dms_credentials 模块不可用）",
             fix_hint=(
                 "set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright"
                 f" && {sys.executable} -m playwright install chromium"
             ),
         )
-    except ImportError:
-        return check_chromium()
+
+
+# 保留 check_chromium_v2 作为别名，兼容已有调用
+check_chromium_v2 = check_chromium
 
 
 def check_credentials() -> CheckResult:
