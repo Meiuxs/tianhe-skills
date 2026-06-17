@@ -54,7 +54,7 @@ COL_FINAL_APPROVAL_TIME = HEADERS.index("审批完成时间")  # 18
 # ==================== Playwright 超时配置 ====================
 
 NAV_TIMEOUT = 30_000       # 页面导航超时（ms）
-LOAD_TIMEOUT = 30_000      # networkidle 等待超时（ms）
+LOAD_TIMEOUT = 15_000      # networkidle 等待超时（ms）
 WAIT_SHORT = 1000          # 短等待，用于 DOM 渲染后稳定（ms）
 WAIT_MEDIUM = 2000         # 中等等待，用于分页/查询后数据加载（ms）
 
@@ -76,10 +76,11 @@ API_FILTER_PAGE_SIZE = 500   # API 筛选每页条数，增大以减少请求次
 # API 端点
 DMS_API_BASE = "https://apigw.trinablue.com"
 DMS_FLOW_LIST_API = f"{DMS_API_BASE}/dms-admin/newFlow/newFlowList"
+DMS_FLOW_DETAILS_API = f"{DMS_API_BASE}/dms-admin/newFlow/flowDetails"
 
 # ==================== 下单检查配置 ====================
 
-ORDER_CHECK_EXTEND_DAYS = 31  # 下单检查日期范围扩展天数（覆盖审批周期）
+ORDER_CHECK_EXTEND_DAYS = 14  # 下单检查日期范围扩展天数（覆盖审批周期）
 
 # ==================== 功率累加函数 ====================
 
