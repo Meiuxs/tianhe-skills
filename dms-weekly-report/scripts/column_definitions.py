@@ -124,3 +124,8 @@ STATUS_NO = "否"
 STATUS_NONE = "无"
 STATUS_DASH = "--"
 SHEET_DATA = "询价汇总"
+
+# ==================== 魔法数字常量 ====================
+FLOW_ID_MIN_LEN = 15  # 流程编号最小长度（15 位数字）
+FLOW_ID_PATTERN = r"^\d{15,}$"  # 流程编号正则（15 位及以上数字）
+EXCEL_SERIAL_OFFSET = 693594  # Excel 日期序列号偏移量（1899-12-30 以来的天数）

@@ -25,6 +25,7 @@ from column_definitions import (
     MAX_RETRIES, RETRY_BASE_DELAY,
     TARGET_FLOW_TYPE, FILTER_PAGE_SIZE, API_FILTER_PAGE_SIZE,
     DMS_FLOW_LIST_API,
+    FLOW_ID_PATTERN,
 )
 from dms_credentials import get_credentials as _get_dms_credentials, source_label
 from playwright.async_api import (
@@ -38,6 +39,7 @@ from core import filtering as _filtering_mod
 from core import html_parser as _html_parser_mod
 from core import api_parser as _api_parser_mod
 from core import detail_extractor as _detail_extractor_mod
+from core._utils import retry_async  # 从独立模块导入，避免循环依赖
 
 logger = logging.getLogger("dms_report")
 
@@ -132,39 +134,6 @@ class TableProcessResult:
         return True
 
 
-# ==================== 重试装饰器 ====================
-
-
-def retry_async(max_retries: int = MAX_RETRIES, base_delay: float = RETRY_BASE_DELAY):
-    """异步函数重试装饰器，指数退避。
-
-    仅重试以下可恢复异常:
-      - PlaywrightTimeout: 网络/页面加载超时
-      - OSError: 连接断开、DNS 解析失败等网络层错误
-      - asyncio.TimeoutError: asyncio 原生超时
-    """
-    def decorator(func):
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            last_exc = None
-            for attempt in range(1, max_retries + 1):
-                try:
-                    return await func(*args, **kwargs)
-                except (PlaywrightTimeout, OSError, asyncio.TimeoutError) as e:
-                    last_exc = e
-                    if attempt < max_retries:
-                        delay = base_delay * (2 ** (attempt - 1))
-                        logger.warning("%s 第 %d/%d 次失败: %s，%.1fs 后重试",
-                                       func.__name__, attempt, max_retries, e, delay)
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.error("%s 重试 %d 次后仍失败: %s",
-                                     func.__name__, max_retries, e)
-            raise last_exc
-        return wrapper
-    return decorator
-
-
 # ==================== 工具函数 ====================
 
 
@@ -233,14 +202,19 @@ async def get_access_token(context: BrowserContext) -> str | None:
     return None
 
 # 模块级 token 缓存，避免每次 API 请求都重新读取 cookie
+# 带 TTL：token 缓存超过 TTL 后自动刷新，避免 token 过期后仍使用旧值
 _cached_token: str | None = None
+_cached_token_time: float = 0.0  # asyncio.get_event_loop().time() 时间戳
+_TOKEN_CACHE_TTL = 300  # token 缓存 TTL（秒），5 分钟
 
 
 async def _get_api_headers(context: BrowserContext) -> dict[str, str] | None:
-    """获取 API 请求的 Authorization header（带缓存）。"""
-    global _cached_token
-    if _cached_token is None:
+    """获取 API 请求的 Authorization header（带缓存 + TTL）。"""
+    global _cached_token, _cached_token_time
+    now = asyncio.get_event_loop().time()
+    if _cached_token is None or (now - _cached_token_time) > _TOKEN_CACHE_TTL:
         _cached_token = await get_access_token(context)
+        _cached_token_time = now
     if _cached_token:
         return {"Authorization": f"bearer {_cached_token}"}
     return None
@@ -314,7 +288,7 @@ async def filter_and_get_flow_ids_via_api(
             status_name = str(row.get("statusName") or "")
 
             # 流程编号校验
-            if not re.match(r"^\d{15,}$", flow_id):
+            if not re.match(FLOW_ID_PATTERN, flow_id):
                 continue
 
             # 流程类型校验（通过 flowName 匹配）

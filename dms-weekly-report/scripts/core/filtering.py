@@ -20,46 +20,25 @@ from playwright.async_api import Page
 
 logger = logging.getLogger("dms_report")
 
-_session_logged_in = False
+# 从独立工具模块导入 retry_async（避免与 dms_browser 循环依赖）
+from core._utils import retry_async
+
+# 导入流程编号正则常量
+from column_definitions import FLOW_ID_PATTERN
 
 
-def _retry_async_simple(max_retries: int = 2, base_delay: float = 1.0):
-    """轻量级重试装饰器（避免从 dms_browser 导入 retry_async 导致循环依赖）。"""
-    from playwright.async_api import TimeoutError as PlaywrightTimeout
-
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            import asyncio
-            last_exc = None
-            for attempt in range(1, max_retries + 1):
-                try:
-                    return await func(*args, **kwargs)
-                except (PlaywrightTimeout, OSError, asyncio.TimeoutError) as e:
-                    last_exc = e
-                    if attempt < max_retries:
-                        delay = base_delay * (2 ** (attempt - 1))
-                        logger.warning("%s 第 %d/%d 次失败: %s，%.1fs 后重试",
-                                       func.__name__, attempt, max_retries, e, delay)
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.error("%s 重试 %d 次后仍失败: %s",
-                                     func.__name__, max_retries, e)
-            raise last_exc
-        return wrapper
-    return decorator
-
-
-@_retry_async_simple(max_retries=2)
+@retry_async(max_retries=2)
 async def _navigate_to_process_center(page: Page) -> None:
-    """导航到流程中心页面，处理登录重定向。"""
-    global _session_logged_in
+    """导航到流程中心页面，处理登录重定向。
+
+    每次实际检查页面 URL 状态，不依赖模块级全局标志。
+    """
     from core.dms_browser import is_on_login_page, do_login
 
     target = f"{DMS_URL}/#/process/process_center"
-    if not _session_logged_in and is_on_login_page(page.url):
+    # 每次都检查当前 URL，而非依赖缓存的登录状态
+    if is_on_login_page(page.url):
         await do_login(page)
-        _session_logged_in = True
     if page.url != target:
         await page.goto(target, timeout=NAV_TIMEOUT)
     await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
@@ -90,7 +69,7 @@ async def _process_table_rows(
         cell_texts = [t.strip().strip('"') for t in cell_texts]
         flow_text = cell_texts[0] if cell_texts else ""
 
-        if not re.match(r"^\d{15,}$", flow_text):
+        if not re.match(FLOW_ID_PATTERN, flow_text):
             logger.debug("跳过非数字流程编号: %s", flow_text)
             continue
 
