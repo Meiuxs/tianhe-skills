@@ -130,13 +130,19 @@ def apply_header_style(ws: Any, row: int, headers: list[str], start_col: int = 1
         cell.alignment = ALIGN_HEADER
 
 
-def apply_data_row(ws: Any, row: int, values: list, start_col: int = 1, is_alt: bool = False) -> None:
-    """给数据行应用标准样式，无背景色，全部居中。"""
-    for col, val in enumerate(values, start_col):
-        cell = ws.cell(row=row, column=col, value=val)
+def apply_data_row(ws: Any, row: int, values: list, start_col: int = 1,
+                   is_alt: bool = False,
+                   left_align_cols: tuple[int, ...] | None = None) -> None:
+    """给数据行应用标准样式。
+
+    Args:
+        left_align_cols: 需要左对齐的 0-based 列索引元组（如项目名称、代理商名称等长文本列）。
+    """
+    for col_i, val in enumerate(values):
+        cell = ws.cell(row=row, column=start_col + col_i, value=val)
         cell.font = FONT_DATA
         cell.border = THIN_BORDER
-        cell.alignment = ALIGN_CENTER
+        cell.alignment = ALIGN_DATA_LEFT if (left_align_cols and col_i in left_align_cols) else ALIGN_CENTER
         cell.fill = FILL_WHITE
 
 

@@ -98,21 +98,18 @@ def accumulate_power(rows, cols=None):
     if cols is None:
         cols = (COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH)
     col_mk, col_ik, col_bk = cols
-    total_mk = total_ik = total_bk = 0.0
+    totals = [0.0, 0.0, 0.0]  # [mk, ik, bk]
     for row in rows:
-        for val, acc in [(row[col_mk], 'mk'), (row[col_ik], 'ik'), (row[col_bk], 'bk')]:
-            if val not in ("无", "--", None, ""):
+        for idx, col in enumerate((col_mk, col_ik, col_bk)):
+            val = row[col]
+            if isinstance(val, (int, float)):
+                totals[idx] += float(val)
+            elif isinstance(val, str) and val not in ("无", "--", ""):
                 try:
-                    v = float(val)
-                    if acc == 'mk':
-                        total_mk += v
-                    elif acc == 'ik':
-                        total_ik += v
-                    else:
-                        total_bk += v
-                except (ValueError, TypeError):
+                    totals[idx] += float(val)
+                except ValueError:
                     pass
-    return total_mk, total_ik, total_bk
+    return totals[0], totals[1], totals[2]
 
 
 # ==================== 状态常量 ====================
