@@ -20,6 +20,8 @@ from playwright.async_api import Page
 
 logger = logging.getLogger("dms_report")
 
+_session_logged_in = False
+
 
 def _retry_async_simple(max_retries: int = 2, base_delay: float = 1.0):
     """轻量级重试装饰器（避免从 dms_browser 导入 retry_async 导致循环依赖）。"""
@@ -51,11 +53,13 @@ def _retry_async_simple(max_retries: int = 2, base_delay: float = 1.0):
 @_retry_async_simple(max_retries=2)
 async def _navigate_to_process_center(page: Page) -> None:
     """导航到流程中心页面，处理登录重定向。"""
+    global _session_logged_in
     from core.dms_browser import is_on_login_page, do_login
 
     target = f"{DMS_URL}/#/process/process_center"
-    if is_on_login_page(page.url):
+    if not _session_logged_in and is_on_login_page(page.url):
         await do_login(page)
+        _session_logged_in = True
     if page.url != target:
         await page.goto(target, timeout=NAV_TIMEOUT)
     await page.wait_for_load_state("networkidle", timeout=LOAD_TIMEOUT)
@@ -72,13 +76,10 @@ async def _process_table_rows(
     """
     from core.dms_browser import SELECTORS
 
-    rows = await page.locator(SELECTORS["table_body"]).first.locator(SELECTORS["table_tbody"]).all()
-    logger.debug("找到 %d 行", len(rows))
+    rows = await page.locator(SELECTORS["table_tbody"]).all()
     if not rows:
-        fallback_rows = await page.locator(SELECTORS["table_body"] + " tr").all()
-        logger.debug("回退选择器找到 %d 行", len(fallback_rows))
-        if fallback_rows:
-            rows = fallback_rows
+        rows = await page.locator(f"{SELECTORS['table_body']} tr").all()
+    logger.debug("找到 %d 行", len(rows))
 
     for row in rows:
         cell_texts = await row.locator("td").all_text_contents()

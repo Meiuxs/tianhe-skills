@@ -106,14 +106,16 @@ async def extract_bom(page: Page, api_detail_data: dict | None = None) -> list:
         logger.debug("BOM 回退到 HTML 表格解析")
         processed_tables: set[str] = set()
         try:
-            tables = await page.locator("table").all()
-            for table in tables:
-                thead = table.locator("thead")
-                if await thead.count() > 0 and "物料编号" in ((await thead.text_content()) or ""):
-                    body_table = table.locator("xpath=./following-sibling::table[.//tbody][1]")
-                    if await body_table.count() == 0:
-                        body_table = table.locator("xpath=./following::table[.//tbody][1]")
-                    if await body_table.count() > 0:
+            bom_header = page.locator(
+                "xpath=.//table[.//thead[.//th[normalize-space()='物料编号']]]"
+            )
+            header_count = await bom_header.count()
+            for idx in range(header_count):
+                table = bom_header.nth(idx)
+                body_table = table.locator("xpath=./following-sibling::table[.//tbody][1]")
+                if await body_table.count() == 0:
+                    body_table = table.locator("xpath=./following::table[.//tbody][1]")
+                if await body_table.count() > 0:
                         body_text = (await body_table.text_content()) or ""
                         table_fingerprint = body_text.strip()[:200]
                         if table_fingerprint in processed_tables:
