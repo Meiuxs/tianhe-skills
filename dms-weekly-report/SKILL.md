@@ -8,8 +8,8 @@ description: >
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.6.0
-  updated: 2026-06-14
+  version: 1.7.0
+  updated: 2026-06-17
 ---
 
 # DMS 非标询价周报生成器
@@ -42,46 +42,42 @@ metadata:
 
 > **路径说明：** 以下命令中的 `$SKILL_DIR` 指向本 skill 的安装目录。Agent 执行前自动检测路径
 
+> **快速路径：** 如果环境已通过检查（上次运行成功过）且用户说"本周"/"本周周报"等标准关键词，可跳过步骤 0-1，直接执行步骤 2 快速路径命令（详见下方「快速路径」）。
+
 ### 步骤 0：检查运行环境
 
 > **Fail-fast 原则：** 环境检查放在最开始，避免执行中途因环境问题失败。
+> **已安装跳过：** 如果 `python "$SKILL_DIR/scripts/check_environment.py" --quick` 返回 exit(0)，说明环境已就绪，可直接跳过本步骤进入步骤 1。
 
-**0.1 检测 Python → 0.2 安装依赖 → 0.3 运行环境检查 → 0.4 检查登录凭据**
+**检查流程（仅首次或检查时执行）：**
 
-**Step 1 — 检测 Python 是否可用：**
+**0.1 检测 Python：**
 
 ```bash
 python --version 2>/dev/null || python3 --version 2>/dev/null || py --version 2>/dev/null
 ```
 
-- **命令不存在** → 向用户说明情况，根据检测到的操作系统给出**一键安装命令**（自动同意协议），用户复制粘贴执行后重新检测。详见 `references/installation.md#python-安装`。
-- **Python 可用** → 进入 Step 2。
+- **命令不存在** → 向用户说明情况，根据检测到的操作系统给出**一键安装命令**（自动同意协议），用户复制粘贴执行后重新检测。详见 `references/installation.md`。
+- **Python 可用** → 进入 0.2。
 
-**Step 2 — 安装前置依赖（首次使用前）：**
+**0.2 安装前置依赖（首次使用前）：**
 
 ```bash
 pip install playwright openpyxl -i https://mirrors.aliyun.com/pypi/simple/ && playwright install chromium
 ```
 
-> ⚠️ **国内网络提示：** 如果上面的命令超时或下载失败，优先尝试 Aliyun 镜像（已内置在命令中）。如果 Aliyun 镜像也失败，可尝试以下备选方案：
-> - 腾讯云镜像：`-i https://mirrors.cloud.tencent.com/pypi/simple/`
-> - 华为云镜像：`-i https://repo.huaweicloud.com/repository/pypi/simple/`
-> - PyPI 官方（代理环境）：去掉 `-i` 参数，通过 `http_proxy`/`https_proxy` 环境变量走代理
->
-> `playwright install chromium` 下载 ~400MB 浏览器二进制文件，网络差时会很慢。如失败可重试（支持断点续传）。
-> 虚拟环境、详细代理配置、版本锁定等详见 `references/installation.md`。
+> ⚠️ **国内网络提示：** 详见 `references/installation.md` 镜像源说明。
 
-**Step 3 — 运行统一环境检查脚本：**
+**0.3 统一环境检查：**
 
 ```bash
 python "$SKILL_DIR/scripts/check_environment.py"
 ```
 
-**检查结果分支（Step 3）：**
-- ✅ 全部通过 → 进入 Step 4
+- ✅ 全部通过 → 进入**步骤 1**
 - ❌ **任一失败** → Agent 根据每项失败的 `fix_hint` **自动执行修复命令**，修复后重新运行检查，直至全部通过
 
-**Step 4 — 检查登录凭据：**
+**0.4 检查登录凭据：**
 
 ```bash
 python "$SKILL_DIR/scripts/check_environment.py" --quick
@@ -90,17 +86,19 @@ python "$SKILL_DIR/scripts/check_environment.py" --quick
 - ✅ 凭据就绪 + 浏览器正常 → 进入**步骤 1**
 - ❌ 凭据缺失 → 提示用户配置，详见 `references/login_config.md`，用户回复"已配置"后重新检测确认
 
-### 步骤 1：解析并确认日期范围
+### 步骤 1：解析日期范围（仅非标表述时执行）
 
-先运行 `--help` 查看脚本支持的日期标签和参数说明：
+**标准关键词无需预解析：** `run_weekly_report.py` 已内置 `--date-label` 参数，会自动调用 `resolve_date_range.py` 解析。标准关键词（本周/上周/本月/上月/本季度/上季度/今年/去年）直接在步骤 2 中使用 `--date-label` 即可。
+
+**仅当用户说了非标表述（如"最近一周""近3天""上个月12号到现在"）时执行本步骤**，确认转换结果：
 
 ```bash
-python "$SKILL_DIR/scripts/resolve_date_range.py" --help
+python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月12号到现在" --json
 ```
 
-**⚠️ Agent 注意：** 只使用脚本支持的标签，不要自行编造。如果用户说了脚本不支持的表述（如"最近一周""近3天"），必须转换为支持的等价标签（如"本周""本月"），或改用 `--start-date`/`--end-date` 直接传日期。
+> 输出示例：`{"start": "2026-05-12", "end": "2026-06-12", "range_str": "2026-05-12 ~ 2026-06-12"}`
 
-支持的标签类型：
+**支持的标签类型（如参数不确定可运行 `--help` 查阅）：**
 
 | 类型 | 示例 |
 |------|------|
@@ -109,34 +107,21 @@ python "$SKILL_DIR/scripts/resolve_date_range.py" --help
 | 中文日期范围 | 6月1号到6月7号、六月一号到六月七号 |
 | 标准日期 | 2026-06-01 ~ 2026-06-07 |
 
-确认支持的格式后，选择合适的标签传给脚本，用 `--json` 输出解析结果：
-
-```bash
-python "$SKILL_DIR/scripts/resolve_date_range.py" "上个月到现在" --json
-```
-
-> 输出示例：`{"start": "2026-05-12", "end": "2026-06-12", "range_str": "2026-05-12 ~ 2026-06-12"}`
->
-> 此步骤用于**确认日期解析是否正确**。Agent 会根据输出的日期值，在**步骤 2** 中直接填入命令，不依赖 Shell 跨步骤变量。
-
 ### 步骤 2：运行脚本
 
-先用 `--help` 查看 `run_weekly_report.py` 的全部参数说明和使用示例：
+**（如参数不确定可运行 `--help` 查阅：`python "$SKILL_DIR/scripts/run_weekly_report.py" --help`）**
 
-```bash
-python "$SKILL_DIR/scripts/run_weekly_report.py" --help
-```
-
-Agent 根据**步骤 1** 解析出的日期，直接用日期字符串传参（不依赖 Shell 变量）：
+根据步骤 1 的日期，直接用日期字符串传参（不依赖 Shell 变量）：
 
 ```bash
 SCRIPT="$SKILL_DIR/scripts/run_weekly_report.py"
 
-# 用步骤 1 确认的日期值直接传参 + 无头模式
+# 标准关键词直接用 --date-label（推荐）
+python "$SCRIPT" --output-dir "$PWD" --date-label "本周" --headless
+
+# 非标表述用步骤 1 解析出的日期值
 python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless
 ```
-
-> **注意：** Agent 会在步骤 1 输出后自动将日期值填入步骤 2 的命令中，用户无需手动操作。
 
 **常用模式速查：**
 
@@ -151,11 +136,22 @@ python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-
 | 自定义日期 | `python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-06-12" --headless` |
 | 仅统计（跳过浏览器） | `python "$SCRIPT" --output-dir "$PWD" --stats-only --date-label "本月"` |
 
-> **提示：** `--output-dir` 建议用当前工作目录。bash/zsh 用 `"$PWD"`，PowerShell 用 `"$(Get-Location)"`，或直接省略（默认当前目录）。
->
-> **注意：** 流程编号在 Excel 中显示不正确时，见 FAQ「流程编号显示为不正确的数字」。
+---
 
-### 步骤 3：呈现结果
+#### 快速路径（满足以下条件时跳过步骤 0-1）
+
+如果同时满足：
+- 环境已通过检查（上次运行成功过，或 `check_environment.py --quick` 返回 exit(0)）
+- 用户说"本周"/"本周周报"等标准关键词（无需解析确认）
+
+则直接执行：
+```bash
+python "$SKILL_DIR/scripts/run_weekly_report.py" --output-dir "$PWD" --date-label "本周" --headless
+```
+
+> **提示：** `--output-dir` 建议用当前工作目录。bash/zsh 用 `"$PWD"`，PowerShell 用 `"$(Get-Location)"`，或直接省略（默认当前目录）。
+
+### 步骤 3：呈现结果	
 
 脚本执行后会在终端打印摘要并生成 Excel，直接向用户报告：
 
@@ -168,7 +164,21 @@ python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-
 📎 HTML 报表已保存到：{output_dir}/询价周报报表_{时间戳}.html
 ```
 
-### 步骤 4：记录执行日志（流程完成后）
+### 步骤 3 附：错误恢复决策树
+
+脚本失败时，Agent 按以下决策表操作：
+
+| 错误类型 | Agent 操作 |
+|---------|---------|
+| 登录失败（账号密码错误）| 提示用户检查凭据，引导到 `references/login_config.md` |
+| 登录失败（验证码）| 去掉 `--headless`，提示手动完成验证码 |
+| API 筛选返回空 | 自动切换到 HTML 解析模式（脚本已内置回退） |
+| 0 条记录 | 确认日期范围是否正确，建议扩大范围重试 |
+| 页面超时 | 加 `--verbose` 重新运行，检查网络 |
+| Excel 保存失败 | 提示关闭占用的程序，或自动使用备用文件名 |
+| 浏览器启动失败 | 运行 `playwright install chromium` 修复 |
+
+### 日志记录
 
 周报生成完成后，Agent **自动记录执行日志**，仅在遇到明显异常时才与用户交互。
 
@@ -196,19 +206,19 @@ python "$SCRIPT" --output-dir "$PWD" --start-date "2026-05-12" --end-date "2026-
 | `--start-date YYYY-MM-DD` | 自定义开始日期 | 本周一 |
 | `--end-date YYYY-MM-DD` | 自定义结束日期 | 今天 |
 | `--date-label LABEL` | 中文日期标签（自动解析，如"本月"/"上个月到现在"） | 无 |
-| `--workers N` | 并行并发数 | 4 |
+| `--workers N` | 并行并发数（1-8） | 6 |
 | `--verbose` | 详细日志输出 | 仅 info |
-| `--stats-only` | 仅统计模式：从已有 Excel 读取数据，按日期范围重新统计，跳过浏览器操作 | 自动查找 |
+| `--stats-only` | 仅统计模式：从已有 Excel 读取数据，按日期范围重新统计，跳过浏览器操作 | — |
 | `--input-xlsx FILE` | 仅统计模式下显式指定输入的询价汇总 Excel 文件路径 | 自动查找 |
 | `--this-month` | 快捷统计本月（配合 `--stats-only` 使用） | 无 |
+| `--dry-run` | 预演模式：打印完整执行计划但不启动浏览器 | — |
 
 ### 输出文件
 
 > ⚠️ 每次运行自动生成带时间戳文件（`YYYYMMDD_HHMMSS`），避免覆盖历史数据。
-> 详见 `references/output_format.md`。
 
 - `{output_dir}/询价汇总_{时间戳}.xlsx`
-- `{output_dir}/询价汇总_{时间戳}_v2.xlsx`（文件被占用时的备用）
+- 
 - `{output_dir}/询价周报报表_{时间戳}.html`
 
 ### HTML 独立生成（无需浏览器）

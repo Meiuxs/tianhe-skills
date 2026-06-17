@@ -30,6 +30,8 @@ python "$SKILL_DIR/scripts/dms_credentials.py" --check-browser
 
 ## 配置方式
 
+### Linux / macOS（bash/zsh）
+
 ```bash
 # 临时（当前会话）
 export DMS_USER="your_email@trinapower.com"
@@ -39,6 +41,34 @@ export DMS_PASSWORD="your_password"
 echo -e 'export DMS_USER="your_email@trinapower.com"\nexport DMS_PASSWORD="your_password"' >> ~/.bashrc
 source ~/.bashrc
 ```
+
+### Windows（推荐）
+
+**方式一：PowerShell 永久设置（用户级）**
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("DMS_USER", "your_email@trinapower.com", "User")
+[System.Environment]::SetEnvironmentVariable("DMS_PASSWORD", "your_password", "User")
+```
+
+设置后**重新打开 PowerShell 窗口**即可生效。
+
+**方式二：系统设置 GUI**
+
+1. `Win + R` → 输入 `sysdm.cpl` → 回车
+2. 切换到「高级」标签 → 点击「环境变量」
+3. 在「用户变量」区域 → 点击「新建」
+4. 分别添加 `DMS_USER` 和 `DMS_PASSWORD`
+5. 确定保存后重新打开终端
+
+**方式三：命令行临时（当前窗口）**
+
+```powershell
+$env:DMS_USER="your_email@trinapower.com"
+$env:DMS_PASSWORD="your_password"
+```
+
+> ⚠️ 临时设置仅在当前 PowerShell 窗口有效，关闭后失效。
 
 ## 登录持久化
 

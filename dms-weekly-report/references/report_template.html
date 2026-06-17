@@ -1460,7 +1460,7 @@ const SERVER_NOW = '{{SERVER_TIMESTAMP}}' || null; // 后端注入 ISO 8601 格�
 /* ── 明细表格分页状态 ── */
 let detailPageState = {
   currentPage: 1,
-  pageSize: 4,  // 默认显示4条
+  pageSize: 10,  // 默认显示10条
   totalRows: 0,
 };
 
@@ -2710,7 +2710,7 @@ function renderPaginationControls(totalPages, startRow, endRow, totalRows) {
   paginationDiv.id = 'detail-pagination';
 
   // 页码大小选项
-  let pageSizes = [4, 10, 20, 50, 100];
+  let pageSizes = [10, 20, 50, 100, 200];
   let pageSizeOptions = pageSizes.map(function(size) {
     return '<option value="' + size + '"' + (size === detailPageState.pageSize ? ' selected' : '') + '>' + size + ' 条/页</option>';
   }).join('');
@@ -2986,22 +2986,63 @@ function downloadChart(chartId) {
   var canvas = document.getElementById(chartId);
   if (!canvas) return;
 
-  // 创建临时 canvas，先绘制背景色再叠加图表，避免导出图片透明
+  // 获取图表标题（从 chart-title 元素中提取，去掉下载按钮文字）
+  var chartCard = canvas.closest('.chart-card');
+  var chartTitle = '';
+  if (chartCard) {
+    var titleElem = chartCard.querySelector('.chart-title');
+    if (titleElem) {
+      // 克隆元素并去掉下载按钮，只保留标题文字
+      var titleClone = titleElem.cloneNode(true);
+      var downloadBtn = titleClone.querySelector('.chart-download-btn');
+      if (downloadBtn) downloadBtn.remove();
+      chartTitle = titleClone.textContent.trim();
+    }
+  }
+  // 如果找不到标题，使用 chartId 作为备选
+  if (!chartTitle) chartTitle = chartId;
+
+  // 标题区域高度
+  var titleHeight = 40;
+  var padding = 20;
+
+  // 创建临时 canvas（增加标题区域高度）
   var exportCanvas = document.createElement('canvas');
   exportCanvas.width = canvas.width;
-  exportCanvas.height = canvas.height;
+  exportCanvas.height = canvas.height + titleHeight;
   var exportCtx = exportCanvas.getContext('2d');
 
   // 1. 先填充页面背景色（--bg-page: #F1F5F9）
   exportCtx.fillStyle = '#F1F5F9';
   exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
 
-  // 2. 再绘制原图表内容
-  exportCtx.drawImage(canvas, 0, 0);
+  // 2. 绘制标题背景（白色）
+  exportCtx.fillStyle = '#FFFFFF';
+  exportCtx.fillRect(0, 0, exportCanvas.width, titleHeight);
 
-  // 3. 导出带背景的图片
+  // 3. 绘制标题文字（与 HTML 中的样式一致）
+  exportCtx.fillStyle = '#0F172A';  // --text-primary
+  exportCtx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  exportCtx.textAlign = 'left';
+  exportCtx.textBaseline = 'middle';
+  exportCtx.fillText(chartTitle, padding, titleHeight / 2);
+
+  // 4. 绘制标题底部边框
+  exportCtx.strokeStyle = '#E2E8F0';  // --border-light
+  exportCtx.lineWidth = 1;
+  exportCtx.beginPath();
+  exportCtx.moveTo(0, titleHeight);
+  exportCtx.lineTo(exportCanvas.width, titleHeight);
+  exportCtx.stroke();
+
+  // 5. 绘制原图表内容（从标题下方开始）
+  exportCtx.drawImage(canvas, 0, titleHeight);
+
+  // 6. 导出带背景和标题的图片（使用图表标题作为文件名）
   var link = document.createElement('a');
-  link.download = chartId + '_' + new Date().toISOString().slice(0, 10) + '.png';
+  // 清理文件名中的特殊字符
+  var safeTitle = chartTitle.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
+  link.download = safeTitle + '_' + new Date().toISOString().slice(0, 10) + '.png';
   link.href = exportCanvas.toDataURL('image/png', 1.0);
   link.click();
 }
