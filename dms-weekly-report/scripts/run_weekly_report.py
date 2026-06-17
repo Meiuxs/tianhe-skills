@@ -57,7 +57,7 @@ _handler = logging.StreamHandler(sys.stdout)
 _handler.setFormatter(logging.Formatter(
     "[%(asctime)s] %(levelname)s %(message)s", datefmt="%H:%M:%S"
 ))
-if not logger.handlers:
+if not logger.hasHandlers():
     logger.addHandler(_handler)
 
 # ==================== 配置 ====================
@@ -108,6 +108,8 @@ def print_summary(
     excel_path: str | None = None,
     error: str | None = None,
     discarded: int = 0,
+    order_count: int = 0,
+    order_date_range: str = "",
 ) -> None:
     """打印格式化执行摘要到终端。"""
     elapsed = (datetime.now() - start_time).total_seconds()
@@ -123,6 +125,8 @@ def print_summary(
         print(f"  提取记录    {len(flow_ids)} 条")
     if discarded:
         print(f"  作废流程    {discarded} 条")
+    if order_count:
+        print(f"  订单总数    {order_count} 条（{order_date_range}）")
     if records:
         print(f"  已下单      {ordered} 条")
         print(f"  未下单      {not_ordered} 条")
@@ -163,6 +167,8 @@ async def run(args: argparse.Namespace) -> None:
     records: list[FlowRecord] = []
     excel_path: str | None = None
     error_msg: str | None = None
+    order_api_total: int = 0
+    order_date_range: str = ""
     filter_result = None
 
     try:
@@ -222,20 +228,30 @@ async def run(args: argparse.Namespace) -> None:
                 logger.info("本周无已办询价记录")
                 return
 
-            # 3. 并行提取详情
-            # 注意：不提前关闭 page。persistent_context 中关闭最后一个 page
-            # 可能导致浏览器进程退出，影响后续 context.new_page() 调用。
-            # page 会在 finally 中被 context.close() 一并清理。
-            all_details = await extract_all_parallel(context, flow_ids, args.workers)
+            # 3. 并行提取详情 + 并行启动下单查询
+            from core.orders_checker import fetch_ordered_flow_ids
+            from column_definitions import ORDER_CHECK_EXTEND_DAYS
+
+            all_details, (ordered_ids, order_api_total) = await asyncio.gather(
+                extract_all_parallel(context, flow_ids, args.workers, flow_status=filter_result.flow_status),
+                fetch_ordered_flow_ids(context, start_date, end_date),
+            )
             if not all_details:
                 logger.info("未能提取到任何详情")
                 return
 
-            # 4. 下单检查（通过 API 批量拉取，无需额外安装依赖）
-            all_details = await check_orders_parallel(
-                context, all_details, start_date, end_date,
-            )
+            # 4. 下单检查（ordered_ids 已在步骤 3 并发获取）
+            for rec in all_details:
+                rec.ordered = "是" if rec.flow_id in ordered_ids else "否"
+            ordered_count = sum(1 for r in all_details if r.ordered == "是")
+            logger.info("下单检查完成：%d 条已下单，%d 条未下单",
+                        ordered_count, len(all_details) - ordered_count)
             records = all_details
+
+            # 订单查询日期范围（含扩展天数）
+            from datetime import datetime as _dt, timedelta as _td
+            order_end_dt = _dt.strptime(end_date, "%Y-%m-%d") + _td(days=ORDER_CHECK_EXTEND_DAYS)
+            order_date_range = f"{start_date} ~ {order_end_dt.strftime('%Y-%m-%d')}"
 
             # 5. 生成 Excel
             query_range = f"{start_date} ~ {end_date}"
@@ -258,7 +274,7 @@ async def run(args: argparse.Namespace) -> None:
             logger.info("用户中断执行")
             error_msg = "用户中断"
             discarded = filter_result.skipped_invalid if filter_result else 0
-            print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded)
+            print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded, order_count=order_api_total, order_date_range=order_date_range)
             raise
         except Exception as e:
             error_msg = str(e)
@@ -271,7 +287,7 @@ async def run(args: argparse.Namespace) -> None:
                 logger.debug("浏览器上下文关闭时异常，忽略: %s", e)
 
     discarded = filter_result.skipped_invalid if filter_result else 0
-    print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded)
+    print_summary(start_time, start_date, end_date, flow_ids, records, excel_path, error=error_msg, discarded=discarded, order_count=order_api_total, order_date_range=order_date_range)
 
 
 def stats_from_excel(args: argparse.Namespace) -> None:
@@ -439,8 +455,8 @@ def main() -> None:
                         help="中文日期标签，自动解析。"
                              "支持: 本周/上周/本月/上月/本季度/上季度/今年/去年/上个月X号到现在/X月X号到X月X号等。"
                              "优先级低于 --start-date/--end-date，高于 --weeks")
-    parser.add_argument("--workers", type=int, default=4,
-                        help="并行提取并发数（1-8），默认 4。根据网络和 DMS 响应速度调整，"
+    parser.add_argument("--workers", type=int, default=6,
+                        help="并行提取并发数（1-8），默认 6。根据网络和 DMS 响应速度调整，"
                              "过高可能被限流")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="输出目录（存放 Excel 和 HTML），默认当前工作目录")
