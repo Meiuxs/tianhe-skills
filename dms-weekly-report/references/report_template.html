@@ -620,12 +620,37 @@ th.number-right {
 .pagination-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 12px 16px;
   background: var(--bg-white);
   border-top: 1px solid var(--border-light);
   font-size: 13px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
+
+.pagination-controls .page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pagination-controls .page-size-selector select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-white);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pagination-controls .page-size-selector select:hover {
+  border-color: var(--primary);
+}
+
 .pagination-controls button {
   padding: 6px 12px;
   border: 1px solid var(--border-color);
@@ -1435,7 +1460,7 @@ const SERVER_NOW = '{{SERVER_TIMESTAMP}}' || null; // 后端注入 ISO 8601 格�
 /* ── 明细表格分页状态 ── */
 let detailPageState = {
   currentPage: 1,
-  pageSize: 20,
+  pageSize: 4,  // 默认显示4条
   totalRows: 0,
 };
 
@@ -1489,12 +1514,34 @@ function initChartDefaults() {
   // 全局插件：图表导出/截图时带白色背景，避免透明背景难看
   Chart.register({
     id: 'chart-white-bg',
+    // 在图表绘制前填充白色背景（绘图区域内）
     beforeDraw: function(chart) {
       var ctx = chart.ctx;
-      ctx.save();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, chart.width, chart.height);
-      ctx.restore();
+      var area = chart.chartArea;
+      if (area) {
+        ctx.save();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+        ctx.restore();
+      }
+    },
+    // 在所有图表绘制完成后，确保整个 canvas DOM 尺寸都有白色背景
+    // 这覆盖了 canvas 缩放后超出绘图区域的透明部分
+    afterDraw: function(chart) {
+      var ctx = chart.ctx;
+      var cw = chart.canvas.width;
+      var ch = chart.canvas.height;
+      var area = chart.chartArea;
+      // 只有当 canvas 有 CSS 缩放时才需要补白
+      var cssWidth = chart.width;
+      var cssHeight = chart.height;
+      if (cw > cssWidth || ch > cssHeight) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.restore();
+      }
     },
   });
 }
@@ -1578,6 +1625,11 @@ function showNoData(canvasId, message, icon) {
 var donutCenterPlugin = {
   id: 'donutCenterText',
   afterDraw: function(chart) {
+    // 仅当图表配置中明确启用 showCenterText 时才绘制
+    if (!chart.config.options.showCenterText) {
+      return;
+    }
+
     let width = chart.width;
     let height = chart.height;
     let ctx = chart.ctx;
@@ -1691,11 +1743,12 @@ function makeBarOpts(xLabel, yLabel) {
   };
 }
 
-function makeDonutOpts() {
+function makeDonutOpts(showCenter) {
   return {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 1.2,
+    showCenterText: showCenter !== false,  // 默认显示中间文本
     animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
     plugins: {
       legend: {
@@ -2656,14 +2709,30 @@ function renderPaginationControls(totalPages, startRow, endRow, totalRows) {
   paginationDiv.className = 'pagination-controls';
   paginationDiv.id = 'detail-pagination';
 
+  // 页码大小选项
+  let pageSizes = [4, 10, 20, 50, 100];
+  let pageSizeOptions = pageSizes.map(function(size) {
+    return '<option value="' + size + '"' + (size === detailPageState.pageSize ? ' selected' : '') + '>' + size + ' 条/页</option>';
+  }).join('');
+
   paginationDiv.innerHTML =
+    '<span class="page-size-selector">' +
+      '每页显示 <select id="page-size-select">' + pageSizeOptions + '</select>' +
+    '</span>' +
     '<button id="prev-page-btn" ' + (detailPageState.currentPage <= 1 ? 'disabled' : '') + '>上一页</button>' +
     '<span class="pagination-info">显示 ' + startRow + '-' + endRow + ' / 共 ' + totalRows + ' 条（第 ' + detailPageState.currentPage + '/' + totalPages + ' 页）</span>' +
     '<button id="next-page-btn" ' + (detailPageState.currentPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
 
   tableContainer.appendChild(paginationDiv);
 
-  // 绑定事件
+  // 绑定页码大小变更事件
+  document.getElementById('page-size-select').addEventListener('change', function() {
+    detailPageState.pageSize = parseInt(this.value, 10);
+    detailPageState.currentPage = 1;  // 重置到第一页
+    renderDetailTable(getFilteredRows());
+  });
+
+  // 绑定上一页/下一页事件
   document.getElementById('prev-page-btn').addEventListener('click', function() {
     if (detailPageState.currentPage > 1) {
       detailPageState.currentPage--;
@@ -2912,13 +2981,28 @@ function exportToExcel() {
   XLSX.writeFile(wb, '询价周报_' + new Date().toISOString().slice(0, 10) + '.xlsx');
 }
 
-/** 下载图表为 PNG 图片 */
+/** 下载图表为 PNG 图片（带页面背景色，避免透明） */
 function downloadChart(chartId) {
   var canvas = document.getElementById(chartId);
   if (!canvas) return;
+
+  // 创建临时 canvas，先绘制背景色再叠加图表，避免导出图片透明
+  var exportCanvas = document.createElement('canvas');
+  exportCanvas.width = canvas.width;
+  exportCanvas.height = canvas.height;
+  var exportCtx = exportCanvas.getContext('2d');
+
+  // 1. 先填充页面背景色（--bg-page: #F1F5F9）
+  exportCtx.fillStyle = '#F1F5F9';
+  exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+  // 2. 再绘制原图表内容
+  exportCtx.drawImage(canvas, 0, 0);
+
+  // 3. 导出带背景的图片
   var link = document.createElement('a');
   link.download = chartId + '_' + new Date().toISOString().slice(0, 10) + '.png';
-  link.href = canvas.toDataURL('image/png');
+  link.href = exportCanvas.toDataURL('image/png', 1.0);
   link.click();
 }
 
@@ -3122,3 +3206,5 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </body>
 </html>
+
+
