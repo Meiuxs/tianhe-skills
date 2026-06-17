@@ -165,7 +165,7 @@ class TestCheckOrdersParallel(unittest.TestCase):
     @patch("core.orders_checker.fetch_ordered_flow_ids")
     def test_matched_flow_id_found(self, mock_fetch):
         """流程在订单集合中返回 '是'。"""
-        mock_fetch.return_value = {"FLOW001", "FLOW002"}
+        mock_fetch.return_value = ({"FLOW001", "FLOW002"}, 2)  # 返回元组 (set, total)
         ctx = _make_mock_context()
         records = [MockRecord(flow_id="FLOW001"), MockRecord(flow_id="FLOW003")]
 
@@ -175,10 +175,11 @@ class TestCheckOrdersParallel(unittest.TestCase):
         self.assertEqual(result[0].ordered, "是")
         self.assertEqual(result[1].ordered, "否")
 
+
     @patch("core.orders_checker.fetch_ordered_flow_ids")
     def test_all_not_found(self, mock_fetch):
         """所有流程都不在订单中时全部返回 '否'。"""
-        mock_fetch.return_value = set()
+        mock_fetch.return_value = (set(), 0)  # 返回元组 (set, total)
         ctx = _make_mock_context()
         records = [MockRecord(flow_id="FLOW001"), MockRecord(flow_id="FLOW002")]
 

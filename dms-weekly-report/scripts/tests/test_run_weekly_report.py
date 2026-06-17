@@ -116,34 +116,8 @@ mock_creds.get_credentials = lambda on_source=None: ("test@test.com", "password1
 mock_creds.source_label = lambda s: "mock"
 sys.modules["dms_credentials"] = mock_creds
 
-mock_col_defs = types.ModuleType("column_definitions")
-mock_col_defs.HEADERS = [f"列{i}" for i in range(19)]
-mock_col_defs.COLUMN_WIDTHS = [20] * 19
-mock_col_defs.DMS_URL = "https://dms-admin.trinapower.com"
-mock_col_defs.LOGIN_CHECK_DOMAIN = "iauth.trinapower.com"
-mock_col_defs.NAV_TIMEOUT = 10000
-mock_col_defs.LOAD_TIMEOUT = 10000
-mock_col_defs.WAIT_SHORT = 500
-mock_col_defs.WAIT_MEDIUM = 1000
-mock_col_defs.MAX_RETRIES = 3
-mock_col_defs.RETRY_BASE_DELAY = 1.0
-mock_col_defs.accumulate_power = lambda rows, cols=None: (0.0, 0.0, 0.0)
-mock_col_defs.SHEET_DATA = "sheet1"
-mock_col_defs.STATUS_YES = "Yes"
-mock_col_defs.STATUS_NO = "No"
-mock_col_defs.STATUS_NONE = "None"
-mock_col_defs.STATUS_DASH = "--"
-mock_col_defs.STATUS_ORDERED = "已下单"
-mock_col_defs.STATUS_NOT_ORDERED = "未下单"
-mock_col_defs.STATUS_CHECK_FAILED = "检查失败"
-mock_col_defs.ORDER_CHECK_EXTEND_DAYS = 31
-mock_col_defs.TARGET_FLOW_TYPE = "户用小型工商业询价流程"
-mock_col_defs.FILTER_PAGE_SIZE = 10
-mock_col_defs.API_FILTER_PAGE_SIZE = 500
-mock_col_defs.DMS_API_BASE = "https://apigw.trinablue.com"
-mock_col_defs.DMS_FLOW_LIST_API = f"{mock_col_defs.DMS_API_BASE}/dms-admin/newFlow/newFlowList"
-mock_col_defs.DMS_FLOW_DETAILS_API = f"{mock_col_defs.DMS_API_BASE}/dms-admin/newFlow/flowDetails"
-sys.modules["column_definitions"] = mock_col_defs
+# 不模拟 column_definitions，使用实际模块
+# 这样可以避免模拟模块中变量名不匹配的问题
 
 # ==================== 导入 core 模块 ====================
 
@@ -473,18 +447,21 @@ class TestRunFlowIdsEmpty:
 
         from run_weekly_report import run
 
-        args = MagicMock()
-        args.start_date = "2026-06-01"
-        args.end_date = "2026-06-07"
-        args.weeks = 0
-        args.workers = 2
-        args.headless = True
-        args.output_dir = None
+        # 使用简单对象替代 MagicMock，避免 await 问题
+        args = type("Args", (), {
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-07",
+            "weeks": 0,
+            "workers": 2,
+            "headless": True,
+            "output_dir": None,
+            "verbose": False,
+            "stats_only": False,
+            "input_xlsx": None,
+        })()
 
         # 构造 filter_result 返回空 flow_ids
-        mock_filter_result = MagicMock()
-        mock_filter_result.flow_ids = []
-        mock_filter_result.skipped_invalid = 0
+        mock_filter_result = type("FilterResult", (), {"flow_ids": [], "skipped_invalid": 0})()
 
         # 追踪后续步骤是否被调用
         extract_called = False
@@ -507,9 +484,12 @@ class TestRunFlowIdsEmpty:
             mock_page.url = "https://dms-admin.trinapower.com"
             mock_context.new_page = AsyncMock(return_value=mock_page)
 
-            mock_pw.return_value.__aenter__ = AsyncMock(return_value=mock_pw.return_value)
-            mock_pw.return_value.__aexit__ = AsyncMock(return_value=False)
-            mock_pw.return_value.chromium.launch_persistent_context = AsyncMock(return_value=mock_context)
+            # 正确 mock async_playwright
+            pw_instance = AsyncMock()
+            pw_instance.chromium.launch_persistent_context = AsyncMock(return_value=mock_context)
+            mock_pw.return_value = pw_instance
+            mock_pw.__aenter__ = AsyncMock(return_value=pw_instance)
+            mock_pw.__aexit__ = AsyncMock(return_value=False)
 
             with caplog.at_level(logging.INFO):
                 await run(args)
@@ -525,18 +505,25 @@ class TestRunFlowIdsEmpty:
 
         from run_weekly_report import run
 
-        args = MagicMock()
-        args.start_date = "2026-06-01"
-        args.end_date = "2026-06-07"
-        args.weeks = 0
-        args.workers = 2
-        args.headless = True
-        args.output_dir = None
+        # 使用简单对象替代 MagicMock，避免 await 问题
+        args = type("Args", (), {
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-07",
+            "weeks": 0,
+            "workers": 2,
+            "headless": True,
+            "output_dir": None,
+            "verbose": False,
+            "stats_only": False,
+            "input_xlsx": None,
+        })()
 
-        # 构造 filter_result 返回非空 flow_ids
-        mock_filter_result = MagicMock()
-        mock_filter_result.flow_ids = ["FLOW001", "FLOW002"]
-        mock_filter_result.skipped_invalid = 0
+        # 构造 filter_result 返回非空 flow_ids，添加 flow_status 属性
+        mock_filter_result = type("FilterResult", (), {
+            "flow_ids": ["FLOW001", "FLOW002"],
+            "skipped_invalid": 0,
+            "flow_status": {},  # 添加缺失的 flow_status 属性
+        })()
 
         extract_called = False
 
@@ -558,9 +545,12 @@ class TestRunFlowIdsEmpty:
             mock_page.url = "https://dms-admin.trinapower.com"
             mock_context.new_page = AsyncMock(return_value=mock_page)
 
-            mock_pw.return_value.__aenter__ = AsyncMock(return_value=mock_pw.return_value)
-            mock_pw.return_value.__aexit__ = AsyncMock(return_value=False)
-            mock_pw.return_value.chromium.launch_persistent_context = AsyncMock(return_value=mock_context)
+            # 正确 mock async_playwright
+            pw_instance = AsyncMock()
+            pw_instance.chromium.launch_persistent_context = AsyncMock(return_value=mock_context)
+            mock_pw.return_value = pw_instance
+            mock_pw.__aenter__ = AsyncMock(return_value=pw_instance)
+            mock_pw.__aexit__ = AsyncMock(return_value=False)
 
             with caplog.at_level(logging.INFO):
                 await run(args)

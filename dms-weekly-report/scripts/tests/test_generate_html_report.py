@@ -393,6 +393,6 @@ class TestRowDetailType:
     def test_typed_dict_exists(self):
         from generate_html_report import RowDetail
         assert RowDetail.__annotations__ is not None
-        assert "fid" in RowDetail.__annotations__
-        assert "project_name" in RowDetail.__annotations__
-        assert "module_kw" in RowDetail.__annotations__
+        assert "flowId" in RowDetail.__annotations__  # 实际字段名是 flowId (camelCase)
+        assert "projectName" in RowDetail.__annotations__
+        assert "modulePower" in RowDetail.__annotations__
