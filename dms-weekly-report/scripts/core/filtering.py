@@ -48,6 +48,7 @@ async def _navigate_to_process_center(page: Page) -> None:
 async def _process_table_rows(
     page: Page,
     result,  # TableProcessResult — 使用 Any 避免循环导入
+    include_invalid: bool = True,
 ) -> "TableProcessResult":
     """处理当前页面的表格行，提取有效流程编号。
 
@@ -87,9 +88,9 @@ async def _process_table_rows(
 
         if "作废" in status_text:
             result.skipped_invalid += 1
-            logger.debug("跳过作废流程: %s", flow_text)
-            # 默认包含作废流程，不再跳过
-            # continue
+            if not include_invalid:
+                logger.debug("跳过作废流程: %s", flow_text)
+                continue
 
         if flow_text in result.seen_ids:
             result.skipped_dup += 1

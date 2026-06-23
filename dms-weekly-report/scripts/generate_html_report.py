@@ -33,7 +33,7 @@ from typing import Any, TypedDict
 from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
-    COL_SUBMIT_TIME, COL_IS_VALID,
+    COL_SUBMIT_TIME, COL_IS_VALID, COL_FLOW_STATUS,
     COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_FINAL_APPROVAL_TIME,
@@ -60,6 +60,7 @@ class RowDetail(TypedDict):
     negotiationStatus: str
     provinceApprover: str
     provinceStatus: str
+    flowStatus: str
 
 
 
@@ -165,6 +166,8 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
         submit_time = _format_datetime(row[COL_SUBMIT_TIME])
         final_raw = _format_datetime(row[COL_FINAL_APPROVAL_TIME])
         is_valid = str(row[COL_IS_VALID]) if row[COL_IS_VALID] else "否"
+        # len(row) > COL_FLOW_STATUS 等价于 len(row) >= COL_FLOW_STATUS + 1（索引从0开始）
+        flow_status = str(row[COL_FLOW_STATUS]) if len(row) > COL_FLOW_STATUS and row[COL_FLOW_STATUS] else ""
         detail.append({
             "flowId": fid,
             "projectName": str(row[COL_PROJECT_NAME]) if row[COL_PROJECT_NAME] else "",
@@ -174,7 +177,7 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
             "inverterPower": _safe_float(row[COL_INVERTER_KW]),
             "batteryCapacity": _safe_float(row[COL_BATTERY_KWH]),
             "isValid": is_valid,
-            "isInvalid": is_valid != "是",
+            "isInvalid": "作废" in flow_status,
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "finalDate": final_raw[:10] if len(final_raw) >= 10 and final_raw not in ("--", "无", "") else "",
             "negotiationApprover": (
@@ -201,6 +204,7 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
                 and row[COL_PROVINCE_STATUS] != "--"
                 else ""
             ),
+            "flowStatus": flow_status,
         })
     return detail
 

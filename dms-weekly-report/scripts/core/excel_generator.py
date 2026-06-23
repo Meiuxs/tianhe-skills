@@ -201,10 +201,15 @@ def _read_data_rows(data_ws: Any, max_cols: int = 21) -> list[list[Any]]:
 
 
 def _fill_date_helper_column(ws: Any) -> None:
-    """补充询价汇总Sheet的T列（日期序列号，供Excel公式使用），然后隐藏该列。"""
+    """补充询价汇总Sheet的辅助列（日期序列号，供Excel公式使用），然后隐藏该列。
+
+    注意：辅助列位于最后一列数据之后，避免覆盖现有数据。
+    """
+    from column_definitions import COL_FLOW_STATUS
+    helper_col = COL_FLOW_STATUS + 2  # 在 flow_status 列之后留一列空白，使用下一列作为辅助列
     max_row = ws.max_row
     for r in range(2, max_row + 1):
-        existing = ws.cell(row=r, column=20).value
+        existing = ws.cell(row=r, column=helper_col).value
         if existing is not None and isinstance(existing, (int, float)) and existing < 100000:
             continue
         l_val = ws.cell(row=r, column=12).value
@@ -213,9 +218,9 @@ def _fill_date_helper_column(ws: Any) -> None:
             if date_match:
                 y, m, d = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
                 excel_serial = dt_date(y, m, d).toordinal() - EXCEL_SERIAL_OFFSET
-                ws.cell(row=r, column=20, value=excel_serial)
-    # 隐藏辅助列 T
-    ws.column_dimensions["T"].hidden = True
+                ws.cell(row=r, column=helper_col, value=excel_serial)
+    # 隐藏辅助列 V
+    ws.column_dimensions["V"].hidden = True
 
 
 # ==================== 统计 Sheet ====================

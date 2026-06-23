@@ -70,7 +70,7 @@ async def fetch_detail_via_api(context: BrowserContext, flow_id: str, flow_statu
 
 async def extract_detail_by_url(
     context: BrowserContext, flow_id: str, sem: asyncio.Semaphore,
-    page=None, flow_status: int = 1,
+    page=None, flow_status: int = 1, flow_status_name: str = "",
 ):
     """提取单条询价详情。
 
@@ -79,6 +79,7 @@ async def extract_detail_by_url(
     Args:
         page: 预创建的页面对象。仅在 API 调用失败时用于页面拦截回退。
         flow_status: 流程状态，用于 flowDetails API 请求参数。
+        flow_status_name: 流程状态名称（如"审批通过"、"作废"），来自列表 API。
     """
     from core.dms_browser import ensure_logged_in, FlowRecord
     from core.api_parser import (
@@ -104,9 +105,10 @@ async def extract_detail_by_url(
                     parse_json_date(api_data)
 
             rec = FlowRecord(flow_id=flow_id)
+            rec.flow_status = flow_status_name or "--"
 
             if api_data:
-                fill_record_from_api(rec, api_data, flow_id)
+                fill_record_from_api(rec, api_data, flow_id, flow_status_name)
 
                 if (rec.project_name in ("--", "")
                         and rec.province in ("--", "")

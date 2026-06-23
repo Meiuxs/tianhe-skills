@@ -11,6 +11,8 @@ if (typeof Chart === 'undefined') {
   document.write('<script src="https://unpkg.com/chart.js@4.4.7/dist/chart.umd.min.js"><\/script>');
 }
 </script>
+<!-- Chart.js Datalabels Plugin — 饼图扇区标签 -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <!-- SheetJS CDN — Excel 导出 -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
@@ -519,8 +521,6 @@ body {
   margin: 0;
   cursor: pointer;
 }
-.kpi-card.warning .value { color: var(--color-orange); }
-
 .kpi-card.red    .value { color: var(--color-red); }
 .kpi-card.red    { border-left-color: var(--color-red); }
 
@@ -901,13 +901,6 @@ th.number-right {
   background: var(--primary-l5);
 }
 
-/* ── 可折叠列（小屏隐藏非核心列）── */
-@media (max-width: 900px) {
-  .col-collapsible {
-    display: none;
-  }
-}
-
 /* ===================================================================
    SECTION SUBTITLE
    =================================================================== */
@@ -959,32 +952,6 @@ th.number-right {
   background: var(--primary);
   border-radius: 2px;
   flex-shrink: 0;
-}
-.column-toggle-btn {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  padding: 4px 12px;
-  cursor: pointer;
-  font-family: var(--font-family);
-  transition: all .15s;
-  white-space: nowrap;
-  letter-spacing: 0.2px;
-}
-.column-toggle-btn:hover {
-  color: var(--primary);
-  border-color: var(--primary-light);
-  background: var(--primary-l5);
-}
-.column-toggle-btn:active {
-  background: var(--primary-l10);
-}
-/* 列收起状态切换 */
-.col-collapsible.hidden {
-  display: none;
 }
 
 /* ===================================================================
@@ -1323,7 +1290,6 @@ th.number-right {
     <div class="sub-section">
       <h3 class="sub-section-title">
         <span class="sub-title-bar"></span>项目明细
-        <button id="column-toggle-btn" class="column-toggle-btn" title="显示/隐藏非核心列" onclick="toggleCollapsibleColumns()">⚙ 列设置</button>
       </h3>
       <div class="table-container">
         <div class="table-scroll-wrap">
@@ -1335,11 +1301,11 @@ th.number-right {
               <th>业务员</th>
               <th>组件功率(kW)</th>
               <th>逆变器功率(kW)</th>
-              <th class="col-collapsible">电池容量(kWh)</th>
+              <th>电池容量(kWh)</th>
               <th>是否有效</th>
               <th>提交日期</th>
-              <th>项目管理部核价审批人</th>
-              <th class="col-collapsible">流程编号</th>
+              <th>流程状态</th>
+              <th>流程编号</th>
             </tr>
           </thead>
           <tbody id="detail-table-body"></tbody>
@@ -1697,6 +1663,8 @@ var donutCenterPlugin = {
 var dataLabelPlugin = {
   id: 'dataLabel',
   afterDraw: function(chart) {
+    // 跳过饼图/环状图（此类图表由 chartjs-plugin-datalabels 负责标签显示）
+    if (chart.config.type === 'doughnut' || chart.config.type === 'pie') return;
     // 仅在柱状/条形图（包含 indexAxis）上生效
     if (!chart.isDatasetVisible || !chart.getDatasetMeta) return;
     var ctx = chart.ctx;
@@ -1748,6 +1716,26 @@ if (typeof Chart !== 'undefined') {
   Chart.register(dataLabelPlugin);
 }
 
+// 注册 chartjs-plugin-datalabels 插件（用于饼图扇区标签显示）
+function registerDataLabelsPlugin() {
+  if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+    Chart.register(ChartDataLabels);
+    // 全局禁用 datalabels，仅在环形图配置中单独启用，避免与其他图表冲突
+    Chart.defaults.plugins.datalabels = { display: false };
+    return true;
+  }
+  return false;
+}
+// 立即尝试注册，若 CDN 尚未加载则轮询等待
+if (!registerDataLabelsPlugin()) {
+  var _retryCount = 0;
+  var _retryInterval = setInterval(function() {
+    if (registerDataLabelsPlugin() || ++_retryCount > 50) {
+      clearInterval(_retryInterval);
+    }
+  }, 100);
+}
+
 /* ──────────── 通用图表配置 ──────────── */
 function makeBarOpts(xLabel, yLabel) {
   return {
@@ -1789,7 +1777,7 @@ function makeDonutOpts(showCenter) {
     responsive: true,
     maintainAspectRatio: true,
     aspectRatio: 1.2,
-    showCenterText: showCenter !== false,  // 默认显示中间文本
+    showCenterText: false,  // 不显示中间文本，数据改在扇区上显示
     animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
     plugins: {
       legend: {
@@ -1810,6 +1798,25 @@ function makeDonutOpts(showCenter) {
             return ctx.label + ': ' + fmtNum(value) + ' (' + pct + '%)';
           }
         }
+      },
+      // 在扇区上直接显示百分比和数值
+      datalabels: {
+        display: true,
+        color: '#fff',
+        font: {
+          weight: 'bold',
+          size: 13,
+        },
+        anchor: 'center',
+        align: 'center',
+        offset: 0,
+        formatter: function(value, ctx) {
+          const total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+          const pct = total > 0 ? (value / total * 100).toFixed(1) : 0;
+          // 百分比小于 5% 时不显示标签（避免重叠）
+          if (parseFloat(pct) < 5) return '';
+          return fmtNum(value) + '\n(' + pct + '%)';
+        },
       },
     },
     cutout: '55%',
@@ -2568,9 +2575,9 @@ function initApprovalCharts() {
 
 /* ──────────── Tab 3 图表：明细 ──────────── */
 function initDetailCharts() {
-  let summaries = computePeriodSummaries(ROWS_DETAIL);
-  let periodNames = Object.keys(summaries);
   let filtered = getFilteredRows();
+  let summaries = computePeriodSummaries(filtered);
+  let periodNames = Object.keys(summaries);
 
   // 周期功率趋势柱状图
   let moduleData = periodNames.map(function(n) { return summaries[n].modulePower; });
@@ -2718,7 +2725,7 @@ function renderDetailTable(rows) {
   let endIdx = Math.min(startIdx + detailPageState.pageSize, rows.length);
   let pageRows = rows.slice(startIdx, endIdx);
 
-  // 渲染当前页（项目名称 -> sticky 列；流程编号 -> 最后可折叠列）
+    // 渲染当前页（项目名称 -> sticky 列）
   pageRows.forEach(function(item) {
     let tr = document.createElement('tr');
     tr.appendChild(createTableCell('td', item.projectName, 'sticky-col'));
@@ -2730,8 +2737,8 @@ function renderDetailTable(rows) {
     tr.appendChild(createTableCell('td', item.batteryCapacity != null ? item.batteryCapacity.toFixed(2) : '--'));
     tr.appendChild(createTableCell('td', item.isValid));
     tr.appendChild(createTableCell('td', item.submitDate));
-    tr.appendChild(createTableCell('td', item.negotiationApprover));
-    tr.appendChild(createTableCell('td', item.flowId, 'col-collapsible'));
+    tr.appendChild(createTableCell('td', item.flowStatus));
+    tr.appendChild(createTableCell('td', item.flowId));
     tbody.appendChild(tr);
   });
 
@@ -2812,17 +2819,6 @@ function renderProvinceTable() {
       '<td class="number-right">' + item.module.toFixed(2) + '</td>';
     tbody.appendChild(tr);
   });
-}
-
-/* ──────────── 列设置：切换可折叠列的显隐 ──────────── */
-var _collapsibleVisible = false;
-function toggleCollapsibleColumns() {
-  _collapsibleVisible = !_collapsibleVisible;
-  document.querySelectorAll('.col-collapsible').forEach(function(el) {
-    el.classList.toggle('hidden', !_collapsibleVisible);
-  });
-  var btn = document.getElementById('column-toggle-btn');
-  if (btn) btn.textContent = _collapsibleVisible ? '✓ 全部列' : '⚙ 列设置';
 }
 
 /* ──────────── 审批人下拉列表 ──────────── */
@@ -3014,7 +3010,7 @@ function exportToExcel() {
       '电池容量(kWh)': row.batteryCapacity,
       '是否有效': row.isValid,
       '提交日期': row.submitDate,
-      '项目管理部核价审批人': row.negotiationApprover,
+      '流程状态': row.flowStatus,
     };
   }));
   var wb = XLSX.utils.book_new();

@@ -1,6 +1,7 @@
 """API 响应数据的解析与 FlowRecord 填充。
 
 从 dms_browser.py 拆分而来，包含：
+  - _should_record_final_approval_time: 判断是否应记录审批完成时间
   - parse_json_date: 将 detail['jsonDate'] 从 JSON 字符串解析为 dict
   - mask_salesperson: 对业务员信息进行脱敏处理
   - fill_record_from_api: 从 flowDetails API 响应数据中填充 FlowRecord
@@ -15,6 +16,16 @@ import json
 import logging
 
 logger = logging.getLogger("dms_report")
+
+
+def _should_record_final_approval_time(flow_status_name: str) -> bool:
+    """判断是否应记录审批完成时间。
+
+    只有流程整体状态为审批结束/审批通过时才记录，避免作废流程记录虚假的审批完成时间。
+    """
+    if not flow_status_name:
+        return False
+    return "审批通过" in flow_status_name or "审批结束" in flow_status_name
 
 
 def parse_json_date(detail: dict) -> None:
@@ -41,7 +52,7 @@ def mask_salesperson(s: str) -> str:
     return s[0] + "***" if len(s) > 1 else s
 
 
-def fill_record_from_api(rec, api_data: dict, flow_id: str) -> None:
+def fill_record_from_api(rec, api_data: dict, flow_id: str, flow_status_name: str = "") -> None:
     """从 flowDetails API 响应数据中填充 FlowRecord。
 
     解析 jsonDate.req（项目信息）、jsonDate.projectManagementPricing（定价）、nodeList（审批链）。
@@ -98,11 +109,8 @@ def fill_record_from_api(rec, api_data: dict, flow_id: str) -> None:
         rec.unit_price = "--"
         rec.total_price = "--"
 
-    node_list = api_data.get("nodeList") or []
-    fill_approval_from_nodes(rec, node_list)
-
-    # 流程状态：从 jsonDate.statusName 获取
-    rec.flow_status = json_date.get("statusName") or "--"
+    node_list = api_data.get("nodeList") or json_date.get("nodeList") or []
+    fill_approval_from_nodes(rec, node_list, flow_status_name)
 
     logger.debug(
         "API flow_id=%s | project=%r | province=%r | salesman=%r | price=%.2f/%s | pricing_keys=%s",
@@ -116,7 +124,7 @@ def fill_record_from_api(rec, api_data: dict, flow_id: str) -> None:
     )
 
 
-def fill_approval_from_nodes(rec, node_list: list) -> None:
+def fill_approval_from_nodes(rec, node_list: list, flow_status_name: str = "") -> None:
     """从 API nodeList 填充审批信息。"""
     submit_time = "--"
     negotiation_processor = "--"
@@ -125,6 +133,9 @@ def fill_approval_from_nodes(rec, node_list: list) -> None:
     province_processor = "--"
     province_status = "--"
     final_approval_time = "--"
+
+    # 判断是否应记录审批完成时间（仅当流程整体状态为审批结束/审批通过时）
+    should_record_final_time = _should_record_final_approval_time(flow_status_name)
 
     for node in node_list:
         role_name = node.get("roleName") or ""
@@ -145,7 +156,7 @@ def fill_approval_from_nodes(rec, node_list: list) -> None:
             # 已废弃，保留供后续恢复使用
             pass
 
-        if "通过" in status_name and update_time and update_time not in ("--", ""):
+        if should_record_final_time and "通过" in status_name and update_time and update_time not in ("--", ""):
             if final_approval_time in ("--", "") or update_time > final_approval_time:
                 final_approval_time = update_time
 
@@ -181,7 +192,9 @@ def fill_approval_from_dict(rec, approval: dict) -> None:
     rec.negotiation_time = approval.get("negotiation_time", "--")
     rec.province_processor = approval.get("province_processor", "--")
     rec.province_status = approval.get("province_status", "--")
-    rec.final_approval_time = approval.get("final_approval_time", "--")
+    # 只有流程整体状态为审批结束/审批通过时才记录审批完成时间
+    if _should_record_final_approval_time(rec.flow_status):
+        rec.final_approval_time = approval.get("final_approval_time", "--")
     # 计算是否有效：项目管理部核价审批通过即为有效
     negotiation_status = approval.get("negotiation_status", "--")
     rec.is_valid = "是" if negotiation_status and "通过" in negotiation_status else "否"

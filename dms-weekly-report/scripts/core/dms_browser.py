@@ -119,7 +119,7 @@ class TableProcessResult:
     skipped_wrong_type: int = 0
     skipped_invalid: int = 0
     skipped_dup: int = 0
-    flow_status: int = 1  # 流程状态，用于 flowDetails API 请求参数
+    flow_status_map: dict[str, str] = field(default_factory=dict)  # flow_id → statusName
 
     @property
     def valid_rows(self) -> int:
@@ -227,6 +227,7 @@ async def _get_api_headers(context: BrowserContext) -> dict[str, str] | None:
 
 async def filter_and_get_flow_ids_via_api(
     context: BrowserContext, start_date: str, end_date: str,
+    include_invalid: bool = True,
 ) -> TableProcessResult:
     """通过 API 筛选已办流程，返回有效流程编号列表。
 
@@ -301,11 +302,11 @@ async def filter_and_get_flow_ids_via_api(
                 result.skipped_wrong_type += 1
                 continue
 
-            # 作废校验（默认包含作废流程，仅记录计数）
+            # 作废校验
             if "作废" in status_name:
                 result.skipped_invalid += 1
-                # 默认包含作废流程，不再跳过
-                # continue
+                if not include_invalid:
+                    continue
 
             # 去重
             if flow_id in result.seen_ids:
@@ -313,6 +314,7 @@ async def filter_and_get_flow_ids_via_api(
                 continue
 
             result.add_flow_id(flow_id)
+            result.flow_status_map[flow_id] = status_name
 
         # 翻页判断
         if len(result.flow_ids) >= total or len(rows) < API_FILTER_PAGE_SIZE:
@@ -323,7 +325,10 @@ async def filter_and_get_flow_ids_via_api(
     if result.skipped_wrong_type:
         logger.info("  跳过非目标流程: %d 条", result.skipped_wrong_type)
     if result.skipped_invalid:
-        logger.info("  跳过作废流程: %d 条", result.skipped_invalid)
+        if include_invalid:
+            logger.info("  作废流程: %d 条（已包含）", result.skipped_invalid)
+        else:
+            logger.info("  跳过作废流程: %d 条", result.skipped_invalid)
     if result.skipped_dup:
         logger.info("  跳过重复流程: %d 条", result.skipped_dup)
     return result
@@ -393,7 +398,8 @@ async def do_login(page: Page) -> None:
 # ==================== 筛选 ====================
 
 
-async def filter_and_get_flow_ids(page: Page, start_date: str, end_date: str) -> TableProcessResult:
+async def filter_and_get_flow_ids(page: Page, start_date: str, end_date: str,
+                                   include_invalid: bool = True) -> TableProcessResult:
     """在已办流程中按日期筛选，返回有效流程编号列表（支持多页翻页）。"""
     logger.info("筛选日期范围: %s ~ %s", start_date, end_date)
     await _navigate_to_process_center(page)
@@ -431,7 +437,7 @@ async def filter_and_get_flow_ids(page: Page, start_date: str, end_date: str) ->
     result = TableProcessResult()
 
     # 处理第 1 页
-    result = await _process_table_rows(page, result)
+    result = await _process_table_rows(page, result, include_invalid=include_invalid)
 
     # 翻页处理后续页面
     for page_num in range(2, total_pages + 1):
@@ -447,13 +453,16 @@ async def filter_and_get_flow_ids(page: Page, start_date: str, end_date: str) ->
             logger.warning("翻到第 %d 页失败，终止翻页", page_num)
             break
 
-        result = await _process_table_rows(page, result)
+        result = await _process_table_rows(page, result, include_invalid=include_invalid)
 
     logger.info("有效行: %d 行（去重后 %d 个流程）", result.valid_rows, len(result.flow_ids))
     if result.skipped_wrong_type:
         logger.info("跳过非目标流程: %d 条", result.skipped_wrong_type)
     if result.skipped_invalid:
-        logger.info("跳过作废流程: %d 条", result.skipped_invalid)
+        if include_invalid:
+            logger.info("作废流程: %d 条（已包含）", result.skipped_invalid)
+        else:
+            logger.info("跳过作废流程: %d 条", result.skipped_invalid)
     if result.skipped_dup:
         logger.info("跳过重复流程: %d 条", result.skipped_dup)
     return result
@@ -482,7 +491,7 @@ _navigate_to_process_center = _filtering_mod._navigate_to_process_center
 
 async def extract_all_parallel(
     context: BrowserContext, flow_ids: list[str], workers: int,
-    flow_status: int = 1,
+    flow_status_map: dict[str, str] | None = None,
 ) -> list[FlowRecord]:
     """并行提取所有流程详情（页面池复用模式）。"""
     total = len(flow_ids)
@@ -493,7 +502,8 @@ async def extract_all_parallel(
     sem = asyncio.Semaphore(workers)
 
     async def _extract_with_page(ctx, fid, s, pg):
-        return await extract_detail_by_url(ctx, fid, s, page=pg, flow_status=flow_status)
+        status_name = (flow_status_map or {}).get(fid, "")
+        return await extract_detail_by_url(ctx, fid, s, page=pg, flow_status_name=status_name)
 
     tasks = [_extract_with_page(context, flow_ids[i], sem, pages[i % len(pages)])
              for i in range(total)]

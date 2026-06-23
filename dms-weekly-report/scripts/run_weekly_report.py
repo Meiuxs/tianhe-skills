@@ -170,6 +170,7 @@ async def _launch_browser_context(args: argparse.Namespace):
 async def _login_and_filter(
     page: Any, context: Any,
     start_date: str, end_date: str,
+    include_invalid: bool = True,
 ) -> Any:
     """登录 DMS 并筛选流程列表。
 
@@ -188,7 +189,9 @@ async def _login_and_filter(
     filter_result = None
     try:
         logger.info("尝试 API 方式筛选流程列表...")
-        filter_result = await filter_and_get_flow_ids_via_api(context, start_date, end_date)
+        filter_result = await filter_and_get_flow_ids_via_api(
+            context, start_date, end_date, include_invalid=include_invalid,
+        )
         if filter_result and filter_result.flow_ids:
             logger.info("API 筛选成功，获取 %d 个流程", len(filter_result.flow_ids))
         else:
@@ -199,7 +202,9 @@ async def _login_and_filter(
         filter_result = None
 
     if not filter_result:
-        filter_result = await filter_and_get_flow_ids(page, start_date, end_date)
+        filter_result = await filter_and_get_flow_ids(
+            page, start_date, end_date, include_invalid=include_invalid,
+        )
 
     return filter_result
 
@@ -208,7 +213,7 @@ async def _extract_details(
     context: Any,
     flow_ids: list[str],
     workers: int,
-    flow_status: dict | None = None,
+    flow_status_map: dict[str, str] | None = None,
 ) -> list[FlowRecord]:
     """并行提取详情。
 
@@ -216,7 +221,7 @@ async def _extract_details(
         records 列表
     """
     # TODO: 后续可能恢复使用 fetch_ordered_flow_ids 进行下单检查
-    all_details = await extract_all_parallel(context, flow_ids, workers, flow_status=flow_status)
+    all_details = await extract_all_parallel(context, flow_ids, workers, flow_status_map=flow_status_map)
     return all_details
 
 
@@ -302,7 +307,10 @@ async def run(args: argparse.Namespace) -> None:
         p, context, page = await _launch_browser_context(args)
 
         # 登录 + 筛选
-        filter_result = await _login_and_filter(page, context, start_date, end_date)
+        filter_result = await _login_and_filter(
+            page, context, start_date, end_date,
+            include_invalid=args.include_invalid,
+        )
 
         flow_ids = filter_result.flow_ids
         if not flow_ids:
@@ -311,7 +319,7 @@ async def run(args: argparse.Namespace) -> None:
             # 提取详情
             all_details = await _extract_details(
                 context, flow_ids, args.workers,
-                flow_status=filter_result.flow_status,
+                flow_status_map=filter_result.flow_status_map,
             )
             if not all_details:
                 logger.info("未能提取到任何详情")
@@ -540,6 +548,10 @@ def main() -> None:
                              "等价于 --stats-only --date-label \"本月\"")
     parser.add_argument("--dry-run", action="store_true",
                         help="预演模式：打印完整执行计划（日期范围、输出路径、参数）但不启动浏览器")
+    parser.add_argument("--include-invalid", action="store_true", default=False,
+                        help="显式包含作废流程（默认行为，通常无需指定）")
+    parser.add_argument("--exclude-invalid", action="store_true",
+                        help="排除作废流程（旧逻辑）")
     args = parser.parse_args()
 
     configure_logging(args.verbose)
@@ -555,6 +567,16 @@ def main() -> None:
     if args.stats_only and args.this_month:
         args.start_date, args.end_date = None, None
         args.date_label = "本月"
+
+    # --include-invalid 和 --exclude-invalid 互斥
+    if args.include_invalid and args.exclude_invalid:
+        logger.error("--include-invalid 和 --exclude-invalid 不能同时使用")
+        sys.exit(1)
+    # 默认行为是包含作废流程，只有 --exclude-invalid 时才排除
+    if not args.include_invalid and not args.exclude_invalid:
+        args.include_invalid = True
+    elif args.exclude_invalid:
+        args.include_invalid = False
 
     # 三种日期方式只能选一种（优先级: start-date > date-label > weeks）
     if args.start_date and args.end_date:
@@ -604,6 +626,7 @@ def main() -> None:
         print(f"  输出目录    {output_dir}")
         print(f"  并发数      {args.workers}")
         print(f"  无头模式    {args.headless}")
+        print(f"  包含作废    {'是' if args.include_invalid else '否'}")
         print(f"  Excel路径   {output_dir}/询价汇总_{timestamp_str}.xlsx")
         print(f"  HTML路径    {output_dir}/询价周报报表_{timestamp_str}.html")
         print(f"  统计模式    {args.stats_only}")
