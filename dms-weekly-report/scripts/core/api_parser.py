@@ -121,8 +121,6 @@ def fill_approval_from_nodes(rec, node_list: list) -> None:
     negotiation_time = "--"
     province_processor = "--"
     province_status = "--"
-    purchase_processor = "--"
-    purchase_status = "--"
     final_approval_time = "--"
 
     for node in node_list:
@@ -141,8 +139,8 @@ def fill_approval_from_nodes(rec, node_list: list) -> None:
             province_processor = user_name
             province_status = status_name
         elif "采购" in role_name or "商务" in role_name:
-            purchase_processor = user_name
-            purchase_status = status_name
+            # 已废弃，保留供后续恢复使用
+            pass
 
         if "通过" in status_name and update_time and update_time not in ("--", ""):
             if final_approval_time in ("--", "") or update_time > final_approval_time:
@@ -154,8 +152,6 @@ def fill_approval_from_nodes(rec, node_list: list) -> None:
     rec.negotiation_time = negotiation_time
     rec.province_processor = province_processor
     rec.province_status = province_status
-    rec.purchase_processor = purchase_processor
-    rec.purchase_status = purchase_status
     rec.final_approval_time = final_approval_time
     # 计算是否有效：项目管理部核价审批通过即为有效
     rec.is_valid = "是" if negotiation_status and "通过" in negotiation_status else "否"
@@ -182,8 +178,6 @@ def fill_approval_from_dict(rec, approval: dict) -> None:
     rec.negotiation_time = approval.get("negotiation_time", "--")
     rec.province_processor = approval.get("province_processor", "--")
     rec.province_status = approval.get("province_status", "--")
-    rec.purchase_processor = approval.get("purchase_processor", "--")
-    rec.purchase_status = approval.get("purchase_status", "--")
     rec.final_approval_time = approval.get("final_approval_time", "--")
     # 计算是否有效：项目管理部核价审批通过即为有效
     negotiation_status = approval.get("negotiation_status", "--")

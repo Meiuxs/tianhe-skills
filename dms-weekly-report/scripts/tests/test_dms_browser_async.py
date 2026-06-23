@@ -370,11 +370,11 @@ class TestFlowRecordExtended:
         assert rec.total_price == "--"
         assert rec.submit_time == "--"
         assert rec.remark == "无"
-        assert rec.ordered == "否"
+        assert rec.is_valid == "否"
         assert rec.province_processor == "--"
         assert rec.province_status == "--"
-        assert rec.purchase_processor == "--"
-        assert rec.purchase_status == "--"
+        assert rec.negotiation_processor == "--"
+        assert rec.negotiation_status == "--"
         assert rec.final_approval_time == "--"
 
     def test_custom_values(self):
