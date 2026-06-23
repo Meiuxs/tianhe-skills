@@ -8,8 +8,8 @@ description: >
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.7.0
-  updated: 2026-06-17
+  version: 1.8.0
+  updated: 2026-06-23
 ---
 
 # DMS 非标询价周报生成器
@@ -227,6 +227,8 @@ python "$SKILL_DIR/scripts/run_weekly_report.py" --output-dir "$PWD" --date-labe
 | `--input-xlsx FILE` | 仅统计模式下显式指定输入的询价汇总 Excel 文件路径 | 自动查找 |
 | `--this-month` | 快捷统计本月（配合 `--stats-only` 使用） | 无 |
 | `--dry-run` | 预演模式：打印完整执行计划但不启动浏览器 | — |
+| `--include-invalid` | 显式包含作废流程（默认行为，通常无需指定） | 无 |
+| `--exclude-invalid` | 排除作废流程 | — |
 
 ### 输出文件
 
