@@ -20,16 +20,16 @@ from generate_html_report import (
 from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
-    COL_SUBMIT_TIME, COL_ORDERED, COL_REMARK,
+    COL_SUBMIT_TIME, COL_REMARK,
+    COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
 )
 
 
 def _make_row(**overrides):
-    """构造一行 19 列的测试数据。"""
-    row = ["--"] * 19
+    """构造一行 20 列的测试数据。"""
+    row = ["--"] * 20
     defaults = {
         "flow_id": "12345678901234567",
         "project_name": "测试项目",
@@ -39,12 +39,13 @@ def _make_row(**overrides):
         "inverter_kw": 8.0,
         "battery_kwh": 5.0,
         "submit_time": "2026-06-01 10:00:00",
-        "ordered": "是",
+        "is_valid": "是",
         "remark": "无",
+        "negotiation_processor": "王五",
+        "negotiation_status": "审批通过",
+        "negotiation_time": "2026-06-02 12:00:00",
         "province_processor": "李四",
         "province_status": "审批通过",
-        "purchase_processor": "王五",
-        "purchase_status": "审批通过",
         "final_approval_time": "2026-06-03 15:30:00",
     }
     defaults.update(overrides)
@@ -56,12 +57,12 @@ def _make_row(**overrides):
     row[COL_INVERTER_KW] = defaults["inverter_kw"]
     row[COL_BATTERY_KWH] = defaults["battery_kwh"]
     row[COL_SUBMIT_TIME] = defaults["submit_time"]
-    row[COL_ORDERED] = defaults["ordered"]
+    row[COL_IS_VALID] = defaults["is_valid"]
     row[COL_REMARK] = defaults["remark"]
+    row[COL_NEGOTIATION_PROCESSOR] = defaults["negotiation_processor"]
+    row[COL_NEGOTIATION_STATUS] = defaults["negotiation_status"]
     row[COL_PROVINCE_PROCESSOR] = defaults["province_processor"]
     row[COL_PROVINCE_STATUS] = defaults["province_status"]
-    row[COL_PURCHASE_PROCESSOR] = defaults["purchase_processor"]
-    row[COL_PURCHASE_STATUS] = defaults["purchase_status"]
     row[COL_FINAL_APPROVAL_TIME] = defaults["final_approval_time"]
     return row
 
@@ -213,19 +214,21 @@ class TestComputeRowsDetail:
         # IEEE 754 浮点数精度限制，大数转换可能丢失精度
         assert result[0]["flowId"].isdigit()
 
-    def test_ordered_yes(self):
+    def test_is_valid_yes(self):
         row = _make_row()
-        row[COL_ORDERED] = "是"
+        row[COL_IS_VALID] = "是"
         rows = [row]
         result = compute_rows_detail(rows)
-        assert result[0]["ordered"] == "是"
+        assert result[0]["isValid"] == "是"
+        assert result[0]["isInvalid"] is False
 
-    def test_ordered_no(self):
+    def test_is_valid_no(self):
         row = _make_row()
-        row[COL_ORDERED] = "否"
+        row[COL_IS_VALID] = "否"
         rows = [row]
         result = compute_rows_detail(rows)
-        assert result[0]["ordered"] == "否"
+        assert result[0]["isValid"] == "否"
+        assert result[0]["isInvalid"] is True
 
     def test_final_date_empty(self):
         row = _make_row()
@@ -255,19 +258,19 @@ class TestComputeRowsDetail:
         result = compute_rows_detail(rows)
         assert result[0]["finalDate"] == "2026-06-03"
 
-    def test_procurement_approver_dash(self):
+    def test_negotiation_approver_dash(self):
         row = _make_row()
-        row[COL_PURCHASE_PROCESSOR] = "--"
+        row[COL_NEGOTIATION_PROCESSOR] = "--"
         rows = [row]
         result = compute_rows_detail(rows)
-        assert result[0]["procurementApprover"] == ""
+        assert result[0]["negotiationApprover"] == ""
 
-    def test_procurement_approver_valid(self):
+    def test_negotiation_approver_valid(self):
         row = _make_row()
-        row[COL_PURCHASE_PROCESSOR] = "王五"
+        row[COL_NEGOTIATION_PROCESSOR] = "王五"
         rows = [row]
         result = compute_rows_detail(rows)
-        assert result[0]["procurementApprover"] == "王五"
+        assert result[0]["negotiationApprover"] == "王五"
 
     def test_province_status_valid(self):
         row = _make_row()
@@ -396,3 +399,7 @@ class TestRowDetailType:
         assert "flowId" in RowDetail.__annotations__  # 实际字段名是 flowId (camelCase)
         assert "projectName" in RowDetail.__annotations__
         assert "modulePower" in RowDetail.__annotations__
+        assert "isValid" in RowDetail.__annotations__
+        assert "isInvalid" in RowDetail.__annotations__
+        assert "negotiationApprover" in RowDetail.__annotations__
+        assert "negotiationStatus" in RowDetail.__annotations__

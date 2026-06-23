@@ -98,11 +98,15 @@ class FlowRecord:
     total_price: str = "--"
     submit_time: str = "--"
     remark: str = "无"
-    ordered: str = "否"
+    ordered: str = "否"                    # TODO: 后续可能恢复使用
+    is_valid: str = "否"                  # 是否有效：项目管理部核价审批通过为"是"
+    negotiation_processor: str = "--"      # 项目管理部核价审批人
+    negotiation_status: str = "--"        # 项目管理部核价审批状态
+    negotiation_time: str = "--"          # 项目管理部核价审批时间
     province_processor: str = "--"
     province_status: str = "--"
-    purchase_processor: str = "--"
-    purchase_status: str = "--"
+    purchase_processor: str = "--"        # TODO: 后续可能恢复使用
+    purchase_status: str = "--"           # TODO: 后续可能恢复使用
     final_approval_time: str = "--"
 
 
@@ -296,10 +300,11 @@ async def filter_and_get_flow_ids_via_api(
                 result.skipped_wrong_type += 1
                 continue
 
-            # 作废校验
+            # 作废校验（默认包含作废流程，仅记录计数）
             if "作废" in status_name:
                 result.skipped_invalid += 1
-                continue
+                # 默认包含作废流程，不再跳过
+                # continue
 
             # 去重
             if flow_id in result.seen_ids:

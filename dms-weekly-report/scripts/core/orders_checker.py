@@ -10,6 +10,8 @@
   询价详情提取完成后，调用 check_orders_parallel 批量标记"是否已下单"。
   日期范围 = start_date ~ end_date + ORDER_CHECK_EXTEND_DAYS 天，
   扩展天数覆盖审批周期，避免漏掉已下单但未在周内完成的流程。
+
+TODO: 后续可能恢复使用。当前已替换为项目管理部核价审批有效性检查。
 """
 
 from __future__ import annotations

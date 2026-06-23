@@ -15,18 +15,24 @@ logger = logging.getLogger("dms_report")
 async def extract_approval_info(page: Any) -> dict[str, str]:
     """从审批历史表提取完整的审批链信息。
 
-    提取字段：提交时间、省总审批人/状态、采购审批人/状态、最终完成时间。
+    提取字段：提交时间、核价审批人/状态/时间、省总审批人/状态、采购审批人/状态、最终完成时间。
 
     Args:
         page: Playwright Page 对象（已导航到详情页）。
 
     Returns:
-        dict 包含 6 个键：
-            submit_time, province_processor, province_status,
-            purchase_processor, purchase_status, final_approval_time。
+        dict 包含 9 个键：
+            submit_time,
+            negotiation_processor, negotiation_status, negotiation_time,
+            province_processor, province_status,
+            purchase_processor, purchase_status,
+            final_approval_time。
     """
     result: dict[str, str] = {
         "submit_time": "--",
+        "negotiation_processor": "--",
+        "negotiation_status": "--",
+        "negotiation_time": "--",
         "province_processor": "--",
         "province_status": "--",
         "purchase_processor": "--",
@@ -50,6 +56,10 @@ async def extract_approval_info(page: Any) -> dict[str, str]:
 
                             if "流程发起人" in node and "提交审核" in status_val:
                                 result["submit_time"] = time_text
+                            elif "项目管理部核价" in node:
+                                result["negotiation_processor"] = processor
+                                result["negotiation_status"] = status_val
+                                result["negotiation_time"] = time_text
                             elif "省总" in node or "省公司" in node:
                                 result["province_processor"] = processor
                                 result["province_status"] = status_val

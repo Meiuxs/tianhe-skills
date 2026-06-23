@@ -650,8 +650,8 @@ class TestProcessTableRowsEdgeCases:
         assert result.skipped_invalid == 0
         assert result.valid_rows == 0
 
-    async def test_skip_cancelled_flow(self):
-        """作废流程被跳过。"""
+    async def test_include_cancelled_flow(self):
+        """默认包含作废流程，skipped_invalid 仅记录计数。"""
         td_locator = MagicMock()
         td_locator.all_text_contents = AsyncMock(return_value=[
             "12345678901234567", TARGET_FLOW_TYPE, "作废"
@@ -669,7 +669,8 @@ class TestProcessTableRowsEdgeCases:
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
 
-        assert result.flow_ids == []
+        # 默认包含作废流程
+        assert result.flow_ids == ["12345678901234567"]
         assert result.skipped_invalid == 1
 
     async def test_skip_duplicate_flow(self):
@@ -1025,7 +1026,7 @@ class TestFilterAndGetFlowIdsViaApi:
         assert context.request.post.call_count == 2
 
     async def test_skip_wrong_type(self):
-        """跳过非目标流程类型。"""
+        """跳过非目标流程类型，默认包含作废流程。"""
         data = {
             "code": 1,
             "data": {
@@ -1040,8 +1041,10 @@ class TestFilterAndGetFlowIdsViaApi:
         context, _ = await self._make_mock_context(data)
         result = await filter_and_get_flow_ids_via_api(context, "2026-06-01", "2026-06-15")
 
-        assert len(result.flow_ids) == 1
+        # 默认包含作废流程，所以是 2 条（001 和 003）
+        assert len(result.flow_ids) == 2
         assert "20260616000000001" in result.flow_ids
+        assert "20260616000000003" in result.flow_ids
         assert result.skipped_wrong_type == 1
         assert result.skipped_invalid == 1
 

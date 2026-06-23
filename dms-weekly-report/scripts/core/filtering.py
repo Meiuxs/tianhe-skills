@@ -88,7 +88,8 @@ async def _process_table_rows(
         if "作废" in status_text:
             result.skipped_invalid += 1
             logger.debug("跳过作废流程: %s", flow_text)
-            continue
+            # 默认包含作废流程，不再跳过
+            # continue
 
         if flow_text in result.seen_ids:
             result.skipped_dup += 1

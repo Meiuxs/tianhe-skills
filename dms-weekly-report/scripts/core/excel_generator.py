@@ -24,7 +24,8 @@ from column_definitions import (
     COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
     COL_UNIT_PRICE, COL_TOTAL_PRICE,
-    COL_SUBMIT_TIME, COL_REMARK, COL_ORDERED,
+    COL_SUBMIT_TIME, COL_REMARK,
+    COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
@@ -146,7 +147,7 @@ def _init_worksheet(ws: Any) -> None:
 
 
 def _build_rows_data(records: list) -> list[list[Any]]:
-    """从 FlowRecord 列表构建 19 列行数据。"""
+    """从 FlowRecord 列表构建 20 列行数据。"""
     return [
         [
             r.flow_id, r.project_name,
@@ -154,9 +155,10 @@ def _build_rows_data(records: list) -> list[list[Any]]:
             r.province, r.salesperson,
             r.module_kw, r.inverter_kw, r.battery_kwh,
             r.unit_price, r.total_price,
-            r.submit_time, r.remark, r.ordered,
+            r.submit_time, r.remark,
+            r.is_valid,
+            r.negotiation_processor, r.negotiation_status, r.negotiation_time,
             r.province_processor, r.province_status,
-            r.purchase_processor, r.purchase_status,
             r.final_approval_time,
         ]
         for r in records
@@ -178,7 +180,7 @@ def _deduplicate_rows(wb: openpyxl.Workbook, rows_data: list[list[Any]]) -> list
     return new_rows
 
 
-def _read_data_rows(data_ws: Any, max_cols: int = 19) -> list[list[Any]]:
+def _read_data_rows(data_ws: Any, max_cols: int = 20) -> list[list[Any]]:
     """从询价汇总 Sheet 读取数据行（跳过表头），供多个 Sheet 生成函数复用。
 
     Args:
@@ -233,8 +235,8 @@ def _update_summary_sheet(
 
     # 计算统计数据
     total_projects = 0
-    ordered_count = 0
-    not_ordered_count = 0
+    valid_count = 0
+    invalid_count = 0
     salesperson_set: set[str] = set()
     valid_rows: list = []
 
@@ -246,11 +248,11 @@ def _update_summary_sheet(
             continue
         total_projects += 1
         valid_rows.append(row)
-        ordered = str(row[COL_ORDERED] if row[COL_ORDERED] else "")
-        if ordered == "是":
-            ordered_count += 1
+        is_valid = str(row[COL_IS_VALID] if row[COL_IS_VALID] else "")
+        if is_valid == "是":
+            valid_count += 1
         else:
-            not_ordered_count += 1
+            invalid_count += 1
         sp = str(row[COL_SALESPERSON] if row[COL_SALESPERSON] else "")
         if sp not in ("--", "无", ""):
             salesperson_set.add(sp)
@@ -281,8 +283,8 @@ def _update_summary_sheet(
     kpis_1 = [
         ("询价项目总数", f"{total_projects}", "个", FONT_KPI_BIG),
         ("涉及业务员", f"{len(salesperson_set)}", "人" if salesperson_set else "", FONT_KPI_MED),
-        ("已下单项目", f"{ordered_count}", "个", FONT_GREEN),
-        ("未下单项目", f"{not_ordered_count}", "个", FONT_ORANGE),
+        ("有效询价", f"{valid_count}", "个", FONT_GREEN),
+        ("无效询价", f"{invalid_count}", "个", FONT_ORANGE),
     ]
     for i, (label, value, unit, vf) in enumerate(kpis_1):
         write_kpi_card(ws, r + i, 1, label, value, unit, vf)
@@ -510,27 +512,27 @@ def _create_report_dashboard(wb: Any) -> None:
     ws.row_dimensions[r].height = ROW_HEIGHT_TITLE
     r += 2
 
-    # ===== 区域1：王剑审批统计（一行三卡片） =====
-    r = write_section_title(ws, r, 1, "王剑采购审批统计", merge_end_col=7)
+    # ===== 区域1：项目管理部核价审批统计（一行三卡片） =====
+    r = write_section_title(ws, r, 1, "项目管理部核价审批统计", merge_end_col=7)
 
-    wangjian_count = 0
-    wangjian_total = 0
+    negotiation_approved = 0
+    negotiation_total = 0
     for row in rows_data:
         fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
         if not re.match(FLOW_ID_PATTERN, fid):
             continue
-        proc = str(row[COL_PURCHASE_PROCESSOR] if len(row) > COL_PURCHASE_PROCESSOR and row[COL_PURCHASE_PROCESSOR] else "")
-        status_val = str(row[COL_PURCHASE_STATUS] if len(row) > COL_PURCHASE_STATUS and row[COL_PURCHASE_STATUS] else "")
-        if "王剑" in proc:
-            wangjian_total += 1
+        proc = str(row[COL_NEGOTIATION_PROCESSOR] if len(row) > COL_NEGOTIATION_PROCESSOR and row[COL_NEGOTIATION_PROCESSOR] else "")
+        status_val = str(row[COL_NEGOTIATION_STATUS] if len(row) > COL_NEGOTIATION_STATUS and row[COL_NEGOTIATION_STATUS] else "")
+        if proc and proc not in ("--", "无", ""):
+            negotiation_total += 1
             if "审批通过" in status_val:
-                wangjian_count += 1
+                negotiation_approved += 1
 
-    rate = f"{wangjian_count/wangjian_total*100:.0f}%" if wangjian_total > 0 else "--"
+    rate = f"{negotiation_approved/negotiation_total*100:.0f}%" if negotiation_total > 0 else "--"
 
     cards = [
-        ("审批通过", wangjian_count, "次", FONT_GREEN),
-        ("经手总次数", wangjian_total, "次", FONT_KPI_MED),
+        ("审批通过", negotiation_approved, "次", FONT_GREEN),
+        ("经手总次数", negotiation_total, "次", FONT_KPI_MED),
         ("通过率", rate, "", FONT_VALUE),
     ]
     for i, (label, value, unit, vf) in enumerate(cards):
@@ -611,7 +613,7 @@ def _create_report_dashboard(wb: Any) -> None:
     # 说明
     r = write_section_title(ws, r, 1, "说明", merge_end_col=7)
     for tip in [
-        "1. 王剑审批统计基于采购审批节点数据",
+        "1. 项目管理部核价审批统计基于核价审批节点数据",
         "2. 省公司排名按询价次数降序排列",
         "3. 审批天数 = 审批完成时间 - 发起人提交审核时间",
         "4. 如需最新数据，重新运行周报脚本即可",

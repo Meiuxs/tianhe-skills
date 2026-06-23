@@ -82,7 +82,8 @@ class TestProcessTableRows:
         assert result.flow_ids == []
         assert result.skipped_invalid == 0
 
-    async def test_skip_cancelled_flow(self):
+    async def test_include_cancelled_flow(self):
+        """默认包含作废流程，skipped_invalid 仅记录计数"""
         from core.dms_browser import SELECTORS
         td = MagicMock()
         td.all_text_contents = AsyncMock(return_value=[
@@ -93,7 +94,8 @@ class TestProcessTableRows:
         page = _make_page_with_locator({SELECTORS["table_tbody"]: [row]})
         result = TableProcessResult()
         result = await _process_table_rows(page, result)
-        assert result.flow_ids == []
+        # 默认包含作废流程
+        assert result.flow_ids == ["12345678901234567"]
         assert result.skipped_invalid == 1
 
     async def test_skip_duplicate_flow(self):

@@ -2,7 +2,7 @@
 
 架构定位：
   本模块是报表渲染层，接收 Excel 原始数据行，输出独立 HTML 报表。
-  数据来源：run_weekly_report.py 生成的「询价汇总」Sheet（19 列）。
+  数据来源：run_weekly_report.py 生成的「询价汇总」Sheet（20 列）。
   输出目标：references/report_template.html + 注入 JSON 数据 → 单文件 HTML。
 
 数据管道：
@@ -33,9 +33,9 @@ from typing import Any, TypedDict
 from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
-    COL_SUBMIT_TIME, COL_ORDERED,
+    COL_SUBMIT_TIME, COL_IS_VALID,
+    COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
     FLOW_ID_PATTERN,
 )
@@ -52,11 +52,12 @@ class RowDetail(TypedDict):
     modulePower: float
     inverterPower: float
     batteryCapacity: float
-    ordered: str
+    isValid: str
+    isInvalid: bool
     submitDate: str
     finalDate: str
-    procurementApprover: str
-    procurementStatus: str
+    negotiationApprover: str
+    negotiationStatus: str
     provinceApprover: str
     provinceStatus: str
 
@@ -163,6 +164,7 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
             continue
         submit_time = _format_datetime(row[COL_SUBMIT_TIME])
         final_raw = _format_datetime(row[COL_FINAL_APPROVAL_TIME])
+        is_valid = str(row[COL_IS_VALID]) if row[COL_IS_VALID] else "否"
         detail.append({
             "flowId": fid,
             "projectName": str(row[COL_PROJECT_NAME]) if row[COL_PROJECT_NAME] else "",
@@ -171,19 +173,20 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
             "modulePower": _safe_float(row[COL_MODULE_KW]),
             "inverterPower": _safe_float(row[COL_INVERTER_KW]),
             "batteryCapacity": _safe_float(row[COL_BATTERY_KWH]),
-            "ordered": str(row[COL_ORDERED]) if row[COL_ORDERED] else "否",
+            "isValid": is_valid,
+            "isInvalid": is_valid != "是",
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "finalDate": final_raw[:10] if len(final_raw) >= 10 and final_raw not in ("--", "无", "") else "",
-            "procurementApprover": (
-                str(row[COL_PURCHASE_PROCESSOR])
-                if row[COL_PURCHASE_PROCESSOR]
-                and row[COL_PURCHASE_PROCESSOR] != "--"
+            "negotiationApprover": (
+                str(row[COL_NEGOTIATION_PROCESSOR])
+                if row[COL_NEGOTIATION_PROCESSOR]
+                and row[COL_NEGOTIATION_PROCESSOR] != "--"
                 else ""
             ),
-            "procurementStatus": (
-                str(row[COL_PURCHASE_STATUS])
-                if row[COL_PURCHASE_STATUS]
-                and row[COL_PURCHASE_STATUS] != "--"
+            "negotiationStatus": (
+                str(row[COL_NEGOTIATION_STATUS])
+                if row[COL_NEGOTIATION_STATUS]
+                and row[COL_NEGOTIATION_STATUS] != "--"
                 else ""
             ),
             "provinceApprover": (
@@ -214,7 +217,7 @@ def generate_html_report(
     """从 rows_data 生成 HTML 报表文件，返回输出路径。
 
     Args:
-        rows_data: 询价数据行，每行 19 列。
+        rows_data: 询价数据行，每行 20 列。
         query_range: 查询范围文本（如 "2026-06-01 ~ 2026-06-07"）。
         output_path: 输出 HTML 文件路径。
         template_path: 模板文件路径，默认使用 references/report_template.html。
