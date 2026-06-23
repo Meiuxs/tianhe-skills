@@ -33,9 +33,9 @@ from typing import Any, TypedDict
 from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
-    COL_SUBMIT_TIME, COL_ORDERED,
+    COL_SUBMIT_TIME,
+    COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
     FLOW_ID_PATTERN,
 )
@@ -52,11 +52,13 @@ class RowDetail(TypedDict):
     modulePower: float
     inverterPower: float
     batteryCapacity: float
-    ordered: str
+    isValid: str  # 新增：是否有效
+    isInvalid: bool  # 新增：是否为作废流程
+    negotiationApprover: str  # 新增：项目管理部核价审批人
+    negotiationStatus: str  # 新增：项目管理部核价审批状态
+    negotiationTime: str  # 新增：项目管理部核价审批时间
     submitDate: str
     finalDate: str
-    procurementApprover: str
-    procurementStatus: str
     provinceApprover: str
     provinceStatus: str
 
@@ -163,6 +165,35 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
             continue
         submit_time = _format_datetime(row[COL_SUBMIT_TIME])
         final_raw = _format_datetime(row[COL_FINAL_APPROVAL_TIME])
+        
+        # 获取是否有效字段
+        is_valid = str(row[COL_IS_VALID]) if len(row) > COL_IS_VALID and row[COL_IS_VALID] else "否"
+        # 获取项目管理部核价审批字段
+        negotiation_approver = (
+            str(row[COL_NEGOTIATION_PROCESSOR])
+            if len(row) > COL_NEGOTIATION_PROCESSOR
+            and row[COL_NEGOTIATION_PROCESSOR]
+            and row[COL_NEGOTIATION_PROCESSOR] != "--"
+            else ""
+        )
+        negotiation_status = (
+            str(row[COL_NEGOTIATION_STATUS])
+            if len(row) > COL_NEGOTIATION_STATUS
+            and row[COL_NEGOTIATION_STATUS]
+            and row[COL_NEGOTIATION_STATUS] != "--"
+            else ""
+        )
+        negotiation_time = (
+            str(row[COL_NEGOTIATION_TIME])
+            if len(row) > COL_NEGOTIATION_TIME
+            and row[COL_NEGOTIATION_TIME]
+            and row[COL_NEGOTIATION_TIME] != "--"
+            else ""
+        )
+        
+        # 判断是否为作废流程（通过审批状态判断）
+        is_invalid = "作废" in str(row[COL_PROVINCE_STATUS] or "") or "作废" in str(row[COL_NEGOTIATION_STATUS] or "")
+        
         detail.append({
             "flowId": fid,
             "projectName": str(row[COL_PROJECT_NAME]) if row[COL_PROJECT_NAME] else "",
@@ -171,21 +202,13 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
             "modulePower": _safe_float(row[COL_MODULE_KW]),
             "inverterPower": _safe_float(row[COL_INVERTER_KW]),
             "batteryCapacity": _safe_float(row[COL_BATTERY_KWH]),
-            "ordered": str(row[COL_ORDERED]) if row[COL_ORDERED] else "否",
+            "isValid": is_valid,
+            "isInvalid": is_invalid,
+            "negotiationApprover": negotiation_approver,
+            "negotiationStatus": negotiation_status,
+            "negotiationTime": negotiation_time,
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "finalDate": final_raw[:10] if len(final_raw) >= 10 and final_raw not in ("--", "无", "") else "",
-            "procurementApprover": (
-                str(row[COL_PURCHASE_PROCESSOR])
-                if row[COL_PURCHASE_PROCESSOR]
-                and row[COL_PURCHASE_PROCESSOR] != "--"
-                else ""
-            ),
-            "procurementStatus": (
-                str(row[COL_PURCHASE_STATUS])
-                if row[COL_PURCHASE_STATUS]
-                and row[COL_PURCHASE_STATUS] != "--"
-                else ""
-            ),
             "provinceApprover": (
                 str(row[COL_PROVINCE_PROCESSOR])
                 if row[COL_PROVINCE_PROCESSOR]

@@ -43,9 +43,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _compat  # noqa: F401 — side-effect: 修复 Windows 中文输出乱码
 from column_definitions import (
     DMS_URL, NAV_TIMEOUT, LOAD_TIMEOUT, accumulate_power,
-    STATUS_ORDERED, STATUS_NOT_ORDERED, STATUS_CHECK_FAILED,
     STATUS_YES, STATUS_NO, STATUS_NONE, STATUS_DASH, SHEET_DATA,
-    COL_FLOW_ID, COL_SUBMIT_TIME, COL_ORDERED, COL_SALESPERSON,
+    COL_FLOW_ID, COL_SUBMIT_TIME, COL_IS_VALID, COL_SALESPERSON,
     COL_PROVINCE_PROCESSOR,
     FLOW_ID_PATTERN,
 )
@@ -112,14 +111,11 @@ def print_summary(
     excel_path: str | None = None,
     error: str | None = None,
     discarded: int = 0,
-    order_count: int = 0,
-    order_date_range: str = "",
 ) -> None:
     """打印格式化执行摘要到终端。"""
     elapsed = (datetime.now() - start_time).total_seconds()
-    ordered = sum(1 for r in (records or []) if r.ordered == STATUS_YES)
-    not_ordered = sum(1 for r in (records or []) if r.ordered == STATUS_NO)
-    check_failed = sum(1 for r in (records or []) if r.ordered == STATUS_CHECK_FAILED)
+    valid_count = sum(1 for r in (records or []) if r.is_valid == STATUS_YES)
+    invalid_count = sum(1 for r in (records or []) if r.is_valid != STATUS_YES)
 
     print("\n========================================")
     print("  执行摘要")
@@ -129,13 +125,9 @@ def print_summary(
         print(f"  提取记录    {len(flow_ids)} 条")
     if discarded:
         print(f"  作废流程    {discarded} 条")
-    if order_count:
-        print(f"  订单总数    {order_count} 条（{order_date_range}）")
     if records:
-        print(f"  已下单      {ordered} 条")
-        print(f"  未下单      {not_ordered} 条")
-        if check_failed:
-            print(f"  检查失败    {check_failed} 条")
+        print(f"  有效询价    {valid_count} 条")
+        print(f"  无效询价    {invalid_count} 条")
     if excel_path:
         print(f"  Excel文件   {excel_path}")
     if error:
@@ -217,19 +209,22 @@ async def _extract_and_check(
     start_date: str, end_date: str,
     workers: int,
     flow_status: dict | None = None,
-) -> tuple[list[FlowRecord], set[str], int]:
-    """并行提取详情 + 查询下单状态。
+) -> list[FlowRecord]:
+    """并行提取详情（已废弃下单检查逻辑）。
 
     Returns:
-        (records, ordered_ids, order_api_total)
+        records
     """
-    from core.orders_checker import fetch_ordered_flow_ids
+    # TODO: 后续可能恢复下单检查逻辑
+    # from core.orders_checker import fetch_ordered_flow_ids
+    # all_details, (ordered_ids, order_api_total) = await asyncio.gather(
+    #     extract_all_parallel(context, flow_ids, workers, flow_status=flow_status),
+    #     fetch_ordered_flow_ids(context, start_date, end_date),
+    # )
+    # return all_details, ordered_ids, order_api_total
 
-    all_details, (ordered_ids, order_api_total) = await asyncio.gather(
-        extract_all_parallel(context, flow_ids, workers, flow_status=flow_status),
-        fetch_ordered_flow_ids(context, start_date, end_date),
-    )
-    return all_details, ordered_ids, order_api_total
+    all_details = await extract_all_parallel(context, flow_ids, workers, flow_status=flow_status)
+    return all_details
 
 
 def _generate_excel_report(
@@ -328,20 +323,14 @@ async def run(args: argparse.Namespace) -> None:
         if not flow_ids:
             logger.info("本周无已办询价记录")
         else:
-            # 提取详情 + 下单查询（并发）
-            all_details, ordered_ids, order_api_total = await _extract_and_check(
+            # 提取详情
+            all_details = await _extract_and_check(
                 context, flow_ids, start_date, end_date, args.workers,
                 flow_status=filter_result.flow_status,
             )
             if not all_details:
                 logger.info("未能提取到任何详情")
             else:
-                # 标注下单状态
-                for rec in all_details:
-                    rec.ordered = "是" if rec.flow_id in ordered_ids else "否"
-                ordered_count = sum(1 for r in all_details if r.ordered == "是")
-                logger.info("下单检查完成：%d 条已下单，%d 条未下单",
-                            ordered_count, len(all_details) - ordered_count)
                 records = all_details
 
                 # 生成 Excel 报表
@@ -375,8 +364,7 @@ async def run(args: argparse.Namespace) -> None:
 
     discarded = filter_result.skipped_invalid if filter_result else 0
     print_summary(start_time, start_date, end_date, flow_ids, records, excel_path,
-                  error=error_msg, discarded=discarded,
-                  order_count=order_api_total, order_date_range=order_date_range)
+                  error=error_msg, discarded=discarded)
 
 
 def stats_from_excel(args: argparse.Namespace) -> None:

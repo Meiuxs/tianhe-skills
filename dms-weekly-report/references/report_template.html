@@ -491,12 +491,34 @@ body {
   line-height: 1.6;
 }
 
-/* ── Warning KPI variant (for "not ordered" etc.) ── */
-.kpi-card.warning {
+/* ── Warning KPI variant (已废弃，保留供其他地方复用) ── */
+/* .kpi-card.warning {
   border-left: 4px solid var(--color-orange);
   background: linear-gradient(to right, #FFF7ED 0%, white 100%);
 }
-.kpi-card.warning .label { color: var(--color-orange); font-weight: 600; }
+.kpi-card.warning .label { color: var(--color-orange); font-weight: 600; } */
+
+/* ── Invalid toggle (包含作废流程开关) ── */
+.invalid-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: var(--spacing-md);
+  cursor: pointer;
+  font-size: 13px;
+  color: white;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: background .2s;
+}
+.invalid-toggle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.invalid-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
 .kpi-card.warning .value { color: var(--color-orange); }
 
 .kpi-card.red    .value { color: var(--color-red); }
@@ -1123,6 +1145,10 @@ th.number-right {
           <span class="date-range-sep">~</span>
           <input type="date" id="date-end">
         </span>
+        <label class="invalid-toggle" title="切换是否包含作废流程">
+          <input type="checkbox" id="include-invalid-toggle" checked>
+          <span>包含作废流程</span>
+        </label>
       </div>
       </div>
     </div>
@@ -1171,13 +1197,13 @@ th.number-right {
         <div class="unit">人</div>
       </div>
       <div class="kpi-card green">
-        <div class="label">已下单</div>
-        <div class="value" id="kpi-ordered">--</div>
+        <div class="label">有效询价</div>
+        <div class="value" id="kpi-valid">--</div>
         <div class="unit">个</div>
       </div>
-      <div class="kpi-card warning">
-        <div class="label">未下单</div>
-        <div class="value" id="kpi-not-ordered">--</div>
+      <div class="kpi-card orange">
+        <div class="label">无效询价</div>
+        <div class="value" id="kpi-invalid">--</div>
         <div class="unit">个</div>
       </div>
       <div class="kpi-card highlight">
@@ -1202,14 +1228,14 @@ th.number-right {
       </div>
     </div>
 
-    <!-- ──────────── 图表行一：订单状态饼图 + 功率对比柱状图 ──────────── -->
+    <!-- ──────────── 图表行一：有效性分布饼图 + 功率对比柱状图 ──────────── -->
     <div class="chart-row split-40-60">
       <div class="chart-card">
-        <div class="chart-title">📊 订单状态分布<button class="chart-download-btn" data-chart-id="chart-order-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+        <div class="chart-title">📊 询价有效性分布<button class="chart-download-btn" data-chart-id="chart-order-donut" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
         <div class="chart-wrap">
           <canvas id="chart-order-donut"></canvas>
         </div>
-        <div class="chart-caption">已下单 vs 未下单 项目占比</div>
+        <div class="chart-caption">有效 vs 无效 询价占比</div>
       </div>
       <div class="chart-card">
         <div class="chart-title">📊 功率容量对比<button class="chart-download-btn" data-chart-id="chart-power-bar" title="下载图片" style="float:right;padding:4px 8px;border:none;background:none;cursor:pointer;font-size:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
@@ -1310,9 +1336,9 @@ th.number-right {
               <th>组件功率(kW)</th>
               <th>逆变器功率(kW)</th>
               <th class="col-collapsible">电池容量(kWh)</th>
-              <th>已下单</th>
+              <th>是否有效</th>
               <th>提交日期</th>
-              <th>采购审批人</th>
+              <th>项目管理部核价审批人</th>
               <th class="col-collapsible">流程编号</th>
             </tr>
           </thead>
@@ -1345,7 +1371,7 @@ th.number-right {
         <div class="filter-cascade-group">
           <label for="approval-role-select">审批角色</label>
           <select id="approval-role-select">
-            <option value="procurement">采购审批</option>
+            <option value="procurement">项目管理部核价审批</option>
             <option value="province">省总审批</option>
           </select>
           <span class="filter-cascade-divider"></span>
@@ -1471,17 +1497,32 @@ function _invalidateFilterCache() {
   _cachedFilteredRows = null;
 }
 
+// 全局状态
+var includeInvalid = true;  // 默认包含作废流程
+
 function getFilteredRows() {
   if (!_cachedFilteredRows) {
     var start = document.getElementById('date-start').value;
     var end = document.getElementById('date-end').value;
-    if (!start || !end) return ROWS_DETAIL;
     _cachedFilteredRows = ROWS_DETAIL.filter(function(row) {
-      return row.submitDate >= start && row.submitDate <= end;
+      // 作废流程过滤
+      if (!includeInvalid && row.isInvalid) return false;
+      // 日期范围过滤
+      if (start && end) {
+        return row.submitDate >= start && row.submitDate <= end;
+      }
+      return true;
     });
   }
   return _cachedFilteredRows;
 }
+
+// 开关切换事件
+document.getElementById('include-invalid-toggle').addEventListener('change', function() {
+  includeInvalid = this.checked;
+  _invalidateFilterCache();  // 清除缓存
+  onDateRangeChange();  // 触发全局刷新
+});
 
 /* ===================================================================
    CHART.JS 加载检查
@@ -1876,15 +1917,15 @@ function filterRowsByPeriod(rows, start, end) {
    LAYER 2: 计算层 — 纯函数，接收 rows[] 返回派生数据
    =================================================================== */
 
-/** 汇总统计：项目数、容量、下单率等 */
+/** 汇总统计：项目数、容量、有效性等 */
 function computeAggregates(rows) {
-  let total = 0, ordered = 0;
+  let total = 0, valid = 0;
   let modulePower = 0, inverterPower = 0, batteryCapacity = 0;
   let spSet = {};
 
   rows.forEach(function(row) {
     total++;
-    if (row.ordered === '是') ordered++;
+    if (row.isValid === '是') valid++;
     modulePower += row.modulePower || 0;
     inverterPower += row.inverterPower || 0;
     batteryCapacity += row.batteryCapacity || 0;
@@ -1895,8 +1936,8 @@ function computeAggregates(rows) {
 
   return {
     totalProjects: total,
-    orderedCount: ordered,
-    notOrderedCount: total - ordered,
+    validCount: valid,
+    invalidCount: total - valid,
     salespersons: Object.keys(spSet).length,
     modulePower: modulePower,
     inverterPower: inverterPower,
@@ -1947,7 +1988,7 @@ function computeApprovalDays(rows) {
 
 /* ── 审批角色配置（可扩展，新增角色只需加一行）── */
 var APPROVAL_ROLES = [
-  { id: 'procurement', label: '采购审批', approverField: 'procurementApprover', statusField: 'procurementStatus' },
+  { id: 'procurement', label: '项目管理部核价审批', approverField: 'negotiationApprover', statusField: 'negotiationStatus' },
   { id: 'province', label: '省总审批', approverField: 'provinceApprover', statusField: 'provinceStatus' },
 ];
 
@@ -2158,7 +2199,7 @@ function computePeriodSummaries(rows) {
   // 初始化每个子时段的统计桶
   var buckets = {};
   subPeriods.forEach(function(sp) {
-    buckets[sp.label] = { total: 0, ordered: 0, modulePower: 0, inverterPower: 0, batteryCapacity: 0, spSet: {} };
+    buckets[sp.label] = { total: 0, valid: 0, modulePower: 0, inverterPower: 0, batteryCapacity: 0, spSet: {} };
   });
 
   // 单次遍历，按日期归属放入对应桶
@@ -2169,7 +2210,7 @@ function computePeriodSummaries(rows) {
       if (row.submitDate >= sp.start && row.submitDate <= sp.end) {
         var b = buckets[sp.label];
         b.total++;
-        if (row.ordered === '是') b.ordered++;
+        if (row.isValid === '是') b.valid++;
         b.modulePower += row.modulePower || 0;
         b.inverterPower += row.inverterPower || 0;
         b.batteryCapacity += row.batteryCapacity || 0;
@@ -2187,8 +2228,8 @@ function computePeriodSummaries(rows) {
     var b = buckets[sp.label];
     allStats[sp.label] = {
       totalProjects: b.total,
-      orderedCount: b.ordered,
-      notOrderedCount: b.total - b.ordered,
+      validCount: b.valid,
+      invalidCount: b.total - b.valid,
       salespersons: Object.keys(b.spSet).length,
       modulePower: b.modulePower,
       inverterPower: b.inverterPower,
@@ -2215,8 +2256,8 @@ function updateOverviewKPIs(stats) {
 
   setText('kpi-total-projects', stats.totalProjects);
   setText('kpi-total-salespersons', stats.salespersons);
-  setText('kpi-ordered', stats.orderedCount);
-  setText('kpi-not-ordered', stats.notOrderedCount);
+  setText('kpi-valid', stats.validCount);
+  setText('kpi-invalid', stats.invalidCount);
   setText('kpi-module-power', fmtNum(stats.modulePower));
   setText('kpi-inverter-power', fmtNum(stats.inverterPower));
   setText('kpi-battery-capacity', fmtNum(stats.batteryCapacity));
@@ -2275,33 +2316,33 @@ function initOverviewCharts() {
   let stats = computeAggregates(filtered);
   let ranking = computeProvinceRanking(filtered);
 
-  // 1. 订单状态饼图
-  let ordered = stats.orderedCount;
-  let notOrdered = stats.notOrderedCount;
-  if (hasData([ordered, notOrdered])) {
+  // 1. 有效性分布饼图
+  let valid = stats.validCount;
+  let invalid = stats.invalidCount;
+  if (hasData([valid, invalid])) {
     // 检查是否单一数据占比 100%
-    let isSingleData = (ordered === 0 || notOrdered === 0);
+    let isSingleData = (valid === 0 || invalid === 0);
 
     createChart('chart-order-donut', {
       type: 'doughnut',
       data: {
-        labels: ['已下单', '未下单'],
+        labels: ['有效询价', '无效询价'],
         datasets: [{
-          data: [ordered, notOrdered],
+          data: [valid, invalid],
           backgroundColor: [CHART_COLORS.green, CHART_COLORS.orange],
           borderWidth: 2,
           borderColor: '#fff',
           // 单一数据时添加半透明占位
           ...(isSingleData ? {
-            data: [ordered || 0.01, notOrdered || 0.01],
-            backgroundColor: ordered > 0 ? [CHART_COLORS.green, 'rgba(0,0,0,0.05)'] : ['rgba(0,0,0,0.05)', CHART_COLORS.orange]
+            data: [valid || 0.01, invalid || 0.01],
+            backgroundColor: valid > 0 ? [CHART_COLORS.green, 'rgba(0,0,0,0.05)'] : ['rgba(0,0,0,0.05)', CHART_COLORS.orange]
           } : {})
         }],
       },
       options: makeDonutOpts(),
     });
   } else {
-    showNoData('chart-order-donut', '暂无订单数据', '📊');
+    showNoData('chart-order-donut', '暂无有效性数据', '📊');
   }
 
   // 2. 功率容量对比柱状图
@@ -2687,9 +2728,9 @@ function renderDetailTable(rows) {
     tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--'));
     // 电池容量：0 是合法值（无电池项目），也显示 "0.00" 而非 "--"
     tr.appendChild(createTableCell('td', item.batteryCapacity != null ? item.batteryCapacity.toFixed(2) : '--'));
-    tr.appendChild(createTableCell('td', item.ordered));
+    tr.appendChild(createTableCell('td', item.isValid));
     tr.appendChild(createTableCell('td', item.submitDate));
-    tr.appendChild(createTableCell('td', item.procurementApprover));
+    tr.appendChild(createTableCell('td', item.negotiationApprover));
     tr.appendChild(createTableCell('td', item.flowId, 'col-collapsible'));
     tbody.appendChild(tr);
   });
@@ -2971,9 +3012,9 @@ function exportToExcel() {
       '组件功率(kW)': row.modulePower,
       '逆变器功率(kW)': row.inverterPower,
       '电池容量(kWh)': row.batteryCapacity,
-      '已下单': row.ordered,
+      '是否有效': row.isValid,
       '提交日期': row.submitDate,
-      '采购审批人': row.procurementApprover,
+      '项目管理部核价审批人': row.negotiationApprover,
     };
   }));
   var wb = XLSX.utils.book_new();

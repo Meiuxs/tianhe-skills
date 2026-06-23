@@ -22,11 +22,12 @@ HEADERS = [
     "总价(元)",
     "流程发起人提交审核时间",
     "备注",
-    "是否下单",
+    "是否有效",
+    "项目管理部核价审批人",
+    "项目管理部核价审批状态",
+    "项目管理部核价审批时间",
     "省总审批人",
     "省总审批状态",
-    "采购审批人",
-    "采购审批状态",
     "审批完成时间",
 ]
 
@@ -44,12 +45,13 @@ COL_UNIT_PRICE = HEADERS.index("瓦单价(元/瓦)")  # 9
 COL_TOTAL_PRICE = HEADERS.index("总价(元)")  # 10
 COL_SUBMIT_TIME = HEADERS.index("流程发起人提交审核时间")  # 11
 COL_REMARK = HEADERS.index("备注")  # 12
-COL_ORDERED = HEADERS.index("是否下单")  # 13
-COL_PROVINCE_PROCESSOR = HEADERS.index("省总审批人")  # 14
-COL_PROVINCE_STATUS = HEADERS.index("省总审批状态")  # 15
-COL_PURCHASE_PROCESSOR = HEADERS.index("采购审批人")  # 16
-COL_PURCHASE_STATUS = HEADERS.index("采购审批状态")  # 17
-COL_FINAL_APPROVAL_TIME = HEADERS.index("审批完成时间")  # 18
+COL_IS_VALID = HEADERS.index("是否有效")  # 13
+COL_NEGOTIATION_PROCESSOR = HEADERS.index("项目管理部核价审批人")  # 14
+COL_NEGOTIATION_STATUS = HEADERS.index("项目管理部核价审批状态")  # 15
+COL_NEGOTIATION_TIME = HEADERS.index("项目管理部核价审批时间")  # 16
+COL_PROVINCE_PROCESSOR = HEADERS.index("省总审批人")  # 17
+COL_PROVINCE_STATUS = HEADERS.index("省总审批状态")  # 18
+COL_FINAL_APPROVAL_TIME = HEADERS.index("审批完成时间")  # 19
 
 # ==================== Playwright 超时配置 ====================
 
@@ -78,7 +80,7 @@ DMS_API_BASE = "https://apigw.trinablue.com"
 DMS_FLOW_LIST_API = f"{DMS_API_BASE}/dms-admin/newFlow/newFlowList"
 DMS_FLOW_DETAILS_API = f"{DMS_API_BASE}/dms-admin/newFlow/flowDetails"
 
-# ==================== 下单检查配置 ====================
+# ==================== 下单检查配置（已废弃，保留供后续恢复） ====================
 
 ORDER_CHECK_EXTEND_DAYS = 14  # 下单检查日期范围扩展天数（覆盖审批周期）
 
@@ -113,9 +115,9 @@ def accumulate_power(rows, cols=None):
 
 
 # ==================== 状态常量 ====================
-STATUS_ORDERED = "已下单"
-STATUS_NOT_ORDERED = "未下单"
-STATUS_CHECK_FAILED = "检查失败"
+# STATUS_ORDERED = "已下单"  # 已废弃，保留供后续恢复
+# STATUS_NOT_ORDERED = "未下单"  # 已废弃，保留供后续恢复
+# STATUS_CHECK_FAILED = "检查失败"  # 已废弃，保留供后续恢复
 STATUS_YES = "是"
 STATUS_NO = "否"
 STATUS_NONE = "无"

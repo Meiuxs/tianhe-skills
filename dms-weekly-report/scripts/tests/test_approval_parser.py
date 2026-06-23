@@ -66,11 +66,11 @@ class TestExtractApprovalInfo(unittest.TestCase):
         return page
 
     def test_basic_extraction(self):
-        """基础提取流程发起人、省总、采购审批信息。"""
+        """基础提取流程发起人、省总、项目管理部核价审批信息。"""
         table = self._make_table_with_approval_rows([
             ["流程发起人", "张三", "提交审核", "2026-06-01 10:00"],
             ["省总审批", "李四", "已批准", "2026-06-02 14:00"],
-            ["采购审批", "王五", "已批准通过", "2026-06-03 15:30"],
+            ["项目管理部核价", "王五", "已批准通过", "2026-06-03 15:30"],
         ])
         page = self._make_page_with_tables([table])
 
@@ -79,8 +79,9 @@ class TestExtractApprovalInfo(unittest.TestCase):
         self.assertEqual(result["submit_time"], "2026-06-01 10:00")
         self.assertEqual(result["province_processor"], "李四")
         self.assertEqual(result["province_status"], "已批准")
-        self.assertEqual(result["purchase_processor"], "王五")
-        self.assertEqual(result["purchase_status"], "已批准通过")
+        self.assertEqual(result["negotiation_processor"], "王五")
+        self.assertEqual(result["negotiation_status"], "已批准通过")
+        self.assertEqual(result["negotiation_time"], "2026-06-03 15:30")
         self.assertEqual(result["final_approval_time"], "2026-06-03 15:30")
 
     def test_returns_defaults_on_no_table(self):
@@ -91,7 +92,7 @@ class TestExtractApprovalInfo(unittest.TestCase):
 
         self.assertEqual(result["submit_time"], "--")
         self.assertEqual(result["province_processor"], "--")
-        self.assertEqual(result["purchase_processor"], "--")
+        self.assertEqual(result["negotiation_processor"], "--")
 
     def test_missing_cells(self):
         """行不足 4 个单元格时应该跳过。"""
@@ -108,7 +109,7 @@ class TestExtractApprovalInfo(unittest.TestCase):
         table = self._make_table_with_approval_rows([
             ["流程发起人", "张三", "提交审核", "2026-06-01 10:00"],
             ["省总审批", "李四", "已批准通过", "2026-06-02 14:00"],
-            ["采购审批", "王五", "已批准通过", "2026-06-05 09:00"],
+            ["项目管理部核价", "王五", "已批准通过", "2026-06-05 09:00"],
         ])
         page = self._make_page_with_tables([table])
 
@@ -116,17 +117,18 @@ class TestExtractApprovalInfo(unittest.TestCase):
         self.assertEqual(result["final_approval_time"], "2026-06-05 09:00")
 
     def test_only_procurement_approval(self):
-        """仅有采购审批节点时应正确提取。"""
+        """仅有项目管理部核价审批节点时应正确提取。"""
         table = self._make_table_with_approval_rows([
             ["流程发起人", "张三", "提交审核", "2026-06-01 10:00"],
-            ["采购审批", "王五", "已批准通过", "2026-06-05 09:00"],
+            ["项目管理部核价", "王五", "已批准通过", "2026-06-05 09:00"],
         ])
         page = self._make_page_with_tables([table])
 
         result = _await_result(extract_approval_info(page))
         self.assertEqual(result["submit_time"], "2026-06-01 10:00")
-        self.assertEqual(result["purchase_processor"], "王五")
-        self.assertEqual(result["purchase_status"], "已批准通过")
+        self.assertEqual(result["negotiation_processor"], "王五")
+        self.assertEqual(result["negotiation_status"], "已批准通过")
+        self.assertEqual(result["negotiation_time"], "2026-06-05 09:00")
         self.assertEqual(result["province_processor"], "--")
 
 

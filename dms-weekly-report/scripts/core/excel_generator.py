@@ -24,9 +24,9 @@ from column_definitions import (
     COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
     COL_UNIT_PRICE, COL_TOTAL_PRICE,
-    COL_SUBMIT_TIME, COL_REMARK, COL_ORDERED,
+    COL_SUBMIT_TIME, COL_REMARK,
+    COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
     COL_FINAL_APPROVAL_TIME,
 )
 from excel_styles import COLUMN_WIDTHS
@@ -146,7 +146,7 @@ def _init_worksheet(ws: Any) -> None:
 
 
 def _build_rows_data(records: list) -> list[list[Any]]:
-    """从 FlowRecord 列表构建 19 列行数据。"""
+    """从 FlowRecord 列表构建 20 列行数据。"""
     return [
         [
             r.flow_id, r.project_name,
@@ -154,9 +154,12 @@ def _build_rows_data(records: list) -> list[list[Any]]:
             r.province, r.salesperson,
             r.module_kw, r.inverter_kw, r.battery_kwh,
             r.unit_price, r.total_price,
-            r.submit_time, r.remark, r.ordered,
+            r.submit_time, r.remark,
+            r.is_valid,  # 新增：是否有效
+            r.negotiation_processor,  # 新增：项目管理部核价审批人
+            r.negotiation_status,  # 新增：项目管理部核价审批状态
+            r.negotiation_time,  # 新增：项目管理部核价审批时间
             r.province_processor, r.province_status,
-            r.purchase_processor, r.purchase_status,
             r.final_approval_time,
         ]
         for r in records
@@ -233,8 +236,8 @@ def _update_summary_sheet(
 
     # 计算统计数据
     total_projects = 0
-    ordered_count = 0
-    not_ordered_count = 0
+    valid_count = 0
+    invalid_count = 0
     salesperson_set: set[str] = set()
     valid_rows: list = []
 
@@ -246,11 +249,11 @@ def _update_summary_sheet(
             continue
         total_projects += 1
         valid_rows.append(row)
-        ordered = str(row[COL_ORDERED] if row[COL_ORDERED] else "")
-        if ordered == "是":
-            ordered_count += 1
+        is_valid = str(row[COL_IS_VALID] if len(row) > COL_IS_VALID and row[COL_IS_VALID] else "")
+        if is_valid == "是":
+            valid_count += 1
         else:
-            not_ordered_count += 1
+            invalid_count += 1
         sp = str(row[COL_SALESPERSON] if row[COL_SALESPERSON] else "")
         if sp not in ("--", "无", ""):
             salesperson_set.add(sp)
@@ -281,8 +284,8 @@ def _update_summary_sheet(
     kpis_1 = [
         ("询价项目总数", f"{total_projects}", "个", FONT_KPI_BIG),
         ("涉及业务员", f"{len(salesperson_set)}", "人" if salesperson_set else "", FONT_KPI_MED),
-        ("已下单项目", f"{ordered_count}", "个", FONT_GREEN),
-        ("未下单项目", f"{not_ordered_count}", "个", FONT_ORANGE),
+        ("有效询价项目", f"{valid_count}", "个", FONT_GREEN),
+        ("无效询价项目", f"{invalid_count}", "个", FONT_ORANGE),
     ]
     for i, (label, value, unit, vf) in enumerate(kpis_1):
         write_kpi_card(ws, r + i, 1, label, value, unit, vf)

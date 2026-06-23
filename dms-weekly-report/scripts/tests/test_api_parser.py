@@ -190,15 +190,16 @@ class TestFillApprovalFromNodes:
         nodes = [
             {"roleName": "流程发起人提交审核", "uname": "李四", "statusName": "提交审核", "updateTime": "2026-01-01 10:00:00"},
             {"roleName": "省总审批", "uname": "王五", "statusName": "审批通过", "updateTime": "2026-01-02 11:00:00"},
-            {"roleName": "采购审批", "uname": "赵六", "statusName": "审批通过", "updateTime": "2026-01-03 12:00:00"},
+            {"roleName": "项目管理部核价", "uname": "赵六", "statusName": "审批通过", "updateTime": "2026-01-03 12:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
         fill_approval_from_nodes(rec, nodes)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "王五"
         assert rec.province_status == "审批通过"
-        assert rec.purchase_processor == "赵六"
-        assert rec.purchase_status == "审批通过"
+        assert rec.negotiation_processor == "赵六"
+        assert rec.negotiation_status == "审批通过"
+        assert rec.negotiation_time == "2026-01-03 12:00:00"
         assert rec.final_approval_time == "2026-01-03 12:00:00"
 
     def test_empty_nodes(self):
@@ -216,7 +217,7 @@ class TestFillApprovalFromNodes:
         fill_approval_from_nodes(rec, nodes)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "--"
-        assert rec.purchase_processor == "--"
+        assert rec.negotiation_processor == "--"
 
     def test_final_approval_time_picks_latest(self):
         nodes = [

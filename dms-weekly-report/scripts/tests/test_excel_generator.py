@@ -120,11 +120,15 @@ class MockFlowRecord:
         self.total_price = kwargs.get("total_price", "10000")
         self.submit_time = kwargs.get("submit_time", "2026-06-01 10:00")
         self.remark = kwargs.get("remark", "无")
-        self.ordered = kwargs.get("ordered", "是")
+        # self.ordered = kwargs.get("ordered", "是")  # 已废弃
+        self.is_valid = kwargs.get("is_valid", "是")
+        self.negotiation_processor = kwargs.get("negotiation_processor", "王五")
+        self.negotiation_status = kwargs.get("negotiation_status", "审批通过")
+        self.negotiation_time = kwargs.get("negotiation_time", "2026-06-03 15:30")
         self.province_processor = kwargs.get("province_processor", "李四")
         self.province_status = kwargs.get("province_status", "审批通过")
-        self.purchase_processor = kwargs.get("purchase_processor", "王五")
-        self.purchase_status = kwargs.get("purchase_status", "审批通过")
+        # self.purchase_processor = kwargs.get("purchase_processor", "王五")  # 已废弃
+        # self.purchase_status = kwargs.get("purchase_status", "审批通过")  # 已废弃
         self.final_approval_time = kwargs.get("final_approval_time", "2026-06-03 15:30")
 
 
@@ -136,7 +140,7 @@ class TestBuildRowsData:
         records = [MockFlowRecord()]
         result = _build_rows_data(records)
         assert len(result) == 1
-        assert len(result[0]) == 19
+        assert len(result[0]) == 20
 
     def test_record_values(self):
         records = [MockFlowRecord(flow_id="99999999999999999", project_name="阳光电站")]
@@ -161,22 +165,24 @@ class TestBuildRowsData:
     def test_column_count(self):
         records = [MockFlowRecord()]
         result = _build_rows_data(records)
-        assert len(result[0]) == 19
+        assert len(result[0]) == 20
 
     def test_approval_fields(self):
         records = [MockFlowRecord(
             province_processor="省审批人",
             province_status="省级通过",
-            purchase_processor="采购审批人",
-            purchase_status="采购通过",
+            negotiation_processor="核价审批人",
+            negotiation_status="核价通过",
+            negotiation_time="2026-06-08",
             final_approval_time="2026-06-10",
         )]
         result = _build_rows_data(records)
-        assert result[0][14] == "省审批人"
-        assert result[0][15] == "省级通过"
-        assert result[0][16] == "采购审批人"
-        assert result[0][17] == "采购通过"
-        assert result[0][18] == "2026-06-10"
+        assert result[0][14] == "核价审批人"
+        assert result[0][15] == "核价通过"
+        assert result[0][16] == "2026-06-08"
+        assert result[0][17] == "省审批人"
+        assert result[0][18] == "省级通过"
+        assert result[0][19] == "2026-06-10"
 
 
 # 注意：TestDeduplicateRows 需要真实 openpyxl，当与其他 mock 测试一起运行时会失败

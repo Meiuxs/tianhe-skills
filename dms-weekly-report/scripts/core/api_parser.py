@@ -116,10 +116,11 @@ def fill_record_from_api(rec, api_data: dict, flow_id: str) -> None:
 def fill_approval_from_nodes(rec, node_list: list) -> None:
     """从 API nodeList 填充审批信息。"""
     submit_time = "--"
+    negotiation_processor = "--"
+    negotiation_status = "--"
+    negotiation_time = "--"
     province_processor = "--"
     province_status = "--"
-    purchase_processor = "--"
-    purchase_status = "--"
     final_approval_time = "--"
 
     for node in node_list:
@@ -130,22 +131,27 @@ def fill_approval_from_nodes(rec, node_list: list) -> None:
 
         if "流程发起人" in role_name and "提交审核" in status_name:
             submit_time = update_time
+        elif "项目管理部核价" in role_name:
+            negotiation_processor = user_name
+            negotiation_status = status_name
+            negotiation_time = update_time
         elif "省总" in role_name or "省公司" in role_name:
             province_processor = user_name
             province_status = status_name
         elif "采购" in role_name or "商务" in role_name:
-            purchase_processor = user_name
-            purchase_status = status_name
+            # 已废弃，保留供后续恢复使用
+            pass
 
         if "通过" in status_name and update_time and update_time not in ("--", ""):
             if final_approval_time in ("--", "") or update_time > final_approval_time:
                 final_approval_time = update_time
 
     rec.submit_time = submit_time
+    rec.negotiation_processor = negotiation_processor
+    rec.negotiation_status = negotiation_status
+    rec.negotiation_time = negotiation_time
     rec.province_processor = province_processor
     rec.province_status = province_status
-    rec.purchase_processor = purchase_processor
-    rec.purchase_status = purchase_status
     rec.final_approval_time = final_approval_time
 
 
@@ -165,8 +171,9 @@ def fill_record_from_html(rec, html: str) -> None:
 def fill_approval_from_dict(rec, approval: dict) -> None:
     """从审批解析结果 dict 填充到 FlowRecord。"""
     rec.submit_time = approval.get("submit_time", "--")
+    rec.negotiation_processor = approval.get("negotiation_processor", "--")
+    rec.negotiation_status = approval.get("negotiation_status", "--")
+    rec.negotiation_time = approval.get("negotiation_time", "--")
     rec.province_processor = approval.get("province_processor", "--")
     rec.province_status = approval.get("province_status", "--")
-    rec.purchase_processor = approval.get("purchase_processor", "--")
-    rec.purchase_status = approval.get("purchase_status", "--")
     rec.final_approval_time = approval.get("final_approval_time", "--")

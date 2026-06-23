@@ -98,11 +98,15 @@ class FlowRecord:
     total_price: str = "--"
     submit_time: str = "--"
     remark: str = "无"
-    ordered: str = "否"
+    # ordered: str = "否"  # 已废弃，保留供后续恢复使用
+    is_valid: str = "否"  # 新增：是否有效（项目管理部核价审批通过即为"是"）
+    negotiation_processor: str = "--"  # 新增：项目管理部核价审批人
+    negotiation_status: str = "--"  # 新增：项目管理部核价审批状态
+    negotiation_time: str = "--"  # 新增：项目管理部核价审批时间
     province_processor: str = "--"
     province_status: str = "--"
-    purchase_processor: str = "--"
-    purchase_status: str = "--"
+    # purchase_processor: str = "--"  # 已废弃，替换为 negotiation_processor
+    # purchase_status: str = "--"  # 已废弃，替换为 negotiation_status
     final_approval_time: str = "--"
 
 
