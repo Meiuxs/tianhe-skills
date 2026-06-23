@@ -458,6 +458,7 @@ class TestRunFlowIdsEmpty:
             "verbose": False,
             "stats_only": False,
             "input_xlsx": None,
+            "include_invalid": True,
         })()
 
         # 构造 filter_result 返回空 flow_ids
@@ -516,13 +517,14 @@ class TestRunFlowIdsEmpty:
             "verbose": False,
             "stats_only": False,
             "input_xlsx": None,
+            "include_invalid": True,
         })()
 
-        # 构造 filter_result 返回非空 flow_ids，添加 flow_status 属性
+        # 构造 filter_result 返回非空 flow_ids，添加 flow_status_map 属性
         mock_filter_result = type("FilterResult", (), {
             "flow_ids": ["FLOW001", "FLOW002"],
             "skipped_invalid": 0,
-            "flow_status": {},  # 添加缺失的 flow_status 属性
+            "flow_status_map": {"FLOW001": "审批通过", "FLOW002": "进行中"},
         })()
 
         extract_called = False

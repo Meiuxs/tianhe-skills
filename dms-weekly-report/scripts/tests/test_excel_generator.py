@@ -120,7 +120,7 @@ class MockFlowRecord:
         self.total_price = kwargs.get("total_price", "10000")
         self.submit_time = kwargs.get("submit_time", "2026-06-01 10:00")
         self.remark = kwargs.get("remark", "无")
-        self.ordered = kwargs.get("ordered", "是")  # TODO: 后续可能恢复使用
+        self.ordered = kwargs.get("ordered", "否")  # TODO: 后续可能恢复使用
         self.is_valid = kwargs.get("is_valid", "是")
         self.negotiation_processor = kwargs.get("negotiation_processor", "王五")
         self.negotiation_status = kwargs.get("negotiation_status", "审批通过")
@@ -130,6 +130,7 @@ class MockFlowRecord:
         self.purchase_processor = kwargs.get("purchase_processor", "王五")  # TODO: 后续可能恢复使用
         self.purchase_status = kwargs.get("purchase_status", "审批通过")   # TODO: 后续可能恢复使用
         self.final_approval_time = kwargs.get("final_approval_time", "2026-06-03 15:30")
+        self.flow_status = kwargs.get("flow_status", "审批通过")
 
 
 @pytest.mark.skipif(not HAS_EXCEL_GENERATOR, reason="excel_generator 导入失败")
@@ -140,7 +141,7 @@ class TestBuildRowsData:
         records = [MockFlowRecord()]
         result = _build_rows_data(records)
         assert len(result) == 1
-        assert len(result[0]) == 20
+        assert len(result[0]) == 21
 
     def test_record_values(self):
         records = [MockFlowRecord(flow_id="99999999999999999", project_name="阳光电站")]
@@ -165,7 +166,7 @@ class TestBuildRowsData:
     def test_column_count(self):
         records = [MockFlowRecord()]
         result = _build_rows_data(records)
-        assert len(result[0]) == 20
+        assert len(result[0]) == 21
 
     def test_approval_fields(self):
         records = [MockFlowRecord(
@@ -178,13 +179,13 @@ class TestBuildRowsData:
             final_approval_time="2026-06-10",
         )]
         result = _build_rows_data(records)
-        assert result[0][13] == "是"
-        assert result[0][14] == "核价审批人"
-        assert result[0][15] == "核价通过"
-        assert result[0][16] == "2026-06-02"
-        assert result[0][17] == "省审批人"
-        assert result[0][18] == "省级通过"
-        assert result[0][19] == "2026-06-10"
+        assert result[0][13] == "是"  # is_valid
+        assert result[0][14] == "省审批人"  # province_processor
+        assert result[0][15] == "省级通过"  # province_status
+        assert result[0][16] == "核价审批人"  # negotiation_processor
+        assert result[0][17] == "核价通过"  # negotiation_status
+        assert result[0][18] == "2026-06-02"  # negotiation_time
+        assert result[0][19] == "2026-06-10"  # final_approval_time
 
 
 # 注意：TestDeduplicateRows 需要真实 openpyxl，当与其他 mock 测试一起运行时会失败

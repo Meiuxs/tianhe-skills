@@ -362,7 +362,8 @@ class TestFillApprovalFromNodes:
             {"roleName": "项目管理部核价", "uname": "赵六", "statusName": "审批通过", "updateTime": "2026-01-03 12:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
-        fill_approval_from_nodes(rec, nodes)
+        rec.flow_status = "审批通过"
+        fill_approval_from_nodes(rec, nodes, rec.flow_status)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "王五"
         assert rec.province_status == "审批通过"
@@ -398,7 +399,8 @@ class TestFillApprovalFromNodes:
             {"roleName": "项目管理部核价", "uname": "C", "statusName": "审批通过", "updateTime": "2026-01-03 10:00:00"},
         ]
         rec = FlowRecord(flow_id="test")
-        fill_approval_from_nodes(rec, nodes)
+        rec.flow_status = "审批通过"
+        fill_approval_from_nodes(rec, nodes, rec.flow_status)
         # 省总 01-05 比核价 01-03 晚，最终完成时间应取 01-05
         assert rec.final_approval_time == "2026-01-05 10:00:00"
 
@@ -510,6 +512,7 @@ class TestFillApprovalFromDict:
             "final_approval_time": "2026-01-03 12:00:00",
         }
         rec = FlowRecord(flow_id="test")
+        rec.flow_status = "审批通过"
         fill_approval_from_dict(rec, approval)
         assert rec.submit_time == "2026-01-01 10:00:00"
         assert rec.province_processor == "王五"

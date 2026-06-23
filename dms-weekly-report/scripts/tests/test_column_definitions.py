@@ -12,7 +12,7 @@ from column_definitions import (
     COL_UNIT_PRICE, COL_TOTAL_PRICE, COL_SUBMIT_TIME, COL_REMARK,
     COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-    COL_FINAL_APPROVAL_TIME,
+    COL_FINAL_APPROVAL_TIME, COL_FLOW_STATUS,
 )
 
 
@@ -21,7 +21,7 @@ class TestColumnDefinitions(unittest.TestCase):
 
     def test_headers_count(self):
         """测试表头数量。"""
-        self.assertEqual(len(HEADERS), 20, "应该有 20 列")
+        self.assertEqual(len(HEADERS), 21, "应该有 21 列")
 
     def test_column_indices_sequence(self):
         """测试列索引是否按顺序。"""
@@ -29,9 +29,11 @@ class TestColumnDefinitions(unittest.TestCase):
             COL_FLOW_ID, COL_PROJECT_NAME, COL_AGENT_CODE, COL_AGENT_NAME,
             COL_PROVINCE, COL_SALESPERSON, COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
             COL_UNIT_PRICE, COL_TOTAL_PRICE, COL_SUBMIT_TIME, COL_REMARK,
-            COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
+            COL_IS_VALID,
             COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
+            COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
             COL_FINAL_APPROVAL_TIME,
+            COL_FLOW_STATUS,
         ]
         # 验证索引从 0 开始，连续且无重复
         self.assertEqual(indices, list(range(len(indices))))
@@ -52,6 +54,7 @@ class TestColumnDefinitions(unittest.TestCase):
         self.assertEqual(HEADERS[COL_NEGOTIATION_STATUS], "项目管理部核价审批状态")
         self.assertEqual(HEADERS[COL_NEGOTIATION_TIME], "项目管理部核价审批时间")
         self.assertEqual(HEADERS[COL_FINAL_APPROVAL_TIME], "审批完成时间")
+        self.assertEqual(HEADERS[COL_FLOW_STATUS], "流程状态")
 
     def test_no_duplicate_indices(self):
         """测试没有重复的列索引。"""
@@ -61,7 +64,7 @@ class TestColumnDefinitions(unittest.TestCase):
             COL_UNIT_PRICE, COL_TOTAL_PRICE, COL_SUBMIT_TIME, COL_REMARK,
             COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
             COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-            COL_FINAL_APPROVAL_TIME,
+            COL_FINAL_APPROVAL_TIME, COL_FLOW_STATUS,
         ]
         self.assertEqual(len(indices), len(set(indices)), "列索引不应有重复")
 
@@ -74,7 +77,7 @@ class TestColumnDefinitions(unittest.TestCase):
             COL_UNIT_PRICE, COL_TOTAL_PRICE, COL_SUBMIT_TIME, COL_REMARK,
             COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
             COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-            COL_FINAL_APPROVAL_TIME,
+            COL_FINAL_APPROVAL_TIME, COL_FLOW_STATUS,
         ]
         for idx in indices:
             self.assertGreaterEqual(idx, 0)

@@ -21,15 +21,16 @@ from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
     COL_SUBMIT_TIME, COL_REMARK,
-    COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
+    COL_IS_VALID, COL_FLOW_STATUS,
+    COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_FINAL_APPROVAL_TIME,
 )
 
 
 def _make_row(**overrides):
-    """构造一行 20 列的测试数据。"""
-    row = ["--"] * 20
+    """构造一行 21 列的测试数据。"""
+    row = ["--"] * 21
     defaults = {
         "flow_id": "12345678901234567",
         "project_name": "测试项目",
@@ -47,6 +48,7 @@ def _make_row(**overrides):
         "province_processor": "李四",
         "province_status": "审批通过",
         "final_approval_time": "2026-06-03 15:30:00",
+        "flow_status": "审批通过",
     }
     defaults.update(overrides)
     row[COL_FLOW_ID] = defaults["flow_id"]
@@ -64,6 +66,7 @@ def _make_row(**overrides):
     row[COL_PROVINCE_PROCESSOR] = defaults["province_processor"]
     row[COL_PROVINCE_STATUS] = defaults["province_status"]
     row[COL_FINAL_APPROVAL_TIME] = defaults["final_approval_time"]
+    row[COL_FLOW_STATUS] = defaults["flow_status"]
     return row
 
 
@@ -228,6 +231,13 @@ class TestComputeRowsDetail:
         rows = [row]
         result = compute_rows_detail(rows)
         assert result[0]["isValid"] == "否"
+        # isInvalid 基于 flow_status 是否包含"作废"，而非 is_valid
+        assert result[0]["isInvalid"] is False
+
+    def test_is_invalid_flow(self):
+        row = _make_row(flow_status="作废")
+        rows = [row]
+        result = compute_rows_detail(rows)
         assert result[0]["isInvalid"] is True
 
     def test_final_date_empty(self):
