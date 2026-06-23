@@ -23,12 +23,13 @@ HEADERS = [
     "流程发起人提交审核时间",
     "备注",
     "是否有效",
+    "省总审批人",
+    "省总审批状态",
     "项目管理部核价审批人",
     "项目管理部核价审批状态",
     "项目管理部核价审批时间",
-    "省总审批人",
-    "省总审批状态",
     "审批完成时间",
+    "流程状态",
 ]
 
 # 自动生成列索引常量
@@ -52,12 +53,13 @@ COL_PURCHASE_PROCESSOR = -1  # 已废弃
 COL_PURCHASE_STATUS = -1     # 已废弃
 
 COL_IS_VALID = HEADERS.index("是否有效")  # 13
-COL_NEGOTIATION_PROCESSOR = HEADERS.index("项目管理部核价审批人")  # 14
-COL_NEGOTIATION_STATUS = HEADERS.index("项目管理部核价审批状态")  # 15
-COL_NEGOTIATION_TIME = HEADERS.index("项目管理部核价审批时间")  # 16
-COL_PROVINCE_PROCESSOR = HEADERS.index("省总审批人")  # 17
-COL_PROVINCE_STATUS = HEADERS.index("省总审批状态")  # 18
+COL_PROVINCE_PROCESSOR = HEADERS.index("省总审批人")  # 14
+COL_PROVINCE_STATUS = HEADERS.index("省总审批状态")  # 15
+COL_NEGOTIATION_PROCESSOR = HEADERS.index("项目管理部核价审批人")  # 16
+COL_NEGOTIATION_STATUS = HEADERS.index("项目管理部核价审批状态")  # 17
+COL_NEGOTIATION_TIME = HEADERS.index("项目管理部核价审批时间")  # 18
 COL_FINAL_APPROVAL_TIME = HEADERS.index("审批完成时间")  # 19
+COL_FLOW_STATUS = HEADERS.index("流程状态")  # 20
 
 # ==================== Playwright 超时配置 ====================
 

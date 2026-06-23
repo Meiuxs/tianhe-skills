@@ -25,10 +25,11 @@ from column_definitions import (
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
     COL_UNIT_PRICE, COL_TOTAL_PRICE,
     COL_SUBMIT_TIME, COL_REMARK,
-    COL_IS_VALID, COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
+    COL_IS_VALID,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
-    COL_PURCHASE_PROCESSOR, COL_PURCHASE_STATUS,
+    COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
     COL_FINAL_APPROVAL_TIME,
+    COL_FLOW_STATUS,
 )
 from excel_styles import COLUMN_WIDTHS
 from column_definitions import FLOW_ID_PATTERN  # noqa: E402 — 流程编号正则常量
@@ -147,7 +148,7 @@ def _init_worksheet(ws: Any) -> None:
 
 
 def _build_rows_data(records: list) -> list[list[Any]]:
-    """从 FlowRecord 列表构建 20 列行数据。"""
+    """从 FlowRecord 列表构建 21 列行数据。"""
     return [
         [
             r.flow_id, r.project_name,
@@ -157,9 +158,10 @@ def _build_rows_data(records: list) -> list[list[Any]]:
             r.unit_price, r.total_price,
             r.submit_time, r.remark,
             r.is_valid,
-            r.negotiation_processor, r.negotiation_status, r.negotiation_time,
             r.province_processor, r.province_status,
+            r.negotiation_processor, r.negotiation_status, r.negotiation_time,
             r.final_approval_time,
+            r.flow_status,
         ]
         for r in records
     ]
@@ -180,7 +182,7 @@ def _deduplicate_rows(wb: openpyxl.Workbook, rows_data: list[list[Any]]) -> list
     return new_rows
 
 
-def _read_data_rows(data_ws: Any, max_cols: int = 20) -> list[list[Any]]:
+def _read_data_rows(data_ws: Any, max_cols: int = 21) -> list[list[Any]]:
     """从询价汇总 Sheet 读取数据行（跳过表头），供多个 Sheet 生成函数复用。
 
     Args:

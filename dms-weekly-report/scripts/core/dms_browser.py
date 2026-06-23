@@ -108,6 +108,7 @@ class FlowRecord:
     purchase_processor: str = "--"        # TODO: 后续可能恢复使用
     purchase_status: str = "--"           # TODO: 后续可能恢复使用
     final_approval_time: str = "--"
+    flow_status: str = "--"               # 流程状态（如审批通过、作废等）
 
 
 @dataclass

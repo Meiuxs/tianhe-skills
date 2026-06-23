@@ -101,6 +101,9 @@ def fill_record_from_api(rec, api_data: dict, flow_id: str) -> None:
     node_list = api_data.get("nodeList") or []
     fill_approval_from_nodes(rec, node_list)
 
+    # 流程状态：从 jsonDate.statusName 获取
+    rec.flow_status = json_date.get("statusName") or "--"
+
     logger.debug(
         "API flow_id=%s | project=%r | province=%r | salesman=%r | price=%.2f/%s | pricing_keys=%s",
         flow_id,
