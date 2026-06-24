@@ -72,7 +72,7 @@ if (typeof Chart === 'undefined') {
   /* ── 毛玻璃（Glassmorphism）──── */
   --glass-bg:       rgba(255,255,255,0.72);
   --glass-bg-heavy: rgba(255,255,255,0.88);
-  --glass-blur:     blur(30px) saturate(180%);
+  --glass-blur:     blur(20px) saturate(120%);
   --glass-border:   rgba(255,255,255,0.4);
 
   /* ── 缓动曲线（Apple 标准）──── */
@@ -136,31 +136,15 @@ body {
 }
 
 /* ===================================================================
-   HEADER — 毛玻璃导航区（Apple 风格）
+   HEADER — Apple 风格简洁导航
    =================================================================== */
 .header {
-  background: linear-gradient(135deg, rgba(0,122,255,0.85) 0%, rgba(10,132,255,0.75) 50%, rgba(77,163,255,0.7) 100%);
-  background-size: 200% 200%;
-  color: white;
-  padding: var(--spacing-lg) var(--spacing-xl);
+  background: #FFFFFF;
+  color: var(--text-primary);
+  padding: 20px var(--spacing-xl);
   position: relative;
-  overflow: hidden;
-}
-
-/* 毛玻璃叠加层 */
-.header::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  z-index: 0;
-}
-
-.header > * {
-  position: relative;
-  z-index: 1;
+  border-bottom: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
 }
 
 .header-inner {
@@ -180,29 +164,30 @@ body {
 }
 
 .header-brand-icon {
-  width: 48px;
-  height: 48px;
-  background: rgba(255,255,255,0.18);
-  border-radius: var(--radius-sm);
+  width: 40px;
+  height: 40px;
+  background: var(--primary);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  font-size: 20px;
+  color: white;
+  flex-shrink: 0;
 }
 
 .header h1 {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
   line-height: 1.2;
+  color: var(--text-primary);
 }
 
 .header .subtitle {
-  font-size: 13px;
-  opacity: 0.8;
-  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
   font-weight: 400;
 }
 
@@ -214,16 +199,17 @@ body {
 }
 
 .header .meta {
-  font-size: 13px;
-  opacity: 0.9;
+  font-size: 12px;
+  color: var(--text-secondary);
   white-space: nowrap;
-  line-height: 1.8;
+  line-height: 1.6;
   font-weight: 500;
 }
 
 .header .meta span {
   display: inline-block;
   margin-left: var(--spacing-md);
+  color: var(--text-secondary);
 }
 
 /* ===================================================================
@@ -233,18 +219,16 @@ body {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  background: rgba(255,255,255,0.12);
+  background: var(--bg-card);
   border-radius: var(--radius-sm);
   padding: 8px 16px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid var(--border-light);
   flex-wrap: wrap;
 }
 
 .global-filter label {
   font-size: 13px;
-  color: rgba(255,255,255,0.9);
+  color: var(--text-secondary);
   white-space: nowrap;
   font-weight: 500;
 }
@@ -258,10 +242,10 @@ body {
 
 .quick-btn {
   padding: 6px 14px;
-  border: 1px solid rgba(255,255,255,0.25);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xs);
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.95);
+  background: var(--bg-white);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -272,8 +256,8 @@ body {
 }
 
 .quick-btn:hover {
-  background: rgba(255,255,255,0.22);
-  border-color: rgba(255,255,255,0.4);
+  background: var(--bg-card);
+  border-color: var(--border-color);
   transform: scale(1.02);
 }
 
@@ -283,9 +267,9 @@ body {
 }
 
 .quick-btn.active {
-  background: rgba(255,255,255,0.95);
-  border-color: white;
-  color: var(--primary);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
@@ -293,33 +277,33 @@ body {
 /* Date input Apple 风格 */
 .global-filter input[type="date"] {
   padding: 6px 10px;
-  border: 1px solid rgba(255,255,255,0.3);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xs);
   font-size: 13px;
   font-family: var(--font-family);
-  background: rgba(255,255,255,0.12);
-  color: white;
+  background: var(--bg-white);
+  color: var(--text-primary);
   cursor: pointer;
   min-width: 120px;
   transition: all 0.2s var(--ease);
 }
 
 .global-filter input[type="date"]:hover {
-  background: rgba(255,255,255,0.2);
-  border-color: rgba(255,255,255,0.5);
+  background: var(--bg-card);
+  border-color: var(--border-color);
 }
 
 .global-filter input[type="date"]:focus {
-  outline: 2px solid rgba(255,255,255,0.6);
+  outline: 2px solid var(--primary-l10);
   outline-offset: 1px;
-  border-color: white;
-  background: rgba(255,255,255,0.18);
+  border-color: var(--primary);
+  background: var(--bg-white);
 }
 
 .global-filter input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+  filter: none;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.5;
 }
 
 .global-filter input[type="date"]::-webkit-calendar-picker-indicator:hover {
@@ -331,8 +315,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xs);
   padding: 4px 10px;
   transition: all 0.2s var(--ease);
@@ -340,13 +324,13 @@ body {
 }
 
 .date-range-group:hover {
-  background: rgba(255,255,255,0.14);
-  border-color: rgba(255,255,255,0.3);
+  background: var(--bg-card);
+  border-color: var(--border-color);
 }
 
 .date-range-group label {
   font-size: 13px;
-  color: rgba(255,255,255,0.85);
+  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -354,7 +338,7 @@ body {
 .date-range-group input[type="date"] {
   border: none;
   background: transparent;
-  color: white;
+  color: var(--text-primary);
   font-size: 13px;
   font-family: var(--font-family);
   padding: 2px 4px;
@@ -365,7 +349,7 @@ body {
 }
 
 .date-range-sep {
-  color: rgba(255,255,255,0.4);
+  color: var(--text-tertiary);
   user-select: none;
   font-size: 14px;
 }
@@ -378,16 +362,18 @@ body {
   margin-left: var(--spacing-md);
   cursor: pointer;
   font-size: 13px;
-  color: white;
-  background: rgba(255,255,255,0.12);
+  color: var(--text-secondary);
+  background: var(--bg-white);
   padding: 5px 12px;
   border-radius: var(--radius-xs);
+  border: 1px solid var(--border-light);
   transition: all 0.2s var(--ease);
   font-weight: 500;
 }
 
 .invalid-toggle:hover {
-  background: rgba(255,255,255,0.22);
+  background: var(--bg-card);
+  border-color: var(--border-color);
 }
 
 .invalid-toggle input[type="checkbox"] {
@@ -397,12 +383,10 @@ body {
 }
 
 /* ===================================================================
-   TAB NAVIGATION — 毛玻璃 Sticky 导航
+   TAB NAVIGATION — 简洁 Sticky 导航
    =================================================================== */
 .tab-nav {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: var(--bg-white);
   border-bottom: 1px solid var(--border-light);
   display: flex;
   padding: 0 var(--spacing-xl);
@@ -411,6 +395,7 @@ body {
   z-index: 100;
   overflow-x: auto;
   gap: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
 
 .tab-btn {
@@ -498,59 +483,59 @@ body {
 .tab-body {
   max-width: 1200px;
   margin: 0 auto;
-  padding: var(--spacing-2xl) var(--spacing-xl);
+  padding: var(--spacing-lg) var(--spacing-xl);
 }
 
 /* ===================================================================
    SECTION TITLE — Apple 风格标题
    =================================================================== */
 .section-title {
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 22px;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: var(--spacing-lg);
-  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
   border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.2px;
 }
 
 .section-title .title-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: var(--primary);
   border-radius: var(--radius-xs);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .section-subtitle {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--text-tertiary);
-  margin-left: var(--spacing-md);
+  margin-left: var(--spacing-sm);
   flex: 1;
 }
 
 /* ===================================================================
-   KPI CARDS — Squircle 大圆角 + 悬停动效
+   KPI CARDS — 紧凑 Squircle 大圆角 + 悬停动效
    =================================================================== */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-2xl);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
 }
 
 .kpi-card {
   background: var(--bg-white);
   border-radius: var(--radius);
-  padding: var(--spacing-xl) var(--spacing-lg);
+  padding: var(--spacing-lg) var(--spacing-md);
   border: 1px solid var(--border-light);
   text-align: center;
   transition: all 0.35s var(--ease);
@@ -572,9 +557,8 @@ body {
 }
 
 .kpi-card:hover {
-  transform: scale(1.02) translateY(-4px);
-  box-shadow: var(--shadow-hover);
-  border-color: transparent;
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-color);
 }
 
 .kpi-card:hover::before {
@@ -596,18 +580,18 @@ body {
 }
 
 .kpi-card .value {
-  font-size: 40px;
-  font-weight: 800;
+  font-size: 32px;
+  font-weight: 700;
   color: var(--primary);
   line-height: 1.1;
-  letter-spacing: -1.5px;
+  letter-spacing: -1px;
   font-variant-numeric: tabular-nums;
 }
 
 .kpi-card .unit {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-tertiary);
-  margin-top: 6px;
+  margin-top: 4px;
   font-weight: 500;
 }
 
@@ -627,8 +611,8 @@ body {
 .chart-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-2xl);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
 }
 
 .chart-row.single { grid-template-columns: 1fr; }
@@ -639,7 +623,7 @@ body {
   background: var(--bg-white);
   border-radius: var(--radius);
   border: 1px solid var(--border-light);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   box-shadow: var(--shadow-sm);
   transition: all 0.35s var(--ease);
 }
@@ -1128,12 +1112,12 @@ td.number-right, th.number-right {
    =================================================================== */
 .footer {
   text-align: center;
-  padding: var(--spacing-2xl) var(--spacing-xl) var(--spacing-xl);
+  padding: var(--spacing-xl) var(--spacing-lg);
   color: var(--text-tertiary);
   font-size: 13px;
   border-top: 1px solid var(--border-light);
   background: var(--bg-page);
-  margin-top: var(--spacing-2xl);
+  margin-top: var(--spacing-xl);
 }
 
 .footer p { padding-top: var(--spacing-sm); }
@@ -1212,13 +1196,13 @@ td.number-right, th.number-right {
   .header-right { align-items: center; }
   .header .meta { text-align: center; }
   .header .meta span { margin: 0 var(--spacing-sm); }
-  .header h1 { font-size: 22px; }
+  .header h1 { font-size: 18px; }
   .tab-nav { padding: 0 var(--spacing-sm); gap: 2px; }
   .tab-btn { padding: 12px 16px; font-size: 13px; }
   .tab-body { padding: var(--spacing-lg) var(--spacing-sm); }
-  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-md); }
-  .kpi-card .value { font-size: 28px; }
-  .kpi-card { padding: var(--spacing-lg) var(--spacing-md); }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
+  .kpi-card .value { font-size: 24px; }
+  .kpi-card { padding: var(--spacing-md) var(--spacing-sm); }
   .section-title { font-size: 22px; }
   .chart-card { padding: var(--spacing-md); }
   .filter-bar { flex-direction: column; align-items: stretch; }
