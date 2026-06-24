@@ -11,11 +11,16 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from generate_html_report import (
+from renderers.data_transform import (
+    RowDetail,
     _safe_float,
+    _format_datetime,
+    compute_rows_detail,
+)
+from generate_html_report import (
     _simple_replace,
     _replace_json_field,
-    compute_rows_detail,
+    generate_html_report,
 )
 from column_definitions import (
     COL_FLOW_ID, COL_PROJECT_NAME, COL_PROVINCE, COL_SALESPERSON,
@@ -358,7 +363,6 @@ class TestXssProtection:
 
     def test_query_range_xss_escaped(self):
         """验证空数据模板中 query_range 被 HTML 转义。"""
-        from generate_html_report import generate_html_report
         import tempfile, os
         with tempfile.TemporaryDirectory() as tmpdir:
             output = os.path.join(tmpdir, "test.html")
@@ -374,29 +378,23 @@ class TestFormatDatetime:
     """测试 _format_datetime 辅助函数。"""
 
     def test_none_value(self):
-        from generate_html_report import _format_datetime
         assert _format_datetime(None) == ""
 
     def test_datetime_object(self):
         from datetime import datetime
-        from generate_html_report import _format_datetime
         dt = datetime(2026, 6, 14, 10, 30, 0)
         assert _format_datetime(dt) == "2026-06-14 10:30:00"
 
     def test_iso_string(self):
-        from generate_html_report import _format_datetime
         assert _format_datetime("2026-06-14T10:30:00") == "2026-06-14 10:30:00"
 
     def test_date_only_string(self):
-        from generate_html_report import _format_datetime
         assert _format_datetime("2026-06-14") == "2026-06-14"
 
     def test_empty_string(self):
-        from generate_html_report import _format_datetime
         assert _format_datetime("") == ""
 
     def test_garbage_string(self):
-        from generate_html_report import _format_datetime
         assert _format_datetime("not-a-date") == "not-a-date"
 
 
@@ -404,7 +402,6 @@ class TestRowDetailType:
     """测试 RowDetail TypedDict 类型定义。"""
 
     def test_typed_dict_exists(self):
-        from generate_html_report import RowDetail
         assert RowDetail.__annotations__ is not None
         assert "flowId" in RowDetail.__annotations__  # 实际字段名是 flowId (camelCase)
         assert "projectName" in RowDetail.__annotations__
