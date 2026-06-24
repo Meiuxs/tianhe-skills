@@ -427,11 +427,6 @@ def stats_from_excel(args: argparse.Namespace) -> None:
             cell.alignment = ALIGN_HEADER
 
     # 清除旧数据并补充辅助列（1-based 列号：COL_PURCHASE_PROCESSOR+1 到 T 列）
-    _clear_start = COL_PROVINCE_PROCESSOR + 1  # openpyxl 1-based
-    _clear_end = 20  # T 列（日期序列号辅助列）
-    for r in range(2, data_ws.max_row + 1):
-        for c in range(_clear_start, _clear_end + 1):
-            data_ws.cell(row=r, column=c).value = None
     _fill_date_helper_column(data_ws)
 
     # 按日期范围筛选

@@ -3911,9 +3911,6 @@ td.number-right, th.number-right {
   width: 100% !important;
 
 
-  height: 100% !important;
-
-
 }
 
 
@@ -5323,16 +5320,22 @@ function initChartDefaults() {
 
 
 
-  // Apple 风格 Tooltip 全局默认
+  // Apple HIG 风格 Tooltip 全局默认 — 浅色毛玻璃
 
 
-  Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(28, 28, 30, 0.9)';
+  Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255,255,255,0.95)';
 
 
-  Chart.defaults.plugins.tooltip.titleColor = '#FFFFFF';
+  Chart.defaults.plugins.tooltip.titleColor = '#1D1D1F';
 
 
-  Chart.defaults.plugins.tooltip.bodyColor = '#E5E5EA';
+  Chart.defaults.plugins.tooltip.bodyColor = '#6E6E73';
+
+
+  Chart.defaults.plugins.tooltip.borderColor = 'rgba(0,0,0,0.06)';
+
+
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
 
 
   Chart.defaults.plugins.tooltip.padding = 12;
@@ -5543,6 +5546,16 @@ const CHART_COLORS = {
 
 
 
+
+
+/* ──── Apple 风格柱状图渐变填充 ──── */
+function createBarGradient(ctx, area, color) {
+  if (!area) return color;
+  var grad = ctx.createLinearGradient(0, area.bottom, 0, area.top);
+  grad.addColorStop(0, color + '30');
+  grad.addColorStop(1, color + 'DD');
+  return grad;
+}
 
 
 function fmtNum(n) {
@@ -6067,19 +6080,29 @@ function makeBarOpts(xLabel, yLabel) {
       tooltip: {
 
 
-        backgroundColor: 'rgba(0,0,0,0.85)',
+        backgroundColor: 'rgba(255,255,255,0.95)',
 
 
-        titleFont: { size: 12, weight: '600' },
+
+        titleColor: '#1D1D1F',
+
+        bodyColor: '#6E6E73',
+        titleFont: { size: 12, weight: '700' },
 
 
-        bodyFont: { size: 12 },
+        bodyFont: { size: 12, weight: '500' },
 
 
+
+        displayColors: true,
+
+        usePointStyle: true,
+
+        boxPadding: 6,
         padding: 12,
 
 
-        cornerRadius: 8,
+        cornerRadius: 10,
 
 
         callbacks: {
@@ -6196,19 +6219,34 @@ function makeDonutOpts(showCenter) {
         mode: 'index',
 
 
-        backgroundColor: 'rgba(0,0,0,0.85)',
+        backgroundColor: 'rgba(255,255,255,0.95)',
 
 
-        titleFont: { size: 12, weight: '600' },
+        titleColor: '#1D1D1F',
 
 
-        bodyFont: { size: 12 },
+        bodyColor: '#6E6E73',
+
+
+        titleFont: { size: 12, weight: '700' },
+
+
+        bodyFont: { size: 12, weight: '500' },
 
 
         padding: 12,
 
 
-        cornerRadius: 8,
+        cornerRadius: 10,
+
+
+        displayColors: true,
+
+
+        usePointStyle: true,
+
+
+        boxPadding: 6,
 
 
         callbacks: {
@@ -7933,7 +7971,16 @@ function initOverviewCharts() {
           data: [mPower, iPower, bPower],
 
 
-          backgroundColor: [CHART_COLORS.blue, CHART_COLORS.orange, CHART_COLORS.green],
+          backgroundColor: function(ctx) {
+
+
+            var colors = [CHART_COLORS.blue, CHART_COLORS.orange, CHART_COLORS.green];
+
+
+            return createBarGradient(ctx.chart.ctx, ctx.chart.chartArea, colors[ctx.dataIndex % colors.length]);
+
+
+          },
 
 
           borderRadius: 4,
@@ -7979,9 +8026,16 @@ function initOverviewCharts() {
 
 
           tooltip: {
-            backgroundColor: 'rgba(0,0,0,0.85)',
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            titleColor: '#1D1D1F',
+            bodyColor: '#6E6E73',
+            titleFont: { size: 12, weight: '700' },
+            bodyFont: { size: 12, weight: '500' },
             padding: 12,
-            cornerRadius: 8,
+            cornerRadius: 10,
+            displayColors: true,
+            usePointStyle: true,
+            boxPadding: 6,
             callbacks: {
               label: function(ctx) {
                 return ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y);
@@ -7998,7 +8052,7 @@ function initOverviewCharts() {
         scales: {
 
 
-          x: { grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73' } },
+          x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73' } },
 
 
           y: {
@@ -8013,9 +8067,14 @@ function initOverviewCharts() {
             grid: { color: 'rgba(0,0,0,0.04)', drawTicks: false },
 
 
-            ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+            ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73', padding: 8, callback: function(v) { return fmtNum(v); } },
 
 
+            border: { display: false },
+
+
+
+            border: { display: false },
           },
 
 
@@ -8073,19 +8132,15 @@ function initOverviewCharts() {
           data: provCounts,
 
 
-          backgroundColor: ranking.map(function(_, i) {
-
-
-            return CHART_COLORS.palette[i % CHART_COLORS.palette.length];
-
-
-          }),
+          backgroundColor: function(ctx) {
+            return CHART_COLORS.palette[ctx.dataIndex % CHART_COLORS.palette.length];
+          },
 
 
           borderRadius: 4,
 
 
-          maxBarThickness: 40,
+          maxBarThickness: 60,
 
 
         }],
@@ -8103,7 +8158,7 @@ function initOverviewCharts() {
         maintainAspectRatio: true,
 
 
-        aspectRatio: 1.8,
+        aspectRatio: 1.2,
 
 
         indexAxis: 'y',
@@ -8121,22 +8176,42 @@ function initOverviewCharts() {
           tooltip: {
 
 
-            backgroundColor: 'rgba(0,0,0,0.85)',
+            backgroundColor: 'rgba(255,255,255,0.95)',
 
 
-            titleFont: { size: 12, weight: '600' },
+            titleColor: '#1D1D1F',
 
 
-            bodyFont: { size: 12 },
+            bodyColor: '#6E6E73',
+
+
+            titleFont: { size: 12, weight: '700' },
+
+
+            bodyFont: { size: 12, weight: '500' },
 
 
             padding: 12,
 
 
-            cornerRadius: 8,
+            cornerRadius: 10,
+
+
+            displayColors: true,
+
+
+            boxPadding: 6,
+
+
+            usePointStyle: true,
 
 
             callbacks: {
+
+
+              title: function(ctx) {
+                return ctx[0].label;
+              },
 
 
               label: function(ctx) {
@@ -8184,10 +8259,10 @@ function initOverviewCharts() {
             grace: '10%',
 
 
-            grid: { color: 'rgba(0,0,0,0.04)', drawTicks: false },
+            grid: { display: false },
 
 
-            ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+            ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73', padding: 8, callback: function(v) { return fmtNum(v); } },
 
 
           },
@@ -8199,7 +8274,10 @@ function initOverviewCharts() {
             grid: { display: false },
 
 
-            ticks: { font: { size: 11 } },
+            ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73', padding: 8 },
+
+
+            border: { display: false },
 
 
           },
@@ -8370,13 +8448,9 @@ function initApprovalCharts() {
         data: compareData.map(function(d) { return d.avg; }),
 
 
-        backgroundColor: compareData.map(function(_, i) {
-
-
-          return CHART_COLORS.palette[i % CHART_COLORS.palette.length];
-
-
-        }),
+        backgroundColor: function(ctx) {
+          return createBarGradient(ctx.chart.ctx, ctx.chart.chartArea, CHART_COLORS.palette[ctx.dataIndex % CHART_COLORS.palette.length]);
+        },
 
 
         borderRadius: 4,
@@ -8416,9 +8490,16 @@ function initApprovalCharts() {
 
 
         tooltip: {
-          backgroundColor: 'rgba(0,0,0,0.85)',
+          backgroundColor: 'rgba(255,255,255,0.95)',
+          titleColor: '#1D1D1F',
+          bodyColor: '#6E6E73',
+          titleFont: { size: 12, weight: '700' },
+          bodyFont: { size: 12, weight: '500' },
           padding: 12,
-          cornerRadius: 8,
+          cornerRadius: 10,
+          displayColors: true,
+          usePointStyle: true,
+          boxPadding: 6,
           callbacks: {
             title: function(ctx) {
               let d = compareData[ctx[0].dataIndex];
@@ -8455,13 +8536,19 @@ function initApprovalCharts() {
           ticks: {
 
 
-            font: { size: 11 },
+            font: { size: 11, weight: '600' },
+
+            color: '#6E6E73',
+
+            padding: 8,
 
 
             callback: function(v) { return fmtNum(v) + '天'; },
 
 
-          },
+  
+        border: { display: false },
+        },
 
 
         },
@@ -8575,7 +8662,9 @@ function initDetailCharts() {
           data: moduleData,
 
 
-          backgroundColor: CHART_COLORS.blue,
+          backgroundColor: function(ctx) {
+            return createBarGradient(ctx.chart.ctx, ctx.chart.chartArea, CHART_COLORS.blue);
+          },
 
 
           borderRadius: 4,
@@ -8590,7 +8679,9 @@ function initDetailCharts() {
           data: inverterData,
 
 
-          backgroundColor: CHART_COLORS.orange,
+          backgroundColor: function(ctx) {
+            return createBarGradient(ctx.chart.ctx, ctx.chart.chartArea, CHART_COLORS.orange);
+          },
 
 
           borderRadius: 4,
@@ -8605,7 +8696,9 @@ function initDetailCharts() {
           data: batteryData,
 
 
-          backgroundColor: CHART_COLORS.green,
+          backgroundColor: function(ctx) {
+            return createBarGradient(ctx.chart.ctx, ctx.chart.chartArea, CHART_COLORS.green);
+          },
 
 
           borderRadius: 4,
@@ -8650,19 +8743,34 @@ function initDetailCharts() {
           tooltip: {
 
 
-            backgroundColor: 'rgba(0,0,0,0.85)',
+            backgroundColor: 'rgba(255,255,255,0.95)',
 
 
-            titleFont: { size: 12, weight: '600' },
+            titleColor: '#1D1D1F',
 
 
-            bodyFont: { size: 12 },
+            bodyColor: '#6E6E73',
+
+
+            titleFont: { size: 12, weight: '700' },
+
+
+            bodyFont: { size: 12, weight: '500' },
 
 
             padding: 12,
 
 
-            cornerRadius: 8,
+            cornerRadius: 10,
+
+
+            displayColors: true,
+
+
+            usePointStyle: true,
+
+
+            boxPadding: 6,
 
 
             callbacks: {
@@ -8695,7 +8803,7 @@ function initDetailCharts() {
             grid: { display: false },
 
 
-            ticks: { font: { size: 11 }, maxRotation: periodNames.length > 6 ? 30 : 0 },
+            ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73', padding: 8, maxRotation: periodNames.length > 6 ? 30 : 0 },
 
 
             // 紧凑分组：同一时段三种柱子紧靠，不同时段之间留空
@@ -8722,7 +8830,7 @@ function initDetailCharts() {
             grid: { color: 'rgba(0,0,0,0.04)', drawTicks: false },
 
 
-            ticks: { font: { size: 11 }, callback: function(v) { return fmtNum(v); } },
+            ticks: { font: { size: 11, weight: '600' }, color: '#6E6E73', padding: 8, callback: function(v) { return fmtNum(v); } },
 
 
           },
