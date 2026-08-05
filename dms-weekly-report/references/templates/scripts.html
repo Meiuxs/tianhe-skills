@@ -1,0 +1,5725 @@
+<!-- ===================================================================
+
+
+     JAVASCRIPT — 三层数据管道
+
+
+     =================================================================== -->
+
+
+<script>
+
+
+/* ===================================================================
+
+
+   DATA — 由后端注入，唯一数据源
+
+
+   =================================================================== */
+
+
+const ROWS_DETAIL = {{ROWS_DETAIL_JSON}} || [];
+
+
+const SERVER_NOW = '{{SERVER_TIMESTAMP}}' || null; // 后端注入 ISO 8601 格式时间戳
+
+
+/* ===================================================================
+
+
+   THEME — 从 CSS 变量读取当前主题色值 + Dark Mode 检测
+
+
+   =================================================================== */
+
+
+function isDarkMode() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+
+/** 从 CSS 自定义属性解析实际色值（Chart.js Canvas 不支持 var()） */
+function cssVar(name, fallback) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+
+/** 获取当前主题下的 Chart.js 色板 */
+function chartTheme() {
+  var dark = isDarkMode();
+  return {
+    textPrimary:  cssVar('--text-primary',  dark ? '#F5F5F7' : '#1D1D1F'),
+    textSecondary: cssVar('--text-secondary', dark ? '#A1A1A6' : '#6E6E73'),
+    textTertiary:  cssVar('--text-tertiary',  dark ? '#6E6E73' : '#86868B'),
+    bgPage:        cssVar('--bg-page',        dark ? '#000000' : '#F5F5F7'),
+    bgCard:        cssVar('--bg-white',       dark ? '#1C1C1E' : '#FFFFFF'),
+    gridColor:     dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
+    tooltipBg:     dark ? 'rgba(28,28,30,0.95)'    : 'rgba(255,255,255,0.95)',
+    tooltipBorder: dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+  };
+}
+
+
+
+/* ── 明细表格分页状态 ── */
+
+
+let detailPageState = {
+
+
+  currentPage: 1,
+
+
+  pageSize: 10,  // 默认显示10条
+
+
+  totalRows: 0,
+
+
+};
+
+
+
+
+
+/* ── 缓存当前过滤结果（避免重复 filterRowsByPeriod）── */
+
+
+var _cachedFilteredRows = null;
+
+
+
+
+
+function _invalidateFilterCache() {
+
+
+  _cachedFilteredRows = null;
+
+
+}
+
+
+
+
+
+// 全局状态
+
+
+var includeInvalid = true;  // 默认包含作废流程
+
+
+
+
+
+function getFilteredRows() {
+
+
+  if (!_cachedFilteredRows) {
+
+
+    var start = document.getElementById('date-start').value;
+
+
+    var end = document.getElementById('date-end').value;
+
+
+    _cachedFilteredRows = ROWS_DETAIL.filter(function(row) {
+
+
+      // 作废流程过滤
+
+
+      if (!includeInvalid && row.isInvalid) return false;
+
+
+      // 日期范围过滤（以区域技术审批时间为口径）
+      var regDate = (row.regionTechApprovalTime || '').slice(0, 10);
+
+
+      if (start && end) {
+
+
+        return regDate >= start && regDate <= end;
+
+
+      }
+
+
+      return true;
+
+
+    });
+
+
+  }
+
+
+  return _cachedFilteredRows;
+
+
+}
+
+
+
+
+
+// 开关切换事件
+
+
+document.getElementById('include-invalid-toggle').addEventListener('change', function() {
+
+
+  includeInvalid = this.checked;
+
+
+  _invalidateFilterCache();  // 清除缓存
+
+
+  onDateRangeChange();  // 触发全局刷新
+
+
+});
+
+
+
+
+
+/* ===================================================================
+
+
+   CHART.JS 加载检查
+
+
+   =================================================================== */
+
+
+var CHART_JS_LOADED = typeof Chart !== 'undefined';
+
+
+
+
+
+function checkChartJsLoaded() {
+
+
+  if (typeof Chart === 'undefined') {
+
+
+    document.querySelectorAll('canvas[id^="chart-"]').forEach(function(canvas) {
+
+
+      let msg = document.createElement('p');
+
+
+      msg.style.cssText = 'text-align:center;padding:40px 16px;color:#95A5A6;font-size:14px;';
+
+
+      msg.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;vertical-align:middle;margin-right:4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 图表库加载失败，请检查网络连接后刷新页面';
+
+
+      canvas.parentNode.replaceChild(msg, canvas);
+
+
+    });
+
+
+    return false;
+
+
+  }
+
+
+  if (!CHART_JS_LOADED) {
+
+
+    CHART_JS_LOADED = true;
+
+
+    initChartDefaults();
+
+
+  }
+
+
+  return true;
+
+
+}
+
+
+
+
+
+function initChartDefaults() {
+
+
+  if (!CHART_JS_LOADED) return;
+
+
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", sans-serif';
+
+
+  Chart.defaults.font.weight = '400';
+
+
+  Chart.defaults.font.size   = 12;
+
+
+  Chart.defaults.color       = chartTheme().textSecondary;
+
+
+
+
+
+  // Apple HIG 风格 Tooltip 全局默认 — 浅色毛玻璃
+
+
+  Chart.defaults.plugins.tooltip.backgroundColor = chartTheme().tooltipBg;
+
+
+  Chart.defaults.plugins.tooltip.titleColor = chartTheme().textPrimary;
+
+
+  Chart.defaults.plugins.tooltip.bodyColor = chartTheme().textSecondary;
+
+
+  Chart.defaults.plugins.tooltip.borderColor = chartTheme().tooltipBorder;
+
+
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+
+
+  Chart.defaults.plugins.tooltip.padding = 12;
+
+
+  Chart.defaults.plugins.tooltip.cornerRadius = 10;
+
+
+  Chart.defaults.plugins.tooltip.titleFont = { family: Chart.defaults.font.family, weight: '700', size: 13 };
+
+
+  Chart.defaults.plugins.tooltip.bodyFont = { family: Chart.defaults.font.family, weight: '400', size: 12 };
+
+
+  Chart.defaults.plugins.tooltip.displayColors = true;
+
+
+  Chart.defaults.plugins.tooltip.boxPadding = 6;
+
+
+  Chart.defaults.plugins.tooltip.usePointStyle = true;
+
+
+
+
+
+  // Theme-aware 网格线
+
+
+  Chart.defaults.scales.grid.color = chartTheme().gridColor;
+
+
+  Chart.defaults.scales.grid.drawBorder = false;
+
+
+  Chart.defaults.scales.grid.drawTicks = false;
+
+
+
+
+
+  // 全局插件：图表导出/截图时带白色背景，避免透明背景难看
+
+
+  Chart.register({
+
+
+    id: 'chart-white-bg',
+
+
+    // 在图表绘制前填充白色背景（绘图区域内）
+
+
+    beforeDraw: function(chart) {
+
+
+      var ctx = chart.ctx;
+
+
+      var area = chart.chartArea;
+
+
+      if (area) {
+
+
+        ctx.save();
+
+
+        ctx.fillStyle = t.bgCard;
+
+
+        ctx.fillRect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+
+
+        ctx.restore();
+
+
+      }
+
+
+    },
+
+
+    // 在所有图表绘制完成后，确保整个 canvas DOM 尺寸都有白色背景
+
+
+    // 这覆盖了 canvas 缩放后超出绘图区域的透明部分
+
+
+    afterDraw: function(chart) {
+
+
+      var ctx = chart.ctx;
+
+
+      var cw = chart.canvas.width;
+
+
+      var ch = chart.canvas.height;
+
+
+      var area = chart.chartArea;
+
+
+      // 只有当 canvas 有 CSS 缩放时才需要补白
+
+
+      var cssWidth = chart.width;
+
+
+      var cssHeight = chart.height;
+
+
+      if (cw > cssWidth || ch > cssHeight) {
+
+
+        ctx.save();
+
+
+        ctx.globalCompositeOperation = 'destination-over';
+
+
+        ctx.fillStyle = '#FFFFFF';
+
+
+        ctx.fillRect(0, 0, cw, ch);
+
+
+        ctx.restore();
+
+
+      }
+
+
+    },
+
+
+  });
+
+
+}
+
+
+
+
+
+function safeChartInit(fn) {
+
+
+  if (!checkChartJsLoaded()) return null;
+
+
+  return fn();
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   CHART COLOR PALETTE & UTILITIES
+
+
+   =================================================================== */
+
+
+const CHART_COLORS = {
+
+
+  navy:     '#1D4ED8',
+
+
+  blue:     '#3B82F6',
+
+
+  lightBlue:'#93C5FD',
+
+
+  green:    '#10B981',
+
+
+  orange:   '#F59E0B',
+
+
+  red:      '#EF4444',
+
+
+  purple:   '#8B5CF6',
+
+
+  teal:     '#06B6D4',
+
+
+  gray:     '#94A3B8',
+
+
+  ltGray:   '#D1D5DB',
+
+
+  palette: ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4'],
+
+
+};
+
+
+
+
+
+
+
+
+
+function fmtNum(n) {
+
+
+  if (n == null) return '0';
+
+
+  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+
+}
+
+
+
+
+
+function escHtml(s) {
+
+
+  if (s == null) return '';
+
+
+  return String(s).replace(/[&<>"']/g, function(c) {
+
+
+    return '&#' + c.charCodeAt(0) + ';';
+
+
+  });
+
+
+}
+
+
+
+
+
+/** 将本地 Date 格式化为 YYYY-MM-DD（不经过时区转换，避免 toISOString 的 UTC 截断） */
+
+
+function fmtLocalDate(d) {
+
+
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+
+
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+
+
+}
+
+
+
+
+
+function hasData(arr) {
+
+
+  return Array.isArray(arr) && arr.some(function(v) { return parseFloat(v) > 0; });
+
+
+}
+
+
+
+
+
+function showNoData(canvasId, message, icon) {
+
+
+  let canvas = document.getElementById(canvasId);
+
+
+  if (!canvas) return;
+
+
+  let wrap = canvas.parentNode;
+
+
+  if (!wrap) return;
+
+
+  let existing = wrap.querySelector('.no-data-msg');
+
+
+  if (existing) existing.remove();
+
+
+  canvas.style.display = 'none';
+
+
+
+
+
+  let container = document.createElement('div');
+
+
+  container.className = 'no-data-msg';
+
+
+  container.style.cssText = 'text-align:center;padding:48px 16px;';
+
+
+
+
+
+  let iconEl = document.createElement('div');
+
+
+  iconEl.style.cssText = 'font-size:40px;margin-bottom:8px;opacity:0.5;';
+
+
+  iconEl.textContent = icon || '';
+
+
+
+
+
+  let msgEl = document.createElement('p');
+
+
+  msgEl.style.cssText = 'color:#95A5A6;font-size:13px;margin:0 0 4px 0;';
+
+
+  msgEl.textContent = message || '暂无数据';
+
+
+
+
+
+  let guideEl = document.createElement('p');
+
+
+  guideEl.style.cssText = 'color:#B0BEC5;font-size:11px;margin:0;';
+
+
+  guideEl.textContent = '试着切换到「本月」或「全部」，看看更广阔的时间范围';
+
+
+
+
+
+  container.appendChild(iconEl);
+
+
+  container.appendChild(msgEl);
+
+
+  container.appendChild(guideEl);
+
+
+  wrap.appendChild(container);
+
+
+}
+
+
+
+
+
+/* ──────────── 饼图中心文字插件 ──────────── */
+
+
+var donutCenterPlugin = {
+
+
+  id: 'donutCenterText',
+
+
+  afterDraw: function(chart) {
+
+
+    // 仅当图表配置中明确启用 showCenterText 时才绘制
+
+
+    if (!chart.config.options.showCenterText) {
+
+
+      return;
+
+
+    }
+
+
+
+
+
+    let width = chart.width;
+
+
+    let height = chart.height;
+
+
+    let ctx = chart.ctx;
+
+
+    ctx.save();
+
+
+    let centerX = width / 2;
+
+
+    let centerY = height / 2 - 4;
+
+
+    // 从原始数据计算合计，排除 isSingleData hack 值（< 0.1）
+
+
+    let rawData = chart.data.datasets[0].data || [];
+
+
+    let total = rawData.reduce(function(sum, val) {
+
+
+      return sum + (Math.abs(val) < 0.1 ? 0 : val);
+
+
+    }, 0);
+
+
+    if (!chart.options.cutout || chart.options.cutout === 0) { ctx.restore(); return; }
+
+
+    let fontSize = Math.min(width, height) * 0.08;
+
+
+    ctx.font = '600 ' + fontSize + 'px ' + Chart.defaults.font.family;
+
+
+    ctx.fillStyle = chartTheme().textPrimary;
+
+
+    ctx.textAlign = 'center';
+
+
+    ctx.textBaseline = 'middle';
+
+
+    ctx.fillText(fmtNum(total), centerX, centerY);
+
+
+    ctx.restore();
+
+
+  },
+
+
+};
+
+
+
+
+
+/* ──────────── 通用数据标签插件（柱状/条形图顶部显示数值）──────────── */
+
+
+var dataLabelPlugin = {
+
+
+  id: 'dataLabel',
+
+
+  afterDraw: function(chart) {
+
+
+    // 跳过饼图/环状图（此类图表由 chartjs-plugin-datalabels 负责标签显示）
+
+
+    if (chart.config.type === 'doughnut' || chart.config.type === 'pie') return;
+
+
+    // 仅在柱状/条形图（包含 indexAxis）上生效
+
+
+    if (!chart.isDatasetVisible || !chart.getDatasetMeta) return;
+
+
+    var ctx = chart.ctx;
+
+
+    ctx.save();
+    ctx.fillStyle = chartTheme().textSecondary;
+
+
+    // 默认字体：按 canvas 高度自适应
+
+
+    var fontSize = Math.max(10, Math.min(13, chart.height * 0.025));
+
+
+    ctx.font = '500 ' + fontSize + 'px ' + Chart.defaults.font.family;
+
+
+    ctx.textAlign = 'center';
+
+
+    ctx.textBaseline = 'bottom';
+
+
+
+
+
+    var isHorizontal = chart.options.indexAxis === 'y';
+
+
+    for (var i = 0; i < chart.data.datasets.length; i++) {
+
+
+      var meta = chart.getDatasetMeta(i);
+
+
+      if (!meta.visible) continue;
+
+
+      var dataset = chart.data.datasets[i];
+
+
+      for (var j = 0; j < meta.data.length; j++) {
+
+
+        var elem = meta.data[j];
+
+
+        if (!elem || elem.hidden) continue;
+
+
+        var value = dataset.data[j];
+
+
+        // 跳过极小的 hack 值（pie 图表会用到 <0.1 占位）
+
+
+        if (Math.abs(value) < 0.1) continue;
+
+
+
+
+
+        var x, y;
+
+
+        if (isHorizontal) {
+
+
+          // 水平条形图：标签在条右端
+
+
+          x = elem.x + 4;
+
+
+          y = elem.y + fontSize * 0.35;
+
+
+          ctx.textAlign = 'left';
+
+
+          ctx.textBaseline = 'middle';
+
+
+        } else {
+
+
+          // 垂直柱状图：标签在柱顶上方
+
+
+          x = elem.x;
+
+
+          y = elem.y - 3;
+
+
+          ctx.textAlign = 'center';
+
+
+          ctx.textBaseline = 'bottom';
+
+
+        }
+
+
+        ctx.fillStyle = '#475569';
+
+
+        var displayVal = typeof value === 'number' ? fmtNum(value) : String(value);
+
+
+        ctx.fillText(displayVal, x, y);
+
+
+      }
+
+
+    }
+
+
+    ctx.restore();
+
+
+  },
+
+
+};
+
+
+
+
+
+// 注册插件
+
+
+if (typeof Chart !== 'undefined') {
+
+
+  Chart.register(donutCenterPlugin);
+
+
+  Chart.register(dataLabelPlugin);
+
+
+}
+
+
+
+
+
+// 注册 chartjs-plugin-datalabels 插件（用于饼图扇区标签显示）
+
+
+function registerDataLabelsPlugin() {
+
+
+  if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+
+
+    Chart.register(ChartDataLabels);
+
+
+    // 全局禁用 datalabels，仅在环形图配置中单独启用，避免与其他图表冲突
+
+
+    Chart.defaults.plugins.datalabels = { display: false };
+
+
+    return true;
+
+
+  }
+
+
+  return false;
+
+
+}
+
+
+// 立即尝试注册，若 CDN 尚未加载则轮询等待
+
+
+if (!registerDataLabelsPlugin()) {
+
+
+  var _retryCount = 0;
+
+
+  var _retryInterval = setInterval(function() {
+
+
+    if (registerDataLabelsPlugin() || ++_retryCount > 50) {
+
+
+      clearInterval(_retryInterval);
+
+
+    }
+
+
+  }, 100);
+
+
+}
+
+
+
+
+
+/* ──────────── 通用图表配置 ──────────── */
+
+
+function makeBarOpts(xLabel, yLabel) {
+
+
+  return {
+
+
+    responsive: true,
+
+
+    maintainAspectRatio: true,
+
+
+    aspectRatio: 2.2,
+
+
+    animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
+
+
+    plugins: {
+
+
+      legend: {
+
+
+        position: 'bottom',
+
+
+        labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12, weight: '500' }, color: chartTheme().textPrimary },
+
+
+      },
+
+
+      tooltip: {
+
+
+        backgroundColor: chartTheme().tooltipBg,
+
+
+
+        titleColor: chartTheme().textPrimary,
+
+        bodyColor: chartTheme().textSecondary,
+        titleFont: { size: 12, weight: '700' },
+
+
+        bodyFont: { size: 12, weight: '400' },
+
+
+
+        displayColors: true,
+
+        usePointStyle: true,
+
+        boxPadding: 6,
+        padding: 12,
+
+
+        cornerRadius: 10,
+
+
+        callbacks: {
+
+
+          label: function(ctx) {
+
+
+            return ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y);
+
+
+          }
+
+
+        }
+
+
+      },
+
+
+    },
+
+
+    scales: {
+
+
+      x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary } },
+
+
+      y: {
+
+
+        beginAtZero: true,
+
+
+        grid: { color: 'rgba(0,0,0,0.03)', drawBorder: false, drawTicks: false },
+
+
+        ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary, padding: 8, callback: function(v) { return fmtNum(v); } },
+
+
+        border: { display: false },
+
+
+      },
+
+
+    },
+
+
+  };
+
+
+}
+
+
+
+
+
+function makeDonutOpts(showCenter) {
+
+
+  return {
+
+
+    responsive: true,
+
+
+    maintainAspectRatio: true,
+
+
+    aspectRatio: 1.2,
+
+
+    showCenterText: false,  // 不显示中间文本，数据改在扇区上显示
+
+
+    animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
+
+
+    plugins: {
+
+
+      legend: {
+
+
+        position: 'bottom',
+
+
+        labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12, weight: '500' }, color: chartTheme().textPrimary },
+
+
+      },
+
+
+      tooltip: {
+
+
+        animation: {
+
+
+          duration: 200,
+
+
+          easing: 'easeOutQuart'
+
+
+        },
+
+
+        intersect: false,
+
+
+        mode: 'index',
+
+
+        backgroundColor: chartTheme().tooltipBg,
+
+
+        titleColor: chartTheme().textPrimary,
+
+
+        bodyColor: chartTheme().textSecondary,
+
+
+        titleFont: { size: 12, weight: '700' },
+
+
+        bodyFont: { size: 12, weight: '400' },
+
+
+        padding: 12,
+
+
+        cornerRadius: 10,
+
+
+        displayColors: true,
+
+
+        usePointStyle: true,
+
+
+        boxPadding: 6,
+
+
+        callbacks: {
+
+
+          label: function(ctx) {
+
+
+            const total = ctx.dataset.data.reduce(function(a,b) { return a + b; }, 0);
+
+
+            const value = typeof ctx.parsed === 'number' ? ctx.parsed : ctx.raw;
+
+
+            const pct = total > 0 ? (value / total * 100).toFixed(1) : 0;
+
+
+            return ctx.label + ': ' + fmtNum(value) + ' (' + pct + '%)';
+
+
+          }
+
+
+        }
+
+
+      },
+
+
+      // 在扇区上直接显示百分比和数值
+
+
+      datalabels: {
+
+
+        display: true,
+
+
+        color: '#fff',
+
+
+        font: {
+
+
+          weight: 'bold',
+
+
+          size: 13,
+
+
+        },
+
+
+        anchor: 'center',
+
+
+        align: 'center',
+
+
+        offset: 0,
+
+
+        formatter: function(value, ctx) {
+
+
+          const total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+
+
+          const pct = total > 0 ? (value / total * 100).toFixed(1) : 0;
+
+
+          // 百分比小于 5% 时不显示标签（避免重叠）
+
+
+          if (parseFloat(pct) < 5) return '';
+
+
+          return fmtNum(value) + '\n(' + pct + '%)';
+
+
+        },
+
+
+      },
+
+
+    },
+
+
+    cutout: '55%',
+
+
+  };
+
+
+}
+
+
+
+
+
+/* ──────────── 图表实例管理 ──────────── */
+
+
+const chartInstances = {};
+
+
+
+
+
+function createChart(canvasId, config) {
+
+
+  const canvas = document.getElementById(canvasId);
+
+
+  if (!canvas) return null;
+
+
+
+
+
+  // 显示 skeleton loader 并保存引用到 canvas
+
+
+  let wrap = canvas.parentNode;
+
+
+  if (wrap && !wrap.querySelector('.chart-skeleton')) {
+
+
+    let skeleton = document.createElement('div');
+
+
+    skeleton.className = 'chart-skeleton';
+
+
+    wrap.insertBefore(skeleton, canvas);
+
+
+    canvas._skeleton = skeleton;
+
+
+  }
+
+
+
+
+
+  if (chartInstances[canvasId]) {
+
+
+    chartInstances[canvasId].destroy();
+
+
+  }
+
+
+  const ctx = canvas.getContext('2d');
+
+
+  chartInstances[canvasId] = new Chart(ctx, config);
+
+
+
+
+
+  return chartInstances[canvasId];
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   LAYER 1: 过滤层 — 按时间段筛选原始数据
+
+
+   =================================================================== */
+
+
+
+
+
+/**
+
+
+ * 获取快捷按钮对应的日期范围 {start, end}。
+
+
+ * start/end 为空字符串表示全部。
+
+
+ */
+
+
+function getQuickRange(quick) {
+
+
+  var today = SERVER_NOW ? new Date(SERVER_NOW) : new Date();
+
+
+  var y = today.getFullYear();
+
+
+  var m = today.getMonth();
+
+
+  var todayStr = fmtLocalDate(today);
+
+
+
+
+
+  switch (quick) {
+
+
+    case 'today':
+
+
+      return { start: todayStr, end: todayStr };
+
+
+    case 'last7': {
+
+
+      var d = new Date(today);
+
+
+      d.setDate(d.getDate() - 6);
+
+
+      return { start: fmtLocalDate(d), end: todayStr };
+
+
+    }
+
+
+    case 'thisweek': {
+
+
+      var ws = new Date(today);
+
+
+      ws.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+
+
+      return { start: fmtLocalDate(ws), end: todayStr };
+
+
+    }
+
+
+    case 'thismonth':
+
+
+      return { start: y + '-' + ('0' + (m + 1)).slice(-2) + '-01', end: todayStr };
+
+
+    case 'lastmonth': {
+
+
+      var lmStart = new Date(y, m - 1, 1);
+
+
+      var lmEnd = new Date(y, m, 0);
+
+
+      return { start: fmtLocalDate(lmStart), end: fmtLocalDate(lmEnd) };
+
+
+    }
+
+
+    case 'thisquarter': {
+
+
+      var qs = Math.floor(m / 3) * 3;
+
+
+      var qStart = new Date(y, qs, 1);
+
+
+      return { start: fmtLocalDate(qStart), end: todayStr };
+
+
+    }
+
+
+    case 'lastquarter': {
+
+
+      var qs = Math.floor(m / 3) * 3;
+
+
+      var qStart = new Date(y, qs - 3, 1);
+
+
+      var qEnd = new Date(y, qs, 0);
+
+
+      return { start: fmtLocalDate(qStart), end: fmtLocalDate(qEnd) };
+
+
+    }
+
+
+    case 'all':
+
+
+      return { start: '', end: '' };
+
+
+    default:
+
+
+      return null;
+
+
+  }
+
+
+}
+
+
+
+
+
+/**
+
+
+ * 根据日期范围自动检测子时段粒度。
+
+
+ */
+
+
+function _detectGranularityFromRange() {
+
+
+  var start = document.getElementById('date-start').value;
+
+
+  var end = document.getElementById('date-end').value;
+
+
+  if (!start || !end) return '全部';
+
+
+
+
+
+  var s = new Date(start);
+
+
+  var e = new Date(end);
+
+
+  var diffDays = Math.round((e - s) / 86400000);
+
+
+
+
+
+  if (diffDays > 180) return '全部';
+
+
+  if (diffDays > 60) return '本季度';
+
+
+  if (diffDays > 14) return '本月';
+
+
+  return '本周';
+
+
+}
+
+
+
+
+
+function filterRowsByPeriod(rows, start, end) {
+
+
+  if (!start || !end) return rows; // '全部'
+
+
+  return rows.filter(function(row) {
+    var regDate = (row.regionTechApprovalTime || '').slice(0, 10);
+
+
+    return regDate >= start && regDate <= end;
+
+
+  });
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   LAYER 2: 计算层 — 纯函数，接收 rows[] 返回派生数据
+
+
+   =================================================================== */
+
+
+
+
+
+/** 汇总统计：项目数、容量、有效性等 */
+
+
+function computeAggregates(rows) {
+
+
+  let total = 0, valid = 0;
+
+
+  let modulePower = 0, inverterPower = 0, batteryCapacity = 0;
+
+
+  let spSet = {};
+
+
+
+
+
+  rows.forEach(function(row) {
+
+
+    total++;
+
+
+    if (row.isValid === '是') valid++;
+
+
+    modulePower += row.modulePower || 0;
+
+
+    inverterPower += row.inverterPower || 0;
+
+
+    batteryCapacity += row.batteryCapacity || 0;
+
+
+    if (row.salesperson && row.salesperson !== '--' && row.salesperson !== '无') {
+
+
+      spSet[row.salesperson] = true;
+
+
+    }
+
+
+  });
+
+
+
+
+
+  return {
+
+
+    totalProjects: total,
+
+
+    validCount: valid,
+
+
+    invalidCount: total - valid,
+
+
+    salespersons: Object.keys(spSet).length,
+
+
+    modulePower: modulePower,
+
+
+    inverterPower: inverterPower,
+
+
+    batteryCapacity: batteryCapacity,
+
+
+    ratio: inverterPower > 0 ? Math.round(modulePower / inverterPower * 100) / 100 : 0,
+
+
+  };
+
+
+}
+
+
+
+
+
+/** 省公司排名 */
+
+
+function computeProvinceRanking(rows) {
+
+
+  let stats = {};
+
+
+  rows.forEach(function(row) {
+
+
+    let pv = row.province;
+
+
+    if (!pv || pv === '--' || pv === '无' || pv === '') return;
+
+
+    if (!stats[pv]) stats[pv] = { province: pv, count: 0, module: 0 };
+
+
+    stats[pv].count += 1;
+
+
+    stats[pv].module += row.modulePower || 0;
+
+
+  });
+
+
+  return Object.values(stats)
+
+
+    .sort(function(a, b) { return b.count - a.count; })
+
+
+    .map(function(item, i) {
+
+
+      item.rank = i + 1;
+
+
+      item.module = Math.round(item.module * 100) / 100;
+
+
+      return item;
+
+
+    });
+
+
+}
+
+
+
+
+
+/** 审批天数统计 */
+
+
+function computeApprovalDays(rows) {
+
+
+  let days = [];
+
+
+  rows.forEach(function(row) {
+
+
+    let sd = row.submitDate;
+
+
+    let fd = row.finalDate;
+
+
+    if (!sd || !fd) return;
+
+
+    let d1 = new Date(sd);
+
+
+    let d2 = new Date(fd);
+
+
+    // 同天为 1 天，跨天按实际日历日差计算（不含时区偏移）
+
+
+    let diff = Math.max(1, Math.round((d2 - d1) / 86400000));
+
+
+    days.push(diff);
+
+
+  });
+
+
+  return {
+
+
+    avg: days.length > 0 ? Math.round(days.reduce(function(a,b) { return a+b; }, 0) / days.length * 10) / 10 : 0,
+
+
+    min: days.length > 0 ? Math.min.apply(null, days) : 0,
+
+
+    max: days.length > 0 ? Math.max.apply(null, days) : 0,
+
+
+    sampleCount: days.length,
+
+
+  };
+
+
+}
+
+
+
+
+
+/* ── 审批角色配置（可扩展，新增角色只需加一行）── */
+
+
+var APPROVAL_ROLES = [
+
+
+  { id: 'procurement', label: '项目管理部核价审批', approverField: 'negotiationApprover', statusField: 'negotiationStatus' },
+
+
+  { id: 'province', label: '省总审批', approverField: 'provinceApprover', statusField: 'provinceStatus' },
+
+
+];
+
+
+
+
+
+/* ── 当前选中的角色 ID ── */
+
+
+var currentApprovalRoleId = 'procurement';
+
+
+
+
+
+/** 根据角色 ID 获取配置对象 */
+
+
+function getRoleConfig(roleId) {
+
+
+  for (var i = 0; i < APPROVAL_ROLES.length; i++) {
+
+
+    if (APPROVAL_ROLES[i].id === roleId) return APPROVAL_ROLES[i];
+
+
+  }
+
+
+  return APPROVAL_ROLES[0];
+
+
+}
+
+
+
+
+
+/** 提取指定角色的审批人列表 */
+
+
+function extractApproverList(rows, roleId) {
+
+
+  var role = getRoleConfig(roleId);
+
+
+  var field = role.approverField;
+
+
+  let set = {};
+
+
+  rows.forEach(function(row) {
+
+
+    let name = row[field];
+
+
+    if (name && name !== '--' && name !== '无' && name !== '') {
+
+
+      set[name] = true;
+
+
+    }
+
+
+  });
+
+
+  return Object.keys(set).sort();
+
+
+}
+
+
+
+
+
+/** 初始化角色下拉列表 */
+
+
+function initRoleSelect() {
+
+
+  var sel = document.getElementById('approval-role-select');
+
+
+  if (!sel) return;
+
+
+  sel.innerHTML = '';
+
+
+  APPROVAL_ROLES.forEach(function(role) {
+
+
+    var opt = document.createElement('option');
+
+
+    opt.value = role.id;
+
+
+    opt.textContent = role.label;
+
+
+    sel.appendChild(opt);
+
+
+  });
+
+
+  sel.value = currentApprovalRoleId;
+
+
+}
+
+
+
+
+
+/** 统计指定角色+审批人的审批通过情况 */
+
+
+function computeApproverStats(rows, roleId, approverName) {
+
+
+  var role = getRoleConfig(roleId);
+
+
+  var approverField = role.approverField;
+
+
+  var statusField = role.statusField;
+
+
+  let approved = 0, total = 0;
+
+
+  let hasApprover = function(name) {
+
+
+    return name && name !== '--' && name !== '无' && name !== '';
+
+
+  };
+
+
+  let isMatch = function(name) {
+
+
+    return approverName === '全部' ? hasApprover(name) : name === approverName;
+
+
+  };
+
+
+  rows.forEach(function(row) {
+
+
+    if (isMatch(row[approverField])) {
+
+
+      total++;
+
+
+      let status = row[statusField] || '';
+
+
+      if (status.indexOf('审批通过') >= 0) approved++;
+
+
+    }
+
+
+  });
+
+
+  return { approved: approved, total: total, rate: total > 0 ? Math.round(approved / total * 100) + '%' : '--' };
+
+
+}
+
+
+
+
+
+/** 按维度（省公司/业务员）统计审批耗时对比 */
+
+
+function computeApprovalByDimension(rows, field) {
+
+
+  let stats = {};
+
+
+  rows.forEach(function(row) {
+
+
+    let sd = row.submitDate;
+
+
+    let fd = row.finalDate;
+
+
+    if (!sd || !fd) return;
+
+
+    let key = row[field] || '';
+
+
+    if (!key || key === '--' || key === '无' || key === '') return;
+
+
+    let d1 = new Date(sd);
+
+
+    let d2 = new Date(fd);
+
+
+    let diff = Math.max(1, Math.round((d2 - d1) / 86400000));
+
+
+    if (!stats[key]) stats[key] = [];
+
+
+    stats[key].push(diff);
+
+
+  });
+
+
+  return Object.keys(stats).map(function(key) {
+
+
+    let days = stats[key];
+
+
+    let sum = days.reduce(function(a,b) { return a+b; }, 0);
+
+
+    return {
+
+
+      name: key,
+
+
+      avg: Math.round(sum / days.length * 10) / 10,
+
+
+      min: Math.min.apply(null, days),
+
+
+      max: Math.max.apply(null, days),
+
+
+      count: days.length,
+
+
+    };
+
+
+  }).sort(function(a, b) { return b.avg - a.avg; });
+
+
+}
+
+
+
+
+
+/**
+
+
+ * 根据全局时间段返回该周期内的子时段划分。
+
+
+ * @param {string} periodName - 全局筛选的时段名
+
+
+ * @returns {Array<{label: string, start: string, end: string}>}
+
+
+ */
+
+
+function getSubPeriods(periodName) {
+
+
+  let today;
+
+
+  if (SERVER_NOW) {
+
+
+    today = new Date(SERVER_NOW);
+
+
+  } else {
+
+
+    today = new Date();
+
+
+  }
+
+
+  let y = today.getFullYear();
+
+
+  let m = today.getMonth();
+
+
+
+
+
+  // 从实际 date input 获取起止范围
+
+
+  var inputStart = document.getElementById('date-start').value;
+
+
+  var inputEnd = document.getElementById('date-end').value;
+
+
+
+
+
+  switch (periodName) {
+
+
+    case '全部': {
+
+
+      // 从数据中提取最早的年份到当前年份，按年划分
+
+
+      let earliestYear = y;
+
+
+      ROWS_DETAIL.forEach(function(row) {
+        var regDate = (row.regionTechApprovalTime || '');
+
+
+        if (regDate && regDate.length >= 4) {
+
+
+          let yr = parseInt(regDate.slice(0, 4), 10);
+
+
+          if (!isNaN(yr) && yr < earliestYear) earliestYear = yr;
+
+
+        }
+
+
+      });
+
+
+      let sub = [];
+
+
+      for (let yr = earliestYear; yr <= y; yr++) {
+
+
+        sub.push({
+
+
+          label: yr + '年',
+
+
+          start: yr + '-01-01',
+
+
+          end: (yr === y) ? fmtLocalDate(today) : yr + '-12-31',
+
+
+        });
+
+
+      }
+
+
+      return sub;
+
+
+    }
+
+
+    case '本季度': {
+
+
+      let qs = Math.floor(m / 3) * 3;
+
+
+      let sub = [];
+
+
+      for (let i = 0; i < 3; i++) {
+
+
+        let month = qs + i;
+
+
+        let monthStart = y + '-' + ('0' + (month + 1)).slice(-2) + '-01';
+
+
+        let monthEnd;
+
+
+        if (month === m) {
+
+
+          monthEnd = fmtLocalDate(today);
+
+
+        } else {
+
+
+          let lastDay = new Date(y, month + 1, 0).getDate();
+
+
+          monthEnd = y + '-' + ('0' + (month + 1)).slice(-2) + '-' + ('0' + lastDay).slice(-2);
+
+
+        }
+
+
+        sub.push({
+
+
+          label: (month + 1) + '月',
+
+
+          start: monthStart,
+
+
+          end: monthEnd,
+
+
+        });
+
+
+      }
+
+
+      return sub.filter(function(s) {
+
+
+        // 只保留在全局范围内的
+
+
+        return s.start <= s.end;
+
+
+      });
+
+
+    }
+
+
+    case '本月':
+
+
+    case '上月': {
+
+
+      // 按周划分，基于实际输入日期范围
+
+
+      if (!inputStart || !inputEnd) return [{ label: periodName, start: '', end: '' }];
+
+
+      var startDate = new Date(inputStart);
+
+
+      var endDate = new Date(inputEnd);
+
+
+      var sub = [];
+
+
+      var cursor = new Date(startDate);
+
+
+      var weekIndex = 1;
+
+
+      while (cursor <= endDate) {
+
+
+        var weekStart = fmtLocalDate(cursor);
+
+
+        var weekEndCursor = new Date(cursor);
+
+
+        weekEndCursor.setDate(weekEndCursor.getDate() + 6);
+
+
+        var weekEnd = weekEndCursor > endDate ? inputEnd : fmtLocalDate(weekEndCursor);
+
+
+        sub.push({
+
+
+          label: '第' + weekIndex + '周',
+
+
+          start: weekStart,
+
+
+          end: weekEnd,
+
+
+        });
+
+
+        cursor.setDate(cursor.getDate() + 7);
+
+
+        weekIndex++;
+
+
+      }
+
+
+      return sub;
+
+
+    }
+
+
+    case '本周': {
+
+
+      // 按天划分，基于实际输入日期范围
+
+
+      if (!inputStart || !inputEnd) return [{ label: periodName, start: '', end: '' }];
+
+
+      var startDate = new Date(inputStart);
+
+
+      var endDate = new Date(inputEnd);
+
+
+      var weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+
+      var sub = [];
+
+
+      var cursor = new Date(startDate);
+
+
+      while (cursor <= endDate) {
+
+
+        var dayStr = fmtLocalDate(cursor);
+
+
+        var dayLabel = weekDays[(cursor.getDay() + 6) % 7]; // 周一开始
+
+
+        sub.push({
+
+
+          label: dayLabel,
+
+
+          start: dayStr,
+
+
+          end: dayStr,
+
+
+        });
+
+
+        cursor.setDate(cursor.getDate() + 1);
+
+
+      }
+
+
+      return sub;
+
+
+    }
+
+
+    default:
+
+
+      return [{ label: periodName, start: '', end: '' }];
+
+
+  }
+
+
+}
+
+
+
+
+
+/** 计算动态子时段的汇总数据（单 pass 分组，避免多遍 filter）。 */
+
+
+function computePeriodSummaries(rows) {
+
+
+  let subPeriods = getSubPeriods(_detectGranularityFromRange());
+
+
+  // 初始化每个子时段的统计桶
+
+
+  var buckets = {};
+
+
+  subPeriods.forEach(function(sp) {
+
+
+    buckets[sp.label] = { total: 0, valid: 0, modulePower: 0, inverterPower: 0, batteryCapacity: 0, spSet: {} };
+
+
+  });
+
+
+
+
+
+  // 单次遍历，按日期归属放入对应桶
+
+
+  rows.forEach(function(row) {
+    var regDate = (row.regionTechApprovalTime || '').slice(0, 10);
+
+
+    if (!regDate) return;
+
+
+    for (var i = 0; i < subPeriods.length; i++) {
+
+
+      var sp = subPeriods[i];
+
+
+      if (regDate >= sp.start && regDate <= sp.end) {
+
+
+        var b = buckets[sp.label];
+
+
+        b.total++;
+
+
+        if (row.isValid === '是') b.valid++;
+
+
+        b.modulePower += row.modulePower || 0;
+
+
+        b.inverterPower += row.inverterPower || 0;
+
+
+        b.batteryCapacity += row.batteryCapacity || 0;
+
+
+        if (row.salesperson && row.salesperson !== '--' && row.salesperson !== '无') {
+
+
+          b.spSet[row.salesperson] = true;
+
+
+        }
+
+
+        break; // 一行只归属一个时段
+
+
+      }
+
+
+    }
+
+
+  });
+
+
+
+
+
+  // 将桶转为 computeAggregates 兼容格式
+
+
+  var allStats = {};
+
+
+  subPeriods.forEach(function(sp) {
+
+
+    var b = buckets[sp.label];
+
+
+    allStats[sp.label] = {
+
+
+      totalProjects: b.total,
+
+
+      validCount: b.valid,
+
+
+      invalidCount: b.total - b.valid,
+
+
+      salespersons: Object.keys(b.spSet).length,
+
+
+      modulePower: b.modulePower,
+
+
+      inverterPower: b.inverterPower,
+
+
+      batteryCapacity: b.batteryCapacity,
+
+
+      ratio: b.inverterPower > 0 ? Math.round(b.modulePower / b.inverterPower * 100) / 100 : 0,
+
+
+    };
+
+
+  });
+
+
+  return allStats;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   LAYER 3: 渲染层 — 接收派生数据，更新 DOM / Chart.js
+
+
+   =================================================================== */
+
+
+
+
+
+function updateOverviewKPIs(stats) {
+
+
+  var hasData = stats && stats.totalProjects > 0;
+
+
+  var emptyState = document.getElementById('overview-empty-state');
+
+
+  var kpiGrid = document.getElementById('overview-kpi-grid');
+
+
+  if (emptyState && kpiGrid) {
+
+
+    emptyState.style.display = hasData ? 'none' : 'flex';
+
+
+    kpiGrid.style.display = hasData ? 'grid' : 'none';
+
+
+  }
+
+
+  if (!hasData) return;
+
+
+
+
+
+  setText('kpi-total-projects', stats.totalProjects);
+
+
+  setText('kpi-total-salespersons', stats.salespersons);
+
+
+  setText('kpi-valid', stats.validCount);
+
+
+  setText('kpi-invalid', stats.invalidCount);
+
+
+  setText('kpi-module-power', fmtNum(stats.modulePower));
+
+
+  setText('kpi-inverter-power', fmtNum(stats.inverterPower));
+
+
+  setText('kpi-battery-capacity', fmtNum(stats.batteryCapacity));
+
+
+  // 容配比：逆变器功率为 0 时显示 N/A
+
+
+  if (stats.inverterPower === 0) {
+
+
+    setText('kpi-ratio', 'N/A');
+
+
+  } else {
+
+
+    setText('kpi-ratio', stats.ratio.toFixed(2));
+
+
+  }
+
+
+}
+
+
+
+
+
+function renderApproverKPI(stats) {
+
+
+  setText('approver-approved', stats.approved);
+
+
+  setText('approver-total', stats.total);
+
+
+  setText('approver-rate', stats.rate);
+
+
+}
+
+
+
+
+
+function renderApprovalDays(days) {
+
+
+  var hasData = days && days.sampleCount > 0 && days.avg > 0;
+
+
+  var emptyState = document.getElementById('approval-empty-state');
+
+
+  var kpiGrid = document.getElementById('approval-timeliness-kpi');
+
+
+  if (emptyState && kpiGrid) {
+
+
+    emptyState.style.display = hasData ? 'none' : 'flex';
+
+
+    kpiGrid.style.display = hasData ? 'grid' : 'none';
+
+
+  }
+
+
+  if (!hasData) return;
+
+
+
+
+
+  setText('days-avg', days.avg.toFixed(1));
+
+
+  setText('days-min', days.min);
+
+
+  setText('days-max', days.max);
+
+
+  setText('days-sample-count', days.sampleCount);
+
+
+
+
+
+  // 异常预警：最长天数超出平均值 3 倍时标记
+
+
+  var alertEl = document.getElementById('days-max-alert');
+
+
+  var cardEl = document.getElementById('days-max-card');
+
+
+  if (alertEl && cardEl) {
+
+
+    if (days.avg > 0 && days.max > days.avg * 3) {
+
+
+      alertEl.style.display = 'inline-block';
+
+
+      cardEl.classList.add('red');
+
+
+      alertEl.textContent = '⚠ 最长审批天数(' + days.max + '天) 超出均值 ' + (days.avg.toFixed(1)) + '天 的 ' + (days.max / days.avg).toFixed(1) + ' 倍';
+
+
+    } else {
+
+
+      alertEl.style.display = 'none';
+
+
+      cardEl.classList.remove('red');
+
+
+    }
+
+
+  }
+
+
+}
+
+
+
+
+
+function setText(id, val) {
+
+
+  let el = document.getElementById(id);
+
+
+  if (el) el.textContent = val;
+
+
+}
+
+
+
+
+
+/* ──────────── Tab 1 图表：概览 ──────────── */
+
+
+function initOverviewCharts() {
+
+
+  let filtered = getFilteredRows();
+
+
+  let stats = computeAggregates(filtered);
+
+
+  let ranking = computeProvinceRanking(filtered);
+
+
+
+
+
+  // 1. 有效性分布饼图
+
+
+  let valid = stats.validCount;
+
+
+  let invalid = stats.invalidCount;
+
+
+  if (hasData([valid, invalid])) {
+
+
+    // 检查是否单一数据占比 100%
+
+
+    let isSingleData = (valid === 0 || invalid === 0);
+
+
+
+
+
+    createChart('chart-order-donut', {
+
+
+      type: 'doughnut',
+
+
+      data: {
+
+
+        labels: ['有效询价', '无效询价'],
+
+
+        datasets: [{
+
+
+          data: [valid, invalid],
+
+
+          backgroundColor: [CHART_COLORS.green, CHART_COLORS.ltGray],
+
+
+          borderWidth: 2,
+
+
+          borderColor: '#fff',
+
+
+          // 单一数据时添加半透明占位
+
+
+          ...(isSingleData ? {
+
+
+            data: [valid || 0.01, invalid || 0.01],
+
+
+            backgroundColor: valid > 0 ? [CHART_COLORS.green, CHART_COLORS.ltGray] : [CHART_COLORS.ltGray, CHART_COLORS.orange]
+
+
+          } : {})
+
+
+        }],
+
+
+      },
+
+
+      options: makeDonutOpts(),
+
+
+    });
+
+
+  } else {
+
+
+    showNoData('chart-order-donut', '暂无有效性数据', '');
+
+
+  }
+
+
+
+
+
+  // 2. 功率容量对比柱状图
+
+
+  let mPower = stats.modulePower;
+
+
+  let iPower = stats.inverterPower;
+
+
+  let bPower = stats.batteryCapacity;
+
+
+  if (hasData([mPower, iPower, bPower])) {
+
+
+    createChart('chart-power-bar', {
+
+
+      type: 'bar',
+
+
+      data: {
+
+
+        labels: ['组件', '逆变器', '电池'],
+
+
+        datasets: [{
+
+
+          label: '容量 (kW/kWh)',
+
+
+          data: [mPower, iPower, bPower],
+
+
+          backgroundColor: function(ctx) {
+
+
+            var colors = ['#007AFF', '#FF9500', '#34C759'];
+
+
+            return colors[ctx.dataIndex % colors.length];
+
+
+          },
+
+
+          borderRadius: 8,
+
+
+          maxBarThickness: 60,
+
+
+        }],
+
+
+      },
+
+
+      options: {
+
+
+        responsive: true,
+
+
+        maintainAspectRatio: true,
+
+
+        aspectRatio: 1.0,
+
+
+        animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
+
+
+        plugins: {
+
+
+          legend: {
+
+
+            position: 'bottom',
+
+
+            labels: { padding: 16, usePointStyle: true, font: { size: 11 } },
+
+
+          },
+
+
+          tooltip: {
+            backgroundColor: chartTheme().tooltipBg,
+            titleColor: chartTheme().textPrimary,
+            bodyColor: chartTheme().textSecondary,
+            titleFont: { size: 12, weight: '700' },
+            bodyFont: { size: 12, weight: '400' },
+            padding: 12,
+            cornerRadius: 10,
+            displayColors: true,
+            usePointStyle: true,
+            boxPadding: 6,
+            callbacks: {
+              label: function(ctx) {
+                return ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y);
+              }
+            },
+
+
+          },
+
+
+        },
+
+
+        scales: {
+
+
+          x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary } },
+
+
+          y: {
+
+
+            beginAtZero: true,
+
+
+            grace: '10%',
+
+
+            grid: { color: 'rgba(0,0,0,0.04)', drawTicks: false },
+
+
+            ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary, padding: 8, callback: function(v) { return fmtNum(v); } },
+
+
+            border: { display: false },
+
+
+
+            border: { display: false },
+          },
+
+
+        },
+
+
+      },
+
+
+    });
+
+
+  } else {
+
+
+    showNoData('chart-power-bar', '暂无功率数据', '');
+
+
+  }
+
+
+
+
+
+  // 3. 省公司排名横向条形图
+
+
+  let provLabels = ranking.map(function(r) { return r.province; });
+
+
+  let provCounts = ranking.map(function(r) { return r.count; });
+
+
+  if (hasData(provCounts)) {
+
+
+    createChart('chart-province-bar', {
+
+
+      type: 'bar',
+
+
+      data: {
+
+
+        labels: provLabels,
+
+
+        datasets: [{
+
+
+          label: '询价次数',
+
+
+          data: provCounts,
+
+
+          backgroundColor: function(ctx) {
+            return CHART_COLORS.palette[ctx.dataIndex % CHART_COLORS.palette.length];
+          },
+
+
+          borderRadius: 8,
+
+
+          maxBarThickness: 60,
+
+
+        }],
+
+
+      },
+
+
+      options: {
+
+
+        responsive: true,
+
+
+        maintainAspectRatio: true,
+
+
+        aspectRatio: 1.2,
+
+
+        indexAxis: 'y',
+
+
+        animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
+
+
+        plugins: {
+
+
+          legend: { display: false },
+
+
+          tooltip: {
+
+
+            backgroundColor: 'rgba(255,255,255,0.95)',
+
+
+            titleColor: chartTheme().textPrimary,
+
+
+            bodyColor: '#6E6E73',
+
+
+            titleFont: { size: 12, weight: '700' },
+
+
+            bodyFont: { size: 12, weight: '400' },
+
+
+            padding: 12,
+
+
+            cornerRadius: 10,
+
+
+            displayColors: true,
+
+
+            boxPadding: 6,
+
+
+            usePointStyle: true,
+
+
+            callbacks: {
+
+
+              title: function(ctx) {
+                return ctx[0].label;
+              },
+
+
+              label: function(ctx) {
+
+
+                return '询价次数: ' + fmtNum(ctx.parsed.x);
+
+
+              },
+
+
+              afterLabel: function(ctx) {
+
+
+                let i = ctx.dataIndex;
+
+
+                let modVal = ranking[i] ? ranking[i].module : null;
+
+
+                return modVal != null ? '组件功率: ' + fmtNum(modVal) + ' kW' : '';
+
+
+              }
+
+
+            }
+
+
+          },
+
+
+        },
+
+
+        scales: {
+
+
+          x: {
+
+
+            beginAtZero: true,
+
+
+            grace: '10%',
+
+
+            grid: { display: false },
+
+
+            ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary, padding: 8, callback: function(v) { return fmtNum(v); } },
+
+
+          },
+
+
+          y: {
+
+
+            grid: { display: false },
+
+
+            ticks: { font: { size: 12 }, color: chartTheme().textPrimary, padding: 8 },
+
+
+            border: { display: false },
+
+
+          },
+
+
+        },
+
+
+      },
+
+
+    });
+
+
+  } else {
+
+
+    showNoData('chart-province-bar', '暂无省公司排名数据', '');
+
+
+  }
+
+
+}
+
+
+
+
+
+/* ──────────── Tab 2 图表：审批 ──────────── */
+
+
+function initApprovalCharts() {
+
+
+  let filtered = getFilteredRows();
+
+
+  var roleId = document.getElementById('approval-role-select').value;
+
+
+  let approverName = getSelectedApprover();
+
+
+  let approverStats = computeApproverStats(filtered, roleId, approverName);
+
+
+  let compareData = computeApprovalByDimension(filtered, 'province');
+
+
+
+
+
+  // KPI 卡片
+
+
+  renderApproverKPI(approverStats);
+
+
+  // 审批天数
+
+
+  renderApprovalDays(computeApprovalDays(filtered));
+
+
+
+
+
+  // 1. 审批通过率饼图
+
+
+  let approved = approverStats.approved;
+
+
+  let total = approverStats.total;
+
+
+  let notApproved = Math.max(0, total - approved);
+
+
+  if (hasData([approved, notApproved])) {
+
+
+    createChart('chart-approval-donut', {
+
+
+      type: 'doughnut',
+
+
+      data: {
+
+
+        labels: ['审批通过', '未通过'],
+
+
+        datasets: [{
+
+
+          data: [approved, notApproved],
+
+
+          backgroundColor: [CHART_COLORS.green, CHART_COLORS.red],
+
+
+          borderWidth: 2,
+
+
+          borderColor: '#fff',
+
+
+        }],
+
+
+      },
+
+
+      options: makeDonutOpts(),
+
+
+    });
+
+
+  } else {
+
+
+    showNoData('chart-approval-donut', '暂无审批数据', '');
+
+
+  }
+
+
+
+
+
+  // 2. 审批耗时对比水平条形图
+
+
+  if (!compareData || compareData.length === 0) {
+
+
+    showNoData('chart-approval-compare', '暂无审批耗时对比数据', '');
+
+
+    return;
+
+
+  }
+
+
+  createChart('chart-approval-compare', {
+
+
+    type: 'bar',
+
+
+    data: {
+
+
+      labels: compareData.map(function(d) { return d.name; }),
+
+
+      datasets: [{
+
+
+        label: '平均审批耗时 (天)',
+
+
+        data: compareData.map(function(d) { return d.avg; }),
+
+
+        backgroundColor: function(ctx) {
+          return CHART_COLORS.palette[ctx.dataIndex % CHART_COLORS.palette.length];
+        },
+
+
+        borderRadius: 8,
+
+
+        maxBarThickness: 30,
+
+
+      }],
+
+
+    },
+
+
+    options: {
+
+
+      responsive: true,
+
+
+      maintainAspectRatio: true,
+
+
+      aspectRatio: Math.max(1.2, compareData.length * 0.25),
+
+
+      indexAxis: 'y',
+
+
+      animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
+
+
+      plugins: {
+
+
+        legend: { display: false },
+
+
+        tooltip: {
+          backgroundColor: 'rgba(255,255,255,0.95)',
+          titleColor: '#1D1D1F',
+          bodyColor: '#6E6E73',
+          titleFont: { size: 12, weight: '700' },
+          bodyFont: { size: 12, weight: '400' },
+          padding: 12,
+          cornerRadius: 10,
+          displayColors: true,
+          usePointStyle: true,
+          boxPadding: 6,
+          callbacks: {
+            title: function(ctx) {
+              let d = compareData[ctx[0].dataIndex];
+              return d ? d.name : '';
+            },
+            label: function(ctx) {
+              let d = compareData[ctx.dataIndex];
+              return '平均: ' + d.avg + '天 | 最短: ' + d.min + '天 | 最长: ' + d.max + '天 | 样本: ' + d.count + '条';
+            },
+          },
+
+
+        },
+
+
+      },
+
+
+      scales: {
+
+
+        x: {
+
+
+          beginAtZero: true,
+
+
+          grace: '10%',
+
+
+          grid: { color: 'rgba(0,0,0,0.04)', drawTicks: false },
+
+
+          ticks: {
+
+
+            font: { size: 11, weight: '500' },
+
+            color: '#6E6E73',
+
+            padding: 8,
+
+
+            callback: function(v) { return fmtNum(v) + '天'; },
+
+
+  
+        border: { display: false },
+        },
+
+
+        },
+
+
+        y: {
+
+
+          grid: { display: false },
+
+
+          ticks: {
+
+
+            font: { size: 12 },
+
+
+            padding: 8, /* 增加间距防止标签溢出 */
+
+
+            callback: function(value, index) {
+
+
+              let label = compareData[index] ? compareData[index].name : '';
+
+
+              /* 超过 10 字符截断 */
+
+
+              return label.length > 10 ? label.slice(0, 10) + '...' : label;
+
+
+            }
+
+
+          },
+
+
+        },
+
+
+      },
+
+
+    },
+
+
+  });
+
+
+}
+
+
+
+
+
+/* ──────────── Tab 3 图表：明细 ──────────── */
+
+
+function initDetailCharts() {
+
+
+  let filtered = getFilteredRows();
+
+
+  let summaries = computePeriodSummaries(filtered);
+
+
+  let periodNames = Object.keys(summaries);
+
+
+
+
+
+  // 周期功率趋势柱状图
+
+
+  let moduleData = periodNames.map(function(n) { return summaries[n].modulePower; });
+
+
+  let inverterData = periodNames.map(function(n) { return summaries[n].inverterPower; });
+
+
+  let batteryData = periodNames.map(function(n) { return summaries[n].batteryCapacity; });
+
+
+
+
+
+  if (hasData(moduleData) || hasData(inverterData) || hasData(batteryData)) {
+
+
+    createChart('chart-query-bar', {
+
+
+      type: 'bar',
+
+
+      data: {
+
+
+        labels: periodNames,
+
+
+        datasets: [{
+
+
+          label: '组件 (kW)',
+
+
+          data: moduleData,
+
+
+          backgroundColor: CHART_COLORS.blue,
+
+
+          borderRadius: 8,
+
+
+        }, {
+
+
+          label: '逆变器 (kW)',
+
+
+          data: inverterData,
+
+
+          backgroundColor: CHART_COLORS.orange,
+
+
+          borderRadius: 8,
+
+
+        }, {
+
+
+          label: '电池 (kWh)',
+
+
+          data: batteryData,
+
+
+          backgroundColor: CHART_COLORS.green,
+
+
+          borderRadius: 8,
+
+
+        }],
+
+
+      },
+
+
+      options: {
+
+
+        responsive: true,
+
+
+        maintainAspectRatio: true,
+
+
+        aspectRatio: periodNames.length > 8 ? 2.2 : 1.8,
+
+
+        animation: { duration: 150, easing: 'easeOutQuart', onComplete: function() { var sk = this.canvas._skeleton; if (sk) { sk.remove(); this.canvas._skeleton = null; } } },
+
+
+        plugins: {
+
+
+          legend: {
+
+
+            position: 'bottom',
+
+
+            labels: { padding: 12, usePointStyle: true, font: { size: 11 } },
+
+
+          },
+
+
+          tooltip: {
+
+
+            backgroundColor: chartTheme().tooltipBg,
+
+
+            titleColor: chartTheme().textPrimary,
+
+
+            bodyColor: chartTheme().textSecondary,
+
+
+            titleFont: { size: 12, weight: '700' },
+
+
+            bodyFont: { size: 12, weight: '400' },
+
+
+            padding: 12,
+
+
+            cornerRadius: 10,
+
+
+            displayColors: true,
+
+
+            usePointStyle: true,
+
+
+            boxPadding: 6,
+
+
+            callbacks: {
+
+
+              label: function(ctx) {
+
+
+                return ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y);
+
+
+              }
+
+
+            }
+
+
+          },
+
+
+        },
+
+
+        scales: {
+
+
+          x: {
+
+
+            grid: { display: false },
+
+
+            border: { display: false },
+
+
+            ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary, padding: 8, maxRotation: periodNames.length > 6 ? 30 : 0 },
+
+
+            // 紧凑分组：同一时段三种柱子紧靠，不同时段之间留空
+
+
+            barPercentage: 0.8,
+
+
+            categoryPercentage: 0.25,
+
+
+          },
+
+
+          y: {
+
+
+            beginAtZero: true,
+
+
+            grace: '10%',
+
+
+            grid: { color: 'rgba(0,0,0,0.04)', drawTicks: false },
+
+
+            ticks: { font: { size: 11, weight: '500' }, color: chartTheme().textSecondary, padding: 8, callback: function(v) { return fmtNum(v); } },
+
+
+          },
+
+
+        },
+
+
+      },
+
+
+    });
+
+
+    // 动态更新 caption：展示当前粒度的子时段数量
+
+
+    var captionQuery = document.querySelector('#chart-query-bar');
+
+
+    if (captionQuery) {
+
+
+      var capEl = captionQuery.closest('.chart-card').querySelector('.chart-caption');
+
+
+      if (capEl) {
+
+
+        capEl.textContent = '按 ' + _detectGranularityFromRange() + ' 细化 · 共 ' + periodNames.length + ' 个时段 · 蓝色=组件 · 橙色=逆变器 · 绿色=电池';
+
+
+      }
+
+
+    }
+
+
+  } else {
+
+
+    showNoData('chart-query-bar', '暂无周期功率数据', '');
+
+
+  }
+
+
+
+
+
+  // 明细表格
+
+
+  renderDetailTable(filtered);
+
+
+}
+
+
+
+
+
+/* ──────────── 明细表格 ──────────── */
+
+
+function createTableCell(tag, content, className) {
+
+
+  let cell = document.createElement(tag);
+
+
+  if (className) cell.className = className;
+
+
+  cell.textContent = content;
+
+
+  return cell;
+
+
+}
+
+
+
+
+
+function renderDetailTable(rows) {
+
+
+  let tbody = document.getElementById('detail-table-body');
+
+
+  if (!tbody) return;
+
+
+  tbody.innerHTML = '';
+
+
+
+
+
+  let label = document.getElementById('detail-period-label');
+
+
+  if (label) {
+
+
+    var startVal = document.getElementById('date-start').value;
+
+
+    var endVal = document.getElementById('date-end').value;
+
+
+    if (startVal && endVal) {
+
+
+      label.textContent = startVal + ' ~ ' + endVal;
+
+
+    } else {
+
+
+      label.textContent = '全部';
+
+
+    }
+
+
+  }
+
+
+
+
+
+  // 更新筛选状态标签
+
+
+  var badgeEl = document.getElementById('detail-filter-badge');
+
+
+  if (badgeEl) {
+
+
+    var currentFilter = label ? label.textContent : '全部';
+
+
+    var hintEl = badgeEl.querySelector('.badge-hint');
+
+
+    if (currentFilter === '全部') {
+
+
+      badgeEl.innerHTML = '<span class="badge-icon"><svg width="13" height="13"><use href="#icon-calendar"/></svg></span><span>当前筛选：<strong>全部数据</strong></span>';
+
+
+      if (hintEl) hintEl.textContent = '';
+
+
+    } else {
+
+
+      badgeEl.innerHTML = '<span class="badge-icon"><svg width="13" height="13"><use href="#icon-calendar"/></svg></span><span>当前筛选：<strong>' + currentFilter + '</strong></span><span class="badge-hint">通过顶部全局筛选切换时间段</span>';
+
+
+    }
+
+
+  }
+
+
+
+
+
+  if (rows.length === 0) {
+
+
+    let tr = document.createElement('tr');
+
+
+    let td = document.createElement('td');
+
+
+    td.colSpan = 9;
+
+
+    td.style.cssText = 'text-align:center;padding:40px;color:#95A5A6;';
+
+
+    td.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4;vertical-align:middle;margin-right:6px;"><polyline points="22,12 16,12 14,15 10,15 8,12 2,12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> <span style="font-size:14px;">当前时段暂无项目</span><br><span style="font-size:12px;">试着切换到「本月」或「全部」，看看更广阔的时间范围</span>';
+
+
+    tr.appendChild(td);
+
+
+    tbody.appendChild(tr);
+
+
+
+
+
+    // 移除分页控件
+
+
+    removePaginationControls();
+
+
+    return;
+
+
+  }
+
+
+
+
+
+  // 更新分页状态
+
+
+  detailPageState.totalRows = rows.length;
+
+
+  let totalPages = Math.ceil(rows.length / detailPageState.pageSize);
+
+
+  if (detailPageState.currentPage > totalPages) {
+
+
+    detailPageState.currentPage = totalPages;
+
+
+  }
+
+
+
+
+
+  // 计算当前页数据
+
+
+  let startIdx = (detailPageState.currentPage - 1) * detailPageState.pageSize;
+
+
+  let endIdx = Math.min(startIdx + detailPageState.pageSize, rows.length);
+
+
+  let pageRows = rows.slice(startIdx, endIdx);
+
+
+
+
+
+    // 渲染当前页（流程编号 -> sticky 列）
+
+
+  pageRows.forEach(function(item) {
+
+
+    let tr = document.createElement('tr');
+
+
+    tr.appendChild(createTableCell('td', item.flowId, 'sticky-col'));
+
+
+    tr.appendChild(createTableCell('td', item.projectName));
+
+
+    tr.appendChild(createTableCell('td', item.province));
+
+
+    tr.appendChild(createTableCell('td', item.salesperson));
+
+
+    tr.appendChild(createTableCell('td', item.modulePower > 0 ? item.modulePower.toFixed(2) : '--', 'number-format'));
+
+
+    tr.appendChild(createTableCell('td', item.inverterPower > 0 ? item.inverterPower.toFixed(2) : '--', 'number-format'));
+
+
+    // 电池容量：0 是合法值（无电池项目），也显示 "0.00" 而非 "--"
+
+
+    tr.appendChild(createTableCell('td', item.batteryCapacity != null ? item.batteryCapacity.toFixed(2) : '--', 'number-format'));
+
+
+    tr.appendChild(createTableCell('td', item.isValid));
+
+
+    tr.appendChild(createTableCell('td', item.flowStatus));
+
+
+    tbody.appendChild(tr);
+
+
+  });
+
+
+
+
+
+  // 渲染分页控件
+
+
+  renderPaginationControls(totalPages, startIdx + 1, endIdx, rows.length);
+
+
+}
+
+
+
+
+
+function renderPaginationControls(totalPages, startRow, endRow, totalRows) {
+
+
+  // 移除旧的分页控件
+
+
+  removePaginationControls();
+
+
+
+
+
+  let tableContainer = document.querySelector('#tab-detail .table-container');
+
+
+  if (!tableContainer) return;
+
+
+
+
+
+  let paginationDiv = document.createElement('div');
+
+
+  paginationDiv.className = 'pagination-controls';
+
+
+  paginationDiv.id = 'detail-pagination';
+
+
+
+
+
+  // 页码大小选项
+
+
+  let pageSizes = [10, 20, 50, 100, 200];
+
+
+  let pageSizeOptions = pageSizes.map(function(size) {
+
+
+    return '<option value="' + size + '"' + (size === detailPageState.pageSize ? ' selected' : '') + '>' + size + ' 条/页</option>';
+
+
+  }).join('');
+
+
+
+
+
+  paginationDiv.innerHTML =
+
+
+    '<span class="page-size-selector">' +
+
+
+      '每页显示 <select id="page-size-select">' + pageSizeOptions + '</select>' +
+
+
+    '</span>' +
+
+
+    '<button id="prev-page-btn" ' + (detailPageState.currentPage <= 1 ? 'disabled' : '') + '>上一页</button>' +
+
+
+    '<span class="pagination-info">显示 ' + startRow + '-' + endRow + ' / 共 ' + totalRows + ' 条（第 ' + detailPageState.currentPage + '/' + totalPages + ' 页）</span>' +
+
+
+    '<button id="next-page-btn" ' + (detailPageState.currentPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
+
+
+
+
+
+  tableContainer.appendChild(paginationDiv);
+
+
+
+
+
+  // 绑定页码大小变更事件
+
+
+  document.getElementById('page-size-select').addEventListener('change', function() {
+
+
+    detailPageState.pageSize = parseInt(this.value, 10);
+
+
+    detailPageState.currentPage = 1;  // 重置到第一页
+
+
+    renderDetailTable(getFilteredRows());
+
+
+  });
+
+
+
+
+
+  // 绑定上一页/下一页事件
+
+
+  document.getElementById('prev-page-btn').addEventListener('click', function() {
+
+
+    if (detailPageState.currentPage > 1) {
+
+
+      detailPageState.currentPage--;
+
+
+      renderDetailTable(getFilteredRows());
+
+
+    }
+
+
+  });
+
+
+  document.getElementById('next-page-btn').addEventListener('click', function() {
+
+
+    if (detailPageState.currentPage < totalPages) {
+
+
+      detailPageState.currentPage++;
+
+
+      renderDetailTable(getFilteredRows());
+
+
+    }
+
+
+  });
+
+
+}
+
+
+
+
+
+function removePaginationControls() {
+
+
+  let existing = document.getElementById('detail-pagination');
+
+
+  if (existing) existing.remove();
+
+
+}
+
+
+
+
+
+/* ──────────── 省公司排名表格 ──────────── */
+
+
+var MEDALS = ['', '', ''];
+
+
+
+
+
+function renderProvinceTable() {
+
+
+  let tbody = document.getElementById('province-table-body');
+
+
+  if (!tbody) return;
+
+
+  tbody.innerHTML = '';
+
+
+  let filtered = getFilteredRows();
+
+
+  let ranking = computeProvinceRanking(filtered);
+
+
+  ranking.forEach(function(item, i) {
+
+
+    let tr = document.createElement('tr');
+
+
+    let medal = MEDALS[i] || '';
+
+
+    // 合并奖牌和排名数字为一个单元格
+
+
+    tr.innerHTML = '<td style="text-align:center;width:80px;">' + medal + item.rank + '</td>' +
+
+
+      '<td>' + escHtml(item.province) + '</td>' +
+
+
+      '<td class="number-format">' + item.count + '</td>' +
+
+
+      '<td class="number-right">' + item.module.toFixed(2) + '</td>';
+
+
+    tbody.appendChild(tr);
+
+
+  });
+
+
+}
+
+
+
+
+
+/* ──────────── 审批人下拉列表 ──────────── */
+
+
+function populateApproverList() {
+
+
+  let select = document.getElementById('approver-select');
+
+
+  if (!select) return;
+
+
+
+
+
+  // 保存当前选中值
+
+
+  let currentVal = select.value;
+
+
+
+
+
+  var roleId = document.getElementById('approval-role-select').value;
+
+
+  let filtered = getFilteredRows();
+
+
+  let approvers = extractApproverList(filtered, roleId);
+
+
+
+
+
+  // 保留第一个「全部审批人」选项，清空后续
+
+
+  while (select.options.length > 1) {
+
+
+    select.remove(1);
+
+
+  }
+
+
+
+
+
+  approvers.forEach(function(name) {
+
+
+    let opt = document.createElement('option');
+
+
+    opt.value = name;
+
+
+    opt.textContent = name;
+
+
+    select.appendChild(opt);
+
+
+  });
+
+
+
+
+
+  // 恢复选中值（如果名字还在列表中），否则回退「全部」
+
+
+  let stillExists = approvers.indexOf(currentVal) >= 0;
+
+
+  if (!stillExists) {
+
+
+    select.value = '全部';
+
+
+  }
+
+
+  // 触发 KPI 更新以匹配当前选中
+
+
+  onApproverChange(select.value);
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   EVENT HANDLERS
+
+
+   =================================================================== */
+
+
+
+
+
+function getSelectedApprover() {
+
+
+  let select = document.getElementById('approver-select');
+
+
+  return select ? select.value : '全部';
+
+
+}
+
+
+
+
+
+function getActiveTab() {
+
+
+  let activeTab = document.querySelector('.tab-content.active');
+
+
+  return activeTab ? activeTab.id.replace('tab-', '') : 'overview';
+
+
+}
+
+
+
+
+
+var tabInitialized = { overview: false, approval: false, detail: false };
+
+
+
+
+
+function initTabCharts(tabName) {
+
+
+  if (!checkChartJsLoaded()) return;
+
+
+
+
+
+  if (tabInitialized[tabName]) {
+
+
+    // 重新调整该 tab 下所有图表的尺寸（canvas 从 display:none 恢复后尺寸可能异常）
+
+
+    Object.keys(chartInstances).forEach(function(id) {
+
+
+      if (chartInstances[id]) chartInstances[id].resize();
+
+
+    });
+
+
+    return;
+
+
+  }
+
+
+
+
+
+  switch (tabName) {
+
+
+    case 'overview': initOverviewCharts(); break;
+
+
+    case 'approval': initApprovalCharts(); break;
+
+
+    case 'detail':   initDetailCharts();   break;
+
+
+  }
+
+
+  tabInitialized[tabName] = true;
+
+
+}
+
+
+
+
+
+function destroyAllCharts() {
+
+
+  Object.keys(chartInstances).forEach(function(id) {
+
+
+    if (chartInstances[id]) {
+
+
+      chartInstances[id].destroy();
+
+
+      delete chartInstances[id];
+
+
+    }
+
+
+  });
+
+
+  document.querySelectorAll('.no-data-msg').forEach(function(el) { el.remove(); });
+
+
+  document.querySelectorAll('canvas').forEach(function(c) { c.style.display = ''; });
+
+
+}
+
+
+
+
+
+/* 日期范围或快捷按钮变化 */
+
+
+function onDateRangeChange() {
+
+
+  // 重置分页状态
+
+
+  detailPageState.currentPage = 1;
+
+
+
+
+
+  // 清除过滤缓存
+
+
+  _invalidateFilterCache();
+
+
+
+
+
+  // 销毁所有图表
+
+
+  destroyAllCharts();
+
+
+  tabInitialized.overview = false;
+
+
+  tabInitialized.approval = false;
+
+
+  tabInitialized.detail = false;
+
+
+
+
+
+  // 更新静态元素
+
+
+  var currentFiltered = getFilteredRows();
+
+
+  updateOverviewKPIs(computeAggregates(currentFiltered));
+
+
+  renderProvinceTable();
+
+
+  populateApproverList();
+
+
+
+
+
+  // 重建所有图表（所有 tab content 始终可见）
+
+
+  tabInitialized.overview = false;
+
+
+  tabInitialized.approval = false;
+
+
+  tabInitialized.detail = false;
+
+
+  initTabCharts('overview');
+
+
+  initTabCharts('approval');
+
+
+  initTabCharts('detail');
+
+
+  renderDetailTable(currentFiltered);
+
+
+
+
+
+
+  // 呼吸动画恢复
+
+
+  setTimeout(function() {
+
+
+    document.querySelectorAll('.data-updating').forEach(function(el) { el.classList.remove('data-updating'); });
+
+
+  }, 180);
+
+
+}
+
+
+
+
+
+/* 审批人切换 */
+
+
+function onApproverChange(selectedValue) {
+
+
+  // select 已保有值，无需额外赋值
+
+
+
+
+
+  // 销毁审批相关的图表
+
+
+  ['chart-approval-donut', 'chart-approval-compare'].forEach(function(id) {
+
+
+    if (chartInstances[id]) {
+
+
+      chartInstances[id].destroy();
+
+
+      delete chartInstances[id];
+
+
+    }
+
+
+  });
+
+
+  document.querySelectorAll('#tab-approval .no-data-msg').forEach(function(el) { el.remove(); });
+
+
+  document.querySelectorAll('#tab-approval canvas').forEach(function(c) { c.style.display = ''; });
+
+
+
+
+
+  tabInitialized.approval = false;
+
+
+  initTabCharts('approval');
+
+
+}
+
+
+
+
+
+/* Tab 切换 — 点击标签平滑滚动到对应内容区 */
+
+
+function switchTab(name) {
+
+
+  var targetSection = document.getElementById('tab-' + name);
+
+
+  if (!targetSection) return;
+
+
+
+
+
+  // 更新按钮激活态
+
+
+  document.querySelectorAll('.segmented-btn').forEach(function(el) {
+
+
+    el.classList.remove('active');
+
+
+    el.setAttribute('aria-selected', 'false');
+
+
+  });
+
+
+  var activeBtn = document.querySelector('[data-tab="' + name + '"]');
+
+
+  if (activeBtn) {
+
+
+    activeBtn.classList.add('active');
+
+
+    activeBtn.setAttribute('aria-selected', 'true');
+
+
+  }
+
+
+
+
+
+  // 目标区域标记激活（仅用于 CSS 样式钩子）
+
+
+  document.querySelectorAll('.tab-content').forEach(function(el) {
+
+
+    el.classList.remove('active');
+
+
+  });
+
+
+  targetSection.classList.add('active');
+
+
+
+
+
+  // 平滑滚动（考虑 sticky tab-nav 高度）
+
+
+  var glassNav = document.getElementById('glass-nav');
+
+
+  var offset = glassNav ? glassNav.offsetHeight + 8 : 0;
+
+
+  var targetTop = targetSection.getBoundingClientRect().top + window.pageYOffset - offset;
+
+
+  window.scrollTo({ top: targetTop, behavior: 'smooth' });
+
+
+
+
+
+  // 确保图表已初始化
+
+
+  setTimeout(function() {
+
+
+    if (name === 'approval') {
+
+
+      populateApproverList();
+
+
+    }
+
+
+    initTabCharts(name);
+
+
+    if (name === 'detail') {
+
+
+      renderDetailTable(getFilteredRows());
+
+
+    }
+
+
+  }, 50);
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   EXPORT / DOWNLOAD / REFRESH
+
+
+   =================================================================== */
+
+
+
+
+
+/** 导出当前筛选数据为 Excel */
+
+
+function exportToExcel() {
+
+
+  if (typeof XLSX === 'undefined') {
+
+
+    alert('Excel 导出库加载失败，请检查网络连接后刷新页面');
+
+
+    return;
+
+
+  }
+
+
+  var filtered = getFilteredRows();
+
+
+  var ws = XLSX.utils.json_to_sheet(filtered.map(function(row) {
+
+
+    return {
+
+
+      '流程编号': row.flowId,
+
+
+      '项目名称': row.projectName,
+
+
+      '省公司': row.province,
+
+
+      '业务员': row.salesperson,
+
+
+      '组件功率(kW)': row.modulePower,
+
+
+      '逆变器功率(kW)': row.inverterPower,
+
+
+      '电池容量(kWh)': row.batteryCapacity,
+
+
+      '是否有效': row.isValid,
+
+
+      '提交日期': row.submitDate,
+
+
+      '流程状态': row.flowStatus,
+
+
+    };
+
+
+  }));
+
+
+  var wb = XLSX.utils.book_new();
+
+
+  XLSX.utils.book_append_sheet(wb, ws, '询价明细');
+
+
+  XLSX.writeFile(wb, '询价周报_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+
+
+}
+
+
+
+
+
+/** 下载图表为 PNG 图片（带页面背景色，避免透明） */
+
+
+function downloadChart(chartId) {
+
+
+  var canvas = document.getElementById(chartId);
+
+
+  if (!canvas) return;
+
+
+
+
+
+  // 获取图表标题（从 chart-title 元素中提取，去掉下载按钮文字）
+
+
+  var chartCard = canvas.closest('.chart-card');
+
+
+  var chartTitle = '';
+
+
+  if (chartCard) {
+
+
+    var titleElem = chartCard.querySelector('.chart-title');
+
+
+    if (titleElem) {
+
+
+      // 克隆元素并去掉下载按钮，只保留标题文字
+
+
+      var titleClone = titleElem.cloneNode(true);
+
+
+      var downloadBtn = titleClone.querySelector('.chart-download-btn');
+
+
+      if (downloadBtn) downloadBtn.remove();
+
+
+      chartTitle = titleClone.textContent.trim();
+
+
+    }
+
+
+  }
+
+
+  // 如果找不到标题，使用 chartId 作为备选
+
+
+  if (!chartTitle) chartTitle = chartId;
+
+
+
+
+
+  // 标题区域高度
+
+
+  var titleHeight = 40;
+
+
+  var padding = 20;
+
+
+
+
+
+  // 创建临时 canvas（增加标题区域高度）
+
+
+  var exportCanvas = document.createElement('canvas');
+
+
+  exportCanvas.width = canvas.width;
+
+
+  exportCanvas.height = canvas.height + titleHeight;
+
+
+  var exportCtx = exportCanvas.getContext('2d');
+
+
+
+
+
+  // 1. 先填充页面背景色（--bg-page: #F1F5F9）
+
+
+  exportCtx.fillStyle = '#F1F5F9';
+
+
+  exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+
+
+
+
+  // 2. 绘制标题背景（白色）
+
+
+  exportCtx.fillStyle = '#FFFFFF';
+
+
+  exportCtx.fillRect(0, 0, exportCanvas.width, titleHeight);
+
+
+
+
+
+  // 3. 绘制标题文字（与 HTML 中的样式一致）
+
+
+  exportCtx.fillStyle = '#0F172A';  // --text-primary
+
+
+  exportCtx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+
+  exportCtx.textAlign = 'left';
+
+
+  exportCtx.textBaseline = 'middle';
+
+
+  exportCtx.fillText(chartTitle, padding, titleHeight / 2);
+
+
+
+
+
+  // 4. 绘制标题底部边框
+
+
+  exportCtx.strokeStyle = '#E2E8F0';  // --border-light
+
+
+  exportCtx.lineWidth = 1;
+
+
+  exportCtx.beginPath();
+
+
+  exportCtx.moveTo(0, titleHeight);
+
+
+  exportCtx.lineTo(exportCanvas.width, titleHeight);
+
+
+  exportCtx.stroke();
+
+
+
+
+
+  // 5. 绘制原图表内容（从标题下方开始）
+
+
+  exportCtx.drawImage(canvas, 0, titleHeight);
+
+
+
+
+
+  // 6. 导出带背景和标题的图片（使用图表标题作为文件名）
+
+
+  var link = document.createElement('a');
+
+
+  // 清理文件名中的特殊字符
+
+
+  var safeTitle = chartTitle.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
+
+
+  link.download = safeTitle + '_' + new Date().toISOString().slice(0, 10) + '.png';
+
+
+  link.href = exportCanvas.toDataURL('image/png', 1.0);
+
+
+  link.click();
+
+
+}
+
+
+
+
+
+/** 刷新数据（演示模式，实际项目替换为真实 API） */
+
+
+function refreshData() {
+
+
+  document.body.style.cursor = 'wait';
+
+
+  // 模拟 API 调用（实际项目中替换为 fetch）
+
+
+  setTimeout(function() {
+
+
+    // fetch('/api/weekly-report?period=' + currentGlobalPeriod)
+
+
+    //   .then(function(res) { return res.json(); })
+
+
+    //   .then(function(data) { ROWS_DETAIL = data; rebuildAll(); });
+
+
+    alert('数据已刷新（演示模式：请配置真实 API 接口）');
+
+
+    document.body.style.cursor = 'default';
+
+
+  }, 500);
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   EVENT LISTENERS — 替代内联 onclick/onchange
+
+
+   =================================================================== */
+
+
+function initEventListeners() {
+
+
+  document.getElementById('date-start').addEventListener('change', onDateRangeChange);
+
+
+  document.getElementById('date-end').addEventListener('change', onDateRangeChange);
+
+
+  document.querySelector('.quick-btns').addEventListener('click', function(e) {
+
+
+    if (e.target.classList.contains('quick-btn')) {
+
+
+      // 切换激活态
+
+
+      document.querySelectorAll('.quick-btn').forEach(function(b) { b.classList.remove('active'); });
+
+
+      e.target.classList.add('active');
+
+
+      var range;
+      if (e.target.dataset.quick === 'all') {
+        // "全部"回填本次注入的查询范围（与初始加载一致）
+        range = { start: window.__queryStart || '', end: window.__queryEnd || '' };
+      } else {
+        range = getQuickRange(e.target.dataset.quick);
+      }
+
+
+      document.getElementById('date-start').value = range.start;
+
+
+      document.getElementById('date-end').value = range.end;
+
+
+      onDateRangeChange();
+
+
+    }
+
+
+  });
+
+
+  document.querySelectorAll('.segmented-btn').forEach(function(btn) {
+
+
+    btn.addEventListener('click', function() {
+
+
+      switchTab(this.dataset.tab);
+
+
+    });
+
+
+  });
+
+
+
+
+
+  // 初始化审批角色下拉（必须在 populateApproverList 之前执行）
+
+
+  initRoleSelect();
+
+
+
+
+
+  /* 滚动高亮：IntersectionObserver 监视各 tab 内容区，自动高亮当前标签 */
+
+
+  var tabSections = document.querySelectorAll('.tab-content');
+
+
+  var tabObserver = new IntersectionObserver(function(entries) {
+
+
+    // 找出当前可见比例最高的 section
+
+
+    var maxRatio = 0;
+
+
+    var mostVisibleId = null;
+
+
+    entries.forEach(function(entry) {
+
+
+      if (entry.intersectionRatio > maxRatio) {
+
+
+        maxRatio = entry.intersectionRatio;
+
+
+        mostVisibleId = entry.target.id.replace('tab-', '');
+
+
+      }
+
+
+    });
+
+
+    if (mostVisibleId) {
+
+
+      document.querySelectorAll('.segmented-btn').forEach(function(btn) {
+
+
+        var isActive = btn.dataset.tab === mostVisibleId;
+
+
+        btn.classList.toggle('active', isActive);
+
+
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+
+      });
+
+
+    }
+
+
+  }, {
+
+
+    root: null,
+
+
+    rootMargin: '-20% 0px -40% 0px',
+
+
+    threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+
+
+  });
+
+
+  tabSections.forEach(function(section) { tabObserver.observe(section); });
+
+
+
+
+
+  /* 审批角色切换 — 联动审批人列表 */
+
+
+  var roleSelect = document.getElementById('approval-role-select');
+
+
+  if (roleSelect) {
+
+
+    roleSelect.addEventListener('change', function() {
+
+
+      currentApprovalRoleId = this.value;
+
+
+      // 切换角色时重置审批人回"全部"
+
+
+      document.getElementById('approver-select').value = '全部';
+
+
+      // 触发审批相关图表刷新
+
+
+      ['chart-approval-donut', 'chart-approval-compare'].forEach(function(id) {
+
+
+        if (chartInstances[id]) {
+
+
+          chartInstances[id].destroy();
+
+
+          delete chartInstances[id];
+
+
+        }
+
+
+      });
+
+
+      document.querySelectorAll('#tab-approval .no-data-msg').forEach(function(el) { el.remove(); });
+
+
+      document.querySelectorAll('#tab-approval canvas').forEach(function(c) { c.style.display = ''; });
+
+
+      tabInitialized.approval = false;
+
+
+      populateApproverList();
+
+
+      initTabCharts('approval');
+
+
+    });
+
+
+  }
+
+
+
+
+
+  /* 审批人下拉 — 选中即触发筛选 */
+
+
+  var approverSelect = document.getElementById('approver-select');
+
+
+  if (approverSelect) {
+
+
+    approverSelect.addEventListener('change', function() {
+
+
+      onApproverChange(this.value);
+
+
+    });
+
+
+  }
+
+
+
+
+
+  /* 图表下载按钮 */
+
+
+  document.querySelectorAll('.chart-download-btn').forEach(function(btn) {
+
+
+    btn.addEventListener('click', function() {
+
+
+      var chartId = this.dataset.chartId;
+
+
+      downloadChart(chartId);
+
+
+    });
+
+
+  });
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   TAB NAV SCROLL SHADOW — Glass nav shadow on scroll
+
+
+   =================================================================== */
+
+
+(function() {
+
+
+  let nav = document.getElementById('glass-nav');
+
+
+  if (!nav) return;
+
+
+  let ticking = false;
+
+
+  function updateShadow() {
+
+
+    if (window.scrollY > 0) {
+
+
+      nav.style.boxShadow = 'var(--shadow-scroll)';
+
+
+    } else {
+
+
+      nav.style.boxShadow = 'var(--shadow-sm)';
+
+
+    }
+
+
+  }
+
+
+  // Initial check
+
+
+  updateShadow();
+
+
+  window.addEventListener('scroll', function() {
+
+
+    if (!ticking) {
+
+
+      window.requestAnimationFrame(function() {
+
+
+        updateShadow();
+
+
+        ticking = false;
+
+
+      });
+
+
+      ticking = true;
+
+
+    }
+
+
+  }, { passive: true });
+
+
+})();
+
+
+
+
+
+/* ===================================================================
+
+
+   CHART.JS RETRY — CDN 加载失败时重试
+
+
+   =================================================================== */
+
+
+function waitForChartJs(retries, callback) {
+
+
+  if (typeof Chart !== 'undefined') {
+
+
+    if (!CHART_JS_LOADED) {
+
+
+      CHART_JS_LOADED = true;
+
+
+      initChartDefaults();
+
+
+    }
+
+
+    callback();
+
+
+    return;
+
+
+  }
+
+
+  if (retries <= 0) {
+
+
+    checkChartJsLoaded();
+
+
+    return;
+
+
+  }
+
+
+  setTimeout(function() { waitForChartJs(retries - 1, callback); }, 1000);
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   INITIALIZE
+
+
+   =================================================================== */
+
+
+document.addEventListener('DOMContentLoaded', function() {
+
+
+  initEventListeners();
+
+
+  checkChartJsLoaded();
+
+
+
+
+
+  // 默认"全部"激活，日期由后端注入的查询范围填充
+
+
+  var defaultQuickBtn = document.querySelector('.quick-btn[data-quick="all"]');
+
+
+  if (defaultQuickBtn) {
+
+
+    defaultQuickBtn.classList.add('active');
+
+
+  }
+
+
+  window.__queryStart = '{{QUERY_START_DATE}}';
+  window.__queryEnd = '{{QUERY_END_DATE}}';
+  var qStart = window.__queryStart;
+
+
+  var qEnd = window.__queryEnd;
+
+
+  document.getElementById('date-start').value = qStart;
+
+
+  document.getElementById('date-end').value = qEnd;
+
+
+
+
+
+  // 初始渲染（Chart.js 已加载则立即渲染，否则稍后重试）
+
+
+  updateOverviewKPIs(computeAggregates(getFilteredRows()));
+
+
+  renderProvinceTable();
+
+
+  if (typeof Chart !== 'undefined') {
+
+
+    // 所有 tab content 始终可见，一次性初始化所有图表
+
+
+    initOverviewCharts();
+
+
+    initApprovalCharts();
+
+
+    initDetailCharts();
+
+
+    tabInitialized.overview = true;
+
+
+    tabInitialized.approval = true;
+
+
+    tabInitialized.detail = true;
+
+
+    populateApproverList();
+
+
+    renderDetailTable(getFilteredRows());
+
+
+  } else {
+
+
+    waitForChartJs(2, function() {
+
+
+      initOverviewCharts();
+
+
+      initApprovalCharts();
+
+
+      initDetailCharts();
+
+
+      tabInitialized.overview = true;
+
+
+      tabInitialized.approval = true;
+
+
+      tabInitialized.detail = true;
+
+
+      populateApproverList();
+
+
+      renderDetailTable(getFilteredRows());
+
+
+    });
+
+
+  }
+
+
+});
+
+
+</script>
