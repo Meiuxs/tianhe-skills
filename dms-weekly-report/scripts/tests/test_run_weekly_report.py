@@ -495,7 +495,7 @@ class TestRunFlowIdsEmpty:
             with caplog.at_level(logging.INFO):
                 await run(args)
 
-            assert "本周无已办询价记录" in caplog.text
+            assert "宽范围内无已办询价记录" in caplog.text
             assert not extract_called, "flow_ids 为空时不应调用 extract_all_parallel"
 
     @pytest.mark.asyncio
@@ -558,6 +558,92 @@ class TestRunFlowIdsEmpty:
                 await run(args)
 
             assert extract_called, "flow_ids 非空时应调用 extract_all_parallel"
+
+
+class TestFilterRecordsByRegionTechTime:
+    """测试按区域技术审批时间过滤记录的逻辑。"""
+
+    def test_keeps_records_within_range(self):
+        from run_weekly_report import _filter_records_by_region_tech_time
+        records = [
+            FlowRecord(flow_id="111111111111111", region_tech_approval_time="2026-06-03 10:00:00"),
+            FlowRecord(flow_id="222222222222222", region_tech_approval_time="2026-06-05 10:00:00"),
+        ]
+        result = _filter_records_by_region_tech_time(records, "2026-06-01", "2026-06-07")
+        assert len(result) == 2
+
+    def test_drops_records_outside_range(self):
+        from run_weekly_report import _filter_records_by_region_tech_time
+        records = [
+            FlowRecord(flow_id="111111111111111", region_tech_approval_time="2026-05-20 10:00:00"),
+            FlowRecord(flow_id="222222222222222", region_tech_approval_time="2026-06-03 10:00:00"),
+        ]
+        result = _filter_records_by_region_tech_time(records, "2026-06-01", "2026-06-07")
+        assert len(result) == 1
+        assert result[0].flow_id == "222222222222222"
+
+    def test_drops_records_without_region_time(self):
+        from run_weekly_report import _filter_records_by_region_tech_time
+        records = [
+            FlowRecord(flow_id="111111111111111", region_tech_approval_time="--"),
+            FlowRecord(flow_id="222222222222222", region_tech_approval_time="2026-06-03 10:00:00"),
+        ]
+        result = _filter_records_by_region_tech_time(records, "2026-06-01", "2026-06-07")
+        assert len(result) == 1
+        assert result[0].flow_id == "222222222222222"
+
+    def test_boundary_inclusive(self):
+        from run_weekly_report import _filter_records_by_region_tech_time
+        records = [
+            FlowRecord(flow_id="111111111111111", region_tech_approval_time="2026-06-01 00:00:00"),
+            FlowRecord(flow_id="222222222222222", region_tech_approval_time="2026-06-07 23:59:59"),
+        ]
+        result = _filter_records_by_region_tech_time(records, "2026-06-01", "2026-06-07")
+        assert len(result) == 2
+
+
+class TestRegionTechTimeInRange:
+    """测试共享谓词 _region_tech_time_in_range。
+
+    该谓词同时供完整模式（_filter_records_by_region_tech_time）与
+    仅统计模式（stats_from_excel）复用，此处覆盖 Excel 行的原始字符串场景。
+    """
+
+    def test_in_range(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("2026-06-03 10:00:00", "2026-06-01", "2026-06-07") is True
+
+    def test_before_range(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("2026-05-20 10:00:00", "2026-06-01", "2026-06-07") is False
+
+    def test_after_range(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("2026-06-10 10:00:00", "2026-06-01", "2026-06-07") is False
+
+    def test_boundary_inclusive(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("2026-06-01 00:00:00", "2026-06-01", "2026-06-07") is True
+        assert _region_tech_time_in_range("2026-06-07 23:59:59", "2026-06-01", "2026-06-07") is True
+
+    def test_placeholder_dash(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("--", "2026-06-01", "2026-06-07") is False
+
+    def test_placeholder_na(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("无", "2026-06-01", "2026-06-07") is False
+
+    def test_empty(self):
+        from run_weekly_report import _region_tech_time_in_range
+        assert _region_tech_time_in_range("", "2026-06-01", "2026-06-07") is False
+        assert _region_tech_time_in_range(None, "2026-06-01", "2026-06-07") is False
+
+    def test_unparsable(self):
+        from run_weekly_report import _region_tech_time_in_range
+        # 无法解析为 YYYY-MM-DD 的格式应返回 False
+        assert _region_tech_time_in_range("2026/06/03", "2026-06-01", "2026-06-07") is False
+        assert _region_tech_time_in_range("未知", "2026-06-01", "2026-06-07") is False
 
 
 # ==================== Restore sys.modules after all tests ====================

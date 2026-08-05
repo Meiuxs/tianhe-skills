@@ -125,6 +125,9 @@ class MockFlowRecord:
         self.negotiation_processor = kwargs.get("negotiation_processor", "王五")
         self.negotiation_status = kwargs.get("negotiation_status", "审批通过")
         self.negotiation_time = kwargs.get("negotiation_time", "2026-06-02 12:00")
+        self.region_tech_processor = kwargs.get("region_tech_processor", "赵六")
+        self.region_tech_status = kwargs.get("region_tech_status", "审批通过")
+        self.region_tech_approval_time = kwargs.get("region_tech_approval_time", "2026-06-02 11:00")
         self.province_processor = kwargs.get("province_processor", "李四")
         self.province_status = kwargs.get("province_status", "审批通过")
         self.purchase_processor = kwargs.get("purchase_processor", "王五")  # TODO: 后续可能恢复使用
@@ -141,7 +144,7 @@ class TestBuildRowsData:
         records = [MockFlowRecord()]
         result = _build_rows_data(records)
         assert len(result) == 1
-        assert len(result[0]) == 21
+        assert len(result[0]) == 24
 
     def test_record_values(self):
         records = [MockFlowRecord(flow_id="99999999999999999", project_name="阳光电站")]
@@ -166,7 +169,7 @@ class TestBuildRowsData:
     def test_column_count(self):
         records = [MockFlowRecord()]
         result = _build_rows_data(records)
-        assert len(result[0]) == 21
+        assert len(result[0]) == 24
 
     def test_approval_fields(self):
         records = [MockFlowRecord(
@@ -174,6 +177,9 @@ class TestBuildRowsData:
             negotiation_processor="核价审批人",
             negotiation_status="核价通过",
             negotiation_time="2026-06-02",
+            region_tech_processor="区域审批人",
+            region_tech_status="区域通过",
+            region_tech_approval_time="2026-06-02 11:00",
             province_processor="省审批人",
             province_status="省级通过",
             final_approval_time="2026-06-10",
@@ -182,10 +188,13 @@ class TestBuildRowsData:
         assert result[0][13] == "是"  # is_valid
         assert result[0][14] == "省审批人"  # province_processor
         assert result[0][15] == "省级通过"  # province_status
-        assert result[0][16] == "核价审批人"  # negotiation_processor
-        assert result[0][17] == "核价通过"  # negotiation_status
-        assert result[0][18] == "2026-06-02"  # negotiation_time
-        assert result[0][19] == "2026-06-10"  # final_approval_time
+        assert result[0][16] == "区域审批人"  # region_tech_processor
+        assert result[0][17] == "区域通过"  # region_tech_status
+        assert result[0][18] == "2026-06-02 11:00"  # region_tech_approval_time
+        assert result[0][19] == "核价审批人"  # negotiation_processor
+        assert result[0][20] == "核价通过"  # negotiation_status
+        assert result[0][21] == "2026-06-02"  # negotiation_time
+        assert result[0][22] == "2026-06-10"  # final_approval_time
 
 
 # 注意：TestDeduplicateRows 需要真实 openpyxl，当与其他 mock 测试一起运行时会失败
@@ -251,3 +260,52 @@ class TestDeduplicateRows:
         new_rows = [["11111111111111111"] + ["--"] * 18]
         result = _deduplicate_rows(wb, new_rows)
         assert len(result) == 0
+
+
+@pytest.mark.skip(reason="需要真实 openpyxl，与其他 mock 测试冲突时跳过")
+class TestDateQuerySheet:
+    """测试「日期查询」Sheet 按区域技术审批时间分组（需单独运行）。"""
+
+    def _make_workbook(self, rows):
+        """构造含「询价汇总」Sheet 的工作簿，写入表头和数据行。"""
+        import openpyxl
+        from column_definitions import HEADERS
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "询价汇总"
+        for ci, name in enumerate(HEADERS, start=1):
+            ws.cell(row=1, column=ci, value=name)
+        for ri, row_data in enumerate(rows, start=2):
+            for ci, val in enumerate(row_data, start=1):
+                ws.cell(row=ri, column=ci, value=val)
+        return wb
+
+    def test_upper_month_counts_by_region_tech_time(self):
+        """「上月」分组应按区域技术审批时间（而非提交时间）计数。"""
+        from column_definitions import (
+            HEADERS, COL_FLOW_ID, COL_SUBMIT_TIME, COL_REGION_TECH_APPROVAL_TIME,
+        )
+        from core.excel_generator import _create_date_query_sheet_v2
+
+        def make_row(fid, submit, region):
+            row = ["--"] * len(HEADERS)
+            row[COL_FLOW_ID] = fid
+            row[COL_SUBMIT_TIME] = submit
+            row[COL_REGION_TECH_APPROVAL_TIME] = region
+            return row
+
+        # 行A：区域技术时间在7月，提交时间在6月底 -> 应计入"上月"
+        row_a = make_row("20260710120000001", "2026-06-30 10:00:00", "2026-07-10 09:00:00")
+        # 行B：区域技术时间在8月，提交时间在7月 -> 不应计入"上月"
+        row_b = make_row("20260801120000002", "2026-07-20 10:00:00", "2026-08-01 09:00:00")
+        wb = self._make_workbook([row_a, row_b])
+
+        _create_date_query_sheet_v2(wb)
+
+        ws = wb["日期查询"]
+        found = None
+        for row in ws.iter_rows(values_only=True):
+            if row and row[0] == "上月":
+                found = row[1]
+                break
+        assert found == 1, "「上月」应计入 1 条（按区域技术审批时间），实际 %s" % found

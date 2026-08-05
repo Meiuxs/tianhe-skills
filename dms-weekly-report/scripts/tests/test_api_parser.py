@@ -239,6 +239,32 @@ class TestFillApprovalFromNodes:
         fill_approval_from_nodes(rec, nodes)
         assert rec.province_processor == "王五"
 
+    def test_region_tech_node_time(self):
+        """区域技术审批节点人/状态/时间应被记录。"""
+        nodes = [
+            {"roleName": "流程发起人提交审核", "uname": "李四", "statusName": "提交审核", "updateTime": "2026-01-01 10:00:00"},
+            {"roleName": "区域技术", "uname": "赵六", "statusName": "审批通过", "updateTime": "2026-01-02 09:30:00"},
+            {"roleName": "项目管理部核价", "uname": "王五", "statusName": "审批通过", "updateTime": "2026-01-03 12:00:00"},
+        ]
+        rec = FlowRecord(flow_id="test")
+        fill_approval_from_nodes(rec, nodes, "审批通过")
+        assert rec.region_tech_processor == "赵六"
+        assert rec.region_tech_status == "审批通过"
+        assert rec.region_tech_approval_time == "2026-01-02 09:30:00"
+        assert rec.negotiation_time == "2026-01-03 12:00:00"
+
+    def test_region_tech_node_absent(self):
+        """无区域技术节点时默认字段为 --。"""
+        nodes = [
+            {"roleName": "流程发起人提交审核", "uname": "李四", "statusName": "提交审核", "updateTime": "2026-01-01 10:00:00"},
+            {"roleName": "项目管理部核价", "uname": "王五", "statusName": "审批通过", "updateTime": "2026-01-03 12:00:00"},
+        ]
+        rec = FlowRecord(flow_id="test")
+        fill_approval_from_nodes(rec, nodes, "审批通过")
+        assert rec.region_tech_processor == "--"
+        assert rec.region_tech_status == "--"
+        assert rec.region_tech_approval_time == "--"
+
 
 class TestFillRecordFromHtml:
     def test_basic_html(self):

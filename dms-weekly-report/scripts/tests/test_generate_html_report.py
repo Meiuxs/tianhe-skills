@@ -28,14 +28,15 @@ from column_definitions import (
     COL_SUBMIT_TIME, COL_REMARK,
     COL_IS_VALID, COL_FLOW_STATUS,
     COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
+    COL_REGION_TECH_PROCESSOR, COL_REGION_TECH_STATUS, COL_REGION_TECH_APPROVAL_TIME,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_FINAL_APPROVAL_TIME,
 )
 
 
 def _make_row(**overrides):
-    """构造一行 21 列的测试数据。"""
-    row = ["--"] * 21
+    """构造一行 24 列的测试数据。"""
+    row = ["--"] * 24
     defaults = {
         "flow_id": "12345678901234567",
         "project_name": "测试项目",
@@ -50,6 +51,9 @@ def _make_row(**overrides):
         "negotiation_processor": "王五",
         "negotiation_status": "审批通过",
         "negotiation_time": "2026-06-02 12:00:00",
+        "region_tech_processor": "赵六",
+        "region_tech_status": "审批通过",
+        "region_tech_approval_time": "2026-06-02 11:00:00",
         "province_processor": "李四",
         "province_status": "审批通过",
         "final_approval_time": "2026-06-03 15:30:00",
@@ -68,6 +72,9 @@ def _make_row(**overrides):
     row[COL_REMARK] = defaults["remark"]
     row[COL_NEGOTIATION_PROCESSOR] = defaults["negotiation_processor"]
     row[COL_NEGOTIATION_STATUS] = defaults["negotiation_status"]
+    row[COL_REGION_TECH_PROCESSOR] = defaults["region_tech_processor"]
+    row[COL_REGION_TECH_STATUS] = defaults["region_tech_status"]
+    row[COL_REGION_TECH_APPROVAL_TIME] = defaults["region_tech_approval_time"]
     row[COL_PROVINCE_PROCESSOR] = defaults["province_processor"]
     row[COL_PROVINCE_STATUS] = defaults["province_status"]
     row[COL_FINAL_APPROVAL_TIME] = defaults["final_approval_time"]

@@ -83,6 +83,25 @@ class TestExtractApprovalInfo(unittest.TestCase):
         self.assertEqual(result["negotiation_status"], "已批准通过")
         self.assertEqual(result["negotiation_time"], "2026-06-03 15:30")
         self.assertEqual(result["final_approval_time"], "2026-06-03 15:30")
+        self.assertEqual(result["region_tech_processor"], "--")
+        self.assertEqual(result["region_tech_status"], "--")
+        self.assertEqual(result["region_tech_approval_time"], "--")
+
+    def test_region_tech_approval_time(self):
+        """提取区域技术审批节点人/状态/时间。"""
+        table = self._make_table_with_approval_rows([
+            ["流程发起人", "张三", "提交审核", "2026-06-01 10:00"],
+            ["区域技术", "赵六", "已批准", "2026-06-02 09:00"],
+            ["项目管理部核价", "王五", "已批准通过", "2026-06-03 15:30"],
+        ])
+        page = self._make_page_with_tables([table])
+
+        result = _await_result(extract_approval_info(page))
+
+        self.assertEqual(result["region_tech_processor"], "赵六")
+        self.assertEqual(result["region_tech_status"], "已批准")
+        self.assertEqual(result["region_tech_approval_time"], "2026-06-02 09:00")
+        self.assertEqual(result["negotiation_time"], "2026-06-03 15:30")
 
     def test_returns_defaults_on_no_table(self):
         """无审批表时返回默认值。"""
