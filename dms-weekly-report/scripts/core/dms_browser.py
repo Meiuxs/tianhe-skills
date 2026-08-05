@@ -103,6 +103,9 @@ class FlowRecord:
     negotiation_processor: str = "--"      # 项目管理部核价审批人
     negotiation_status: str = "--"        # 项目管理部核价审批状态
     negotiation_time: str = "--"          # 项目管理部核价审批时间
+    region_tech_processor: str = "--"     # 区域技术审批人
+    region_tech_status: str = "--"        # 区域技术审批状态
+    region_tech_approval_time: str = "--" # 区域技术审批时间（周报日期范围参考标准）
     province_processor: str = "--"
     province_status: str = "--"
     purchase_processor: str = "--"        # TODO: 后续可能恢复使用

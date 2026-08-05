@@ -130,6 +130,9 @@ def fill_approval_from_nodes(rec, node_list: list, flow_status_name: str = "") -
     negotiation_processor = "--"
     negotiation_status = "--"
     negotiation_time = "--"
+    region_tech_processor = "--"
+    region_tech_status = "--"
+    region_tech_approval_time = "--"
     province_processor = "--"
     province_status = "--"
     final_approval_time = "--"
@@ -149,6 +152,11 @@ def fill_approval_from_nodes(rec, node_list: list, flow_status_name: str = "") -
             negotiation_processor = user_name
             negotiation_status = status_name
             negotiation_time = update_time
+        elif "区域技术" in role_name:
+            # 区域技术审批人/状态/时间（审批时间作为周报日期范围参考标准）
+            region_tech_processor = user_name
+            region_tech_status = status_name
+            region_tech_approval_time = update_time if update_time not in ("--", "") else region_tech_approval_time
         elif "省总" in role_name or "省公司" in role_name:
             province_processor = user_name
             province_status = status_name
@@ -164,6 +172,9 @@ def fill_approval_from_nodes(rec, node_list: list, flow_status_name: str = "") -
     rec.negotiation_processor = negotiation_processor
     rec.negotiation_status = negotiation_status
     rec.negotiation_time = negotiation_time
+    rec.region_tech_processor = region_tech_processor
+    rec.region_tech_status = region_tech_status
+    rec.region_tech_approval_time = region_tech_approval_time
     rec.province_processor = province_processor
     rec.province_status = province_status
     rec.final_approval_time = final_approval_time
@@ -190,6 +201,9 @@ def fill_approval_from_dict(rec, approval: dict) -> None:
     rec.negotiation_processor = approval.get("negotiation_processor", "--")
     rec.negotiation_status = approval.get("negotiation_status", "--")
     rec.negotiation_time = approval.get("negotiation_time", "--")
+    rec.region_tech_processor = approval.get("region_tech_processor", "--")
+    rec.region_tech_status = approval.get("region_tech_status", "--")
+    rec.region_tech_approval_time = approval.get("region_tech_approval_time", "--")
     rec.province_processor = approval.get("province_processor", "--")
     rec.province_status = approval.get("province_status", "--")
     # 只有流程整体状态为审批结束/审批通过时才记录审批完成时间

@@ -33,6 +33,9 @@ async def extract_approval_info(page: Any) -> dict[str, str]:
         "negotiation_processor": "--",
         "negotiation_status": "--",
         "negotiation_time": "--",
+        "region_tech_processor": "--",
+        "region_tech_status": "--",
+        "region_tech_approval_time": "--",
         "province_processor": "--",
         "province_status": "--",
         "purchase_processor": "--",
@@ -60,6 +63,12 @@ async def extract_approval_info(page: Any) -> dict[str, str]:
                                 result["negotiation_processor"] = processor
                                 result["negotiation_status"] = status_val
                                 result["negotiation_time"] = time_text
+                            elif "区域技术" in node:
+                                # 区域技术审批人/状态/时间（审批时间作为周报日期范围参考标准）
+                                result["region_tech_processor"] = processor
+                                result["region_tech_status"] = status_val
+                                if time_text not in ("--", ""):
+                                    result["region_tech_approval_time"] = time_text
                             elif "省总" in node or "省公司" in node:
                                 result["province_processor"] = processor
                                 result["province_status"] = status_val
