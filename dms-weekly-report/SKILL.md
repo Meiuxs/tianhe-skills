@@ -8,8 +8,8 @@ description: >
   Not for modifying or approving DMS data.
 metadata:
   author: Meiuxs
-  version: 1.8.0
-  updated: 2026-06-23
+  version: 1.11.0
+  updated: 2026-08-04
 ---
 
 # DMS 非标询价周报生成器
@@ -17,6 +17,10 @@ metadata:
 ## Overview
 
 一键从 DMS 流程中心筛选已办询价流程，自动登录、提取项目详情和 BOM 清单、检查下单状态，生成含 **4 个 Sheet** 的格式化 Excel 汇总报告（询价汇总/询价统计/日期查询/数据看板）。支持仅统计模式（`--stats-only`）跳过浏览器操作直接重算统计。使用 Playwright 自动化浏览器操作，支持多 Tab 并行提取和会话持久化。
+
+> **日期口径：** 周报的日期范围以 **「区域技术」审批节点的审批时间** 为参考标准，而非提交时间。完整模式先按宽范围拉取流程（列表接口按提交时间筛选），提取详情后在本地按区域技术审批时间过滤；仅统计模式同样按区域技术审批时间列筛选。
+>
+> **输出列：** Excel「询价汇总」Sheet 包含区域技术的审批人、审批状态、审批时间三列（位于项目管理部核价审批时间之后），HTML 报表详情亦同步展示。
 
 > **仅统计模式输入规则：** 默认在 `--output-dir` 目录中自动查找 `询价汇总_{时间戳}.xlsx`、`询价汇总.xlsx` 或 `询价汇总_v2.xlsx`（按优先级）。可通过 `--input-xlsx FILE` 显式指定输入文件。未找到则终止执行，提示先运行完整模式。
 
@@ -220,6 +224,7 @@ python "$SKILL_DIR/scripts/run_weekly_report.py" --output-dir "$PWD" --date-labe
 | `--weeks N` | 最近 N 周（0=本周, 1=上周） | 0 |
 | `--start-date YYYY-MM-DD` | 自定义开始日期 | 本周一 |
 | `--end-date YYYY-MM-DD` | 自定义结束日期 | 今天 |
+| `--wide-days N` | 宽范围拉取跨度（天）。完整模式列表接口按提交时间筛选，需扩大范围后按区域技术审批时间本地二次过滤 | 180（约半年） |
 | `--date-label LABEL` | 中文日期标签（自动解析，如"本月"/"上个月到现在"） | 无 |
 | `--workers N` | 并行并发数（1-8） | 6 |
 | `--verbose` | 详细日志输出 | 仅 info |

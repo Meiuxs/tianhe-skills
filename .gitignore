@@ -5,6 +5,8 @@
 
 # 生成 HTML 报表
 *.html
+# 但 references/templates/ 下的 HTML 模板需要纳入版本控制
+!**/references/templates/**/*.html
 
 # 截图等测试产物
 *.png
