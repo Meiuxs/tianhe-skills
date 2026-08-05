@@ -1,0 +1,3970 @@
+<!DOCTYPE html>
+
+
+<html lang="zh-CN">
+
+
+<head>
+
+
+<meta charset="UTF-8">
+
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+<title>询价周报报表</title>
+
+
+<!-- Chart.js CDN -->
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC" crossorigin="anonymous"></script>
+
+
+<script>
+
+
+if (typeof Chart === 'undefined') {
+
+
+  document.write('<script src="https://unpkg.com/chart.js@4.4.7/dist/chart.umd.min.js"><\/script>');
+
+
+}
+
+
+</script>
+
+
+<!-- Chart.js Datalabels Plugin — 饼图扇区标签 -->
+
+
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
+
+<!-- SheetJS CDN — Excel 导出 -->
+
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+
+<style>
+
+
+/* ===================================================================
+
+
+   APPLE PRO DASHBOARD — 纯正 Apple 高级数据看板风格
+
+
+   遵循 Apple Human Interface Guidelines (HIG)
+
+
+   =================================================================== */
+
+
+:root {
+
+
+  /* ── Apple 字体栈 ── */
+
+
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+
+
+                 "SF Pro Text", "Helvetica Neue", "PingFang SC",
+
+
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+
+
+
+
+  /* ── Apple 主色系 ── */
+
+
+  --primary:       #007AFF;
+
+
+  --primary-dark:  #0056CC;
+
+
+  --primary-light: #4DA3FF;
+
+
+  --primary-l10:   rgba(0,122,255,0.10);
+
+
+  --primary-l5:    rgba(0,122,255,0.05);
+
+
+
+
+
+  /* ── Apple 功能色 ── */
+
+
+  --color-green:  #34C759;
+
+
+  --color-orange: #FF9500;
+
+
+  --color-red:    #FF3B30;
+
+
+  --color-purple: #AF52DE;
+
+
+  --color-teal:   #5AC8FA;
+
+
+
+
+
+  /* ── 图表调色板 ── */
+
+
+  --chart-1: #007AFF;
+
+
+  --chart-2: #34C759;
+
+
+  --chart-3: #FF9500;
+
+
+  --chart-4: #AF52DE;
+
+
+  --chart-5: #FF3B30;
+
+
+  --chart-6: #5AC8FA;
+
+
+
+
+
+  /* ── Light Mode 中性色 ── */
+
+
+  --text-primary:    #1D1D1F;
+
+
+  --text-secondary:  #6E6E73;
+
+
+  --text-tertiary:   #86868B;
+
+
+  --bg-page:         #F5F5F7;
+
+
+  --bg-white:        #FFFFFF;
+
+
+  --bg-card:         #F6F6F8;
+
+
+  --bg-control:     #F2F2F7;
+
+
+  --border-color:    #D2D2D7;
+
+
+  --border-light:    #E8E8ED;
+
+
+
+
+
+  /* ── Squircle 大圆角 ── */
+
+
+  --radius:     16px;
+
+
+  --radius-sm:  10px;
+
+
+  --radius-lg:  20px;
+
+
+  --radius-xs:  6px;
+
+
+  --radius-pill: 9999px;
+
+
+
+
+
+  /* ── Apple 多层柔和阴影 ── */
+
+
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.03), 0 1px 4px rgba(0,0,0,0.04);
+
+
+  --shadow-md:  0 2px 8px rgba(0,0,0,0.04), 0 4px 20px rgba(0,0,0,0.05);
+
+
+  --shadow-lg:  0 4px 16px rgba(0,0,0,0.05), 0 8px 32px rgba(0,0,0,0.06);
+
+
+  --shadow-hover: 0 8px 24px rgba(0,0,0,0.08), 0 16px 48px rgba(0,0,0,0.06);
+
+
+  --shadow-scroll: 0 1px 0 rgba(0,0,0,0.08);
+
+
+
+
+
+  /* ── 毛玻璃 ── */
+
+
+  --glass-bg:       rgba(255,255,255,0.68);
+
+
+  --glass-bg-heavy: rgba(255,255,255,0.85);
+
+
+  --glass-blur:     blur(16px) saturate(140%);
+
+
+  --glass-border:   rgba(255,255,255,0.5);
+
+
+
+
+
+  /* ── 缓动曲线 ── */
+
+
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+
+  --ease-out: cubic-bezier(0, 0, 0.25, 1);
+
+
+  --ease-in:  cubic-bezier(0.25, 0, 1, 1);
+
+
+
+
+
+  /* ── 间距 ── */
+
+
+  --spacing-xs: 4px;
+
+
+  --spacing-sm: 8px;
+
+
+  --spacing-md: 16px;
+
+
+  --spacing-lg: 32px;
+
+
+  --spacing-xl: 48px;
+
+
+  --spacing-2xl: 64px;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   DARK MODE — OLED 纯黑 + 深空灰卡片
+
+
+   =================================================================== */
+
+
+@media (prefers-color-scheme: dark) {
+
+
+  :root {
+
+
+    --primary:       #0A84FF;
+
+
+    --primary-dark:  #409CFF;
+
+
+    --primary-light: #0A84FF;
+
+
+    --primary-l10:   rgba(10,132,255,0.18);
+
+
+    --primary-l5:    rgba(10,132,255,0.09);
+
+
+
+
+
+    --text-primary:    #F5F5F7;
+
+
+    --text-secondary:  #A1A1A6;
+
+
+    --text-tertiary:   #6E6E73;
+
+
+    --bg-page:         #000000;
+
+
+    --bg-white:        #1C1C1E;
+
+
+    --bg-card:         #2C2C2E;
+
+
+    --bg-control:     #3A3A3C;
+
+
+    --border-color:    rgba(255,255,255,0.12);
+
+
+    --border-light:    rgba(255,255,255,0.08);
+
+
+
+
+
+    --glass-bg:       rgba(28,28,30,0.82);
+
+
+    --glass-bg-heavy: rgba(28,28,30,0.92);
+
+
+    --glass-border:   rgba(255,255,255,0.10);
+
+
+
+
+
+    --shadow-sm:  0 1px 2px rgba(0,0,0,0.4);
+
+
+    --shadow-md:  0 2px 8px rgba(0,0,0,0.5);
+
+
+    --shadow-lg:  0 4px 16px rgba(0,0,0,0.5);
+
+
+    --shadow-hover: 0 8px 24px rgba(0,0,0,0.6);
+
+
+    --shadow-scroll: 0 1px 0 rgba(255,255,255,0.08);
+
+
+  }
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   RESET & BASE
+
+
+   =================================================================== */
+
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+
+
+
+
+body {
+
+
+  font-family: var(--font-family);
+
+
+  color: var(--text-primary);
+
+
+  background: var(--bg-page);
+
+
+  line-height: 1.6;
+
+
+  -webkit-font-smoothing: antialiased;
+
+
+  -moz-osx-font-smoothing: grayscale;
+
+
+  font-size: 15px;
+
+
+  padding-top: 64px;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   STICKY GLASS NAV — App Store Connect 风格毛玻璃导航
+
+
+   =================================================================== */
+
+
+.glass-nav {
+
+
+  position: fixed;
+
+
+  top: 0;
+
+
+  left: 0;
+
+
+  right: 0;
+
+
+  z-index: 1000;
+
+
+  background: var(--glass-bg);
+
+
+  backdrop-filter: var(--glass-blur);
+
+
+  -webkit-backdrop-filter: var(--glass-blur);
+
+  will-change: backdrop-filter;
+
+  border-bottom: 1px solid var(--border-light);
+
+
+  box-shadow: var(--shadow-sm);
+
+
+  transition: box-shadow 0.3s var(--ease);
+
+
+}
+
+
+
+
+
+.glass-nav.scrolled {
+
+
+  box-shadow: var(--shadow-scroll);
+
+
+}
+
+
+
+
+
+.glass-nav-inner {
+
+
+  max-width: 1200px;
+
+
+  margin: 0 auto;
+
+
+  padding: 10px var(--spacing-xl);
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  justify-content: space-between;
+
+
+  gap: 12px;
+
+
+}
+
+
+
+
+
+.glass-nav-brand {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: 10px;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.glass-nav-brand-icon {
+
+
+  width: 32px;
+
+
+  height: 32px;
+
+
+  background: var(--primary);
+
+
+  border-radius: 8px;
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  justify-content: center;
+
+
+  font-size: 16px;
+
+
+  color: white;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.glass-nav-brand-text h1 {
+
+
+  font-size: 15px;
+
+
+  font-weight: 700;
+
+
+  letter-spacing: -0.2px;
+
+
+  line-height: 1.2;
+
+
+  color: var(--text-primary);
+
+
+}
+
+
+
+
+
+.glass-nav-brand-text .subtitle {
+
+
+  font-size: 11px;
+
+
+  color: var(--text-tertiary);
+
+
+  font-weight: 400;
+
+
+  line-height: 1.3;
+
+
+  letter-spacing: 0.2px;
+
+
+}
+
+
+
+
+
+.glass-nav-meta {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-sm);
+
+
+  font-size: 11px;
+
+
+  color: var(--text-tertiary);
+
+
+  white-space: nowrap;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.glass-nav-meta span {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  gap: 3px;
+
+
+}
+
+
+
+
+
+/* ── 紧凑导航右侧控件区 ── */
+
+
+
+
+
+.glass-nav-controls {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-sm);
+
+
+  flex-wrap: nowrap;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   SEGMENTED CONTROL / PILL-STYLE TABS
+
+
+   =================================================================== */
+
+
+.segmented-control {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  background: var(--bg-control);
+
+
+  border-radius: var(--radius-pill);
+
+
+  padding: 3px;
+
+
+  gap: 2px;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.segmented-btn {
+
+
+  padding: 6px 14px;
+
+
+  border: none;
+
+
+  border-radius: var(--radius-pill);
+
+
+  background: transparent;
+
+
+  color: var(--text-secondary);
+
+
+  font-size: 12px;
+
+
+  font-weight: 500;
+
+
+  cursor: pointer;
+
+
+  font-family: var(--font-family);
+
+
+  transition: all 0.2s var(--ease);
+
+
+  white-space: nowrap;
+
+
+  line-height: 1.3;
+
+
+  letter-spacing: 0.2px;
+
+
+  user-select: none;
+
+
+}
+
+
+
+
+
+.segmented-btn:hover {
+
+
+  color: var(--text-primary);
+
+
+}
+
+
+
+
+
+.segmented-btn.active {
+
+
+  background: var(--bg-white);
+
+
+  color: var(--text-primary);
+
+
+  font-weight: 600;
+
+
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 0.5px 1px rgba(0,0,0,0.04);
+
+
+}
+
+
+
+
+
+.segmented-btn .badge {
+
+
+  display: inline-block;
+
+
+  background: var(--primary-l10);
+
+
+  color: var(--primary);
+
+
+  font-size: 11px;
+
+
+  font-weight: 700;
+
+
+  padding: 1px 6px;
+
+
+  border-radius: var(--radius-pill);
+
+
+  margin-left: 4px;
+
+
+  letter-spacing: 0.2px;
+
+
+  vertical-align: middle;
+
+
+}
+
+
+
+
+
+.segmented-btn.active .badge {
+
+
+  background: var(--primary);
+
+
+  color: white;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   GLOBAL FILTER — 紧凑式控件区
+
+
+   =================================================================== */
+
+
+.global-filter {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: 6px;
+
+
+  flex-wrap: nowrap;
+
+
+}
+
+
+
+
+
+.quick-btns {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  background: var(--bg-control);
+
+
+  border-radius: var(--radius-pill);
+
+
+  padding: 2px;
+
+
+  gap: 1px;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.quick-btn {
+
+
+  padding: 4px 10px;
+
+
+  border: none;
+
+
+  border-radius: var(--radius-pill);
+
+
+  background: transparent;
+
+
+  color: var(--text-secondary);
+
+
+  font-size: 11px;
+
+
+  font-weight: 500;
+
+
+  cursor: pointer;
+
+
+  font-family: var(--font-family);
+
+
+  transition: all 0.15s var(--ease);
+
+
+  white-space: nowrap;
+
+
+  line-height: 1.3;
+
+
+  letter-spacing: 0.1px;
+
+
+}
+
+
+
+
+
+.quick-btn:hover {
+
+
+  color: var(--text-primary);
+
+
+  background: rgba(0,0,0,0.06);
+
+
+}
+
+
+
+
+
+.quick-btn:active {
+
+
+  transform: scale(0.96);
+
+
+  transition-duration: 0.05s;
+
+
+}
+
+
+
+
+
+.quick-btn.active {
+
+
+  background: var(--bg-white);
+
+
+  color: var(--primary);
+
+
+  font-weight: 600;
+
+
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 0.5px 1px rgba(0,0,0,0.04);
+
+
+}
+
+
+
+
+
+/* ══ iOS 风格日期选择器 — 无边框灰底 + Focus 蓝晕 ══ */
+
+
+.global-filter input[type="date"] {
+
+
+  padding: 5px 8px;
+
+
+  border: none;
+
+
+  border-radius: var(--radius-xs);
+
+
+  font-size: 11px;
+
+
+  font-family: var(--font-family);
+
+
+  background: var(--bg-control);
+
+
+  color: var(--text-primary);
+
+
+  cursor: pointer;
+
+
+  min-width: 105px;
+
+
+  transition: all 0.2s var(--ease);
+
+
+  outline: none;
+
+
+}
+
+
+
+
+
+.global-filter input[type="date"]:focus {
+
+
+  background: var(--bg-white);
+
+
+  box-shadow: 0 0 0 2px var(--primary);
+
+
+}
+
+
+
+
+
+.global-filter input[type="date"]::-webkit-calendar-picker-indicator {
+
+
+  cursor: pointer;
+
+
+  opacity: 0.4;
+
+
+  width: 12px;
+
+
+  height: 12px;
+
+
+}
+
+
+
+
+
+.global-filter input[type="date"]::-webkit-calendar-picker-indicator:hover {
+
+
+  opacity: 0.8;
+
+
+}
+
+
+
+
+
+/* ══ iOS 风格日期范围分组 ══ */
+
+
+.date-range-group {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  gap: 3px;
+
+
+  background: transparent;
+
+
+  border-radius: var(--radius-xs);
+
+
+  padding: 3px 8px;
+
+
+  transition: all 0.2s var(--ease);
+
+
+  cursor: pointer;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.date-range-group:focus-within {
+
+
+  background: var(--bg-white);
+
+
+  box-shadow: 0 0 0 2px var(--primary);
+
+
+}
+
+.date-range-group:hover {
+
+
+  background: var(--bg-control);
+
+
+}
+
+
+
+
+
+.date-range-group label {
+
+
+  font-size: 11px;
+
+
+  color: var(--text-secondary);
+
+
+  cursor: pointer;
+
+
+  white-space: nowrap;
+
+
+  font-weight: 500;
+
+
+}
+
+
+
+
+
+.date-range-group input[type="date"] {
+
+
+  border: none;
+
+
+  background: transparent;
+
+
+  color: var(--text-primary);
+
+
+  font-size: 11px;
+
+
+  font-family: var(--font-family);
+
+
+  padding: 2px 4px;
+
+
+  width: 105px;
+
+
+  min-width: 95px;
+
+
+  cursor: pointer;
+
+
+  outline: none;
+
+
+  text-align: center;
+
+
+}
+
+
+
+
+
+.date-range-group input[type="date"]:focus {
+
+
+  box-shadow: none;
+
+
+  background: transparent;
+
+
+}
+
+
+
+
+
+.date-range-sep {
+
+
+  color: var(--text-tertiary);
+
+
+  user-select: none;
+
+
+  font-size: 12px;
+
+
+  font-weight: 500;
+
+
+}
+
+
+
+
+
+/* ══ iOS 风格切换开关 ══ */
+
+
+.invalid-toggle {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  gap: 4px;
+
+
+  cursor: pointer;
+
+
+  font-size: 11px;
+
+
+  color: var(--text-secondary);
+
+
+  background: transparent;
+
+
+  padding: 4px 8px;
+
+
+  border-radius: var(--radius-pill);
+
+
+  transition: all 0.2s var(--ease);
+
+
+  font-weight: 500;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.invalid-toggle:hover {
+
+
+  background: var(--bg-control);
+
+
+}
+
+
+
+
+
+.invalid-toggle input[type="checkbox"] {
+
+
+  margin: 0;
+
+
+  cursor: pointer;
+
+
+  accent-color: var(--primary);
+
+
+  width: 12px;
+
+
+  height: 12px;
+
+
+}
+
+
+
+
+
+
+
+
+/* ===================================================================
+
+
+   TAB CONTENT LAYOUT — 大量留白
+
+
+   =================================================================== */
+
+
+.tab-content {
+
+
+  display: block;
+
+
+  opacity: 1;
+
+
+  transform: translateY(0);
+
+
+  scroll-margin-top: 60px;
+
+
+  animation: fadeIn 0.4s var(--ease);
+
+
+}
+
+
+
+
+
+@keyframes fadeIn {
+
+
+  from { opacity: 0; transform: translateY(8px); }
+
+
+  to   { opacity: 1; transform: translateY(0); }
+
+
+}
+
+
+
+
+
+.tab-body {
+
+
+  max-width: 1200px;
+
+
+  margin: 0 auto;
+
+
+  padding: var(--spacing-lg) var(--spacing-xl);
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   SECTION TITLE — Apple 风格标题
+
+
+   =================================================================== */
+
+
+.section-title {
+
+
+  font-size: 20px;
+
+
+  font-weight: 700;
+
+
+  color: var(--text-primary);
+
+
+  margin-bottom: var(--spacing-md);
+
+
+  padding-bottom: var(--spacing-sm);
+
+
+  border-bottom: 1px solid var(--border-light);
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-sm);
+
+
+  letter-spacing: -0.2px;
+
+
+}
+
+
+
+
+
+.section-title .title-icon {
+
+
+  width: 26px;
+
+
+  height: 26px;
+
+
+  background: var(--primary);
+
+
+  border-radius: 7px;
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  justify-content: center;
+
+
+  color: white;
+
+
+  font-size: 13px;
+
+
+}
+
+
+
+
+
+.section-subtitle {
+
+
+  font-size: 12px;
+
+
+  font-weight: 400;
+
+
+  color: var(--text-tertiary);
+
+
+  margin-left: var(--spacing-sm);
+
+
+  flex: 1;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   KPI CARDS — Apple Health 风格
+
+
+   =================================================================== */
+
+
+.kpi-grid {
+
+
+  display: grid;
+
+
+  grid-template-columns: repeat(4, 1fr);
+
+
+  gap: var(--spacing-md);
+
+
+  margin-bottom: var(--spacing-xl);
+
+
+}
+
+
+
+
+
+.kpi-card {
+
+
+  background: var(--bg-white);
+
+
+  border-radius: var(--radius);
+
+
+  padding: var(--spacing-lg) var(--spacing-md);
+
+
+  border: none;
+
+
+  text-align: center;
+
+
+  cursor: default;
+
+
+  position: relative;
+
+
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04);
+
+
+  transition: background 0.25s var(--ease), box-shadow 0.25s var(--ease);
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+.kpi-card:hover {
+
+
+  background: var(--primary-l5);
+
+
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.05);
+
+
+}
+
+
+
+
+
+.kpi-card:hover::before {
+
+
+  background: var(--primary);
+
+
+}
+
+
+
+
+
+.kpi-card:active {
+
+
+  background: var(--primary-l10);
+
+
+  transition-duration: 0.05s;
+
+
+}
+
+
+
+
+
+.kpi-card .label {
+
+
+  font-size: 12px;
+
+
+  font-weight: 500;
+
+
+  color: var(--text-tertiary);
+
+
+  margin-bottom: var(--spacing-sm);
+
+
+  letter-spacing: 0.4px;
+
+
+}
+
+
+
+
+
+.kpi-card .value {
+
+
+  font-size: 34px;
+
+
+  font-weight: 700;
+
+
+  color: var(--primary);
+
+
+  letter-spacing: -0.04em;
+
+
+  font-variant-numeric: tabular-nums;
+
+
+}
+
+
+
+
+
+.kpi-card .unit {
+
+
+  font-size: 13px;
+
+
+  font-weight: 400;
+
+
+  color: var(--text-tertiary);
+
+
+  opacity: 0.7;
+
+
+}
+
+.kpi-value-row {
+
+
+  display: flex;
+
+
+  align-items: baseline;
+
+
+  justify-content: center;
+
+
+  gap: 3px;
+
+
+  line-height: 1.1;
+
+
+  color: var(--primary);
+
+
+  letter-spacing: -0.04em;
+
+
+}
+
+
+
+
+
+.kpi-card.green .value { color: var(--color-green); }
+
+
+
+
+
+.kpi-card.orange .value { color: var(--color-orange); }
+
+
+
+
+
+.kpi-card.red .value { color: var(--color-red); }
+
+
+
+
+
+
+
+
+/* ===================================================================
+
+
+   CHART CARDS — Squircle 大圆角
+
+
+   =================================================================== */
+
+
+.chart-row {
+
+
+  display: grid;
+
+
+  grid-template-columns: 1fr 1fr;
+
+
+  gap: var(--spacing-md);
+
+
+  margin-bottom: var(--spacing-xl);
+
+
+}
+
+
+
+
+
+.chart-row.single { grid-template-columns: 1fr; }
+
+
+.chart-row.split-50-50 { grid-template-columns: 1fr 1fr; }
+
+
+.chart-row.split-60-40 { grid-template-columns: 3fr 2fr; }
+
+
+.chart-row.split-40-60 { grid-template-columns: 2fr 3fr; }
+
+
+
+
+
+.chart-card {
+
+
+  background: var(--bg-white);
+
+
+  border-radius: var(--radius);
+
+
+  border: none;
+
+
+  padding: var(--spacing-md);
+
+
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04);
+
+
+  transition: all 0.35s var(--ease);
+
+
+}
+
+
+
+
+
+.chart-card:hover {
+
+
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.08);
+
+
+}
+
+.chart-card:hover .chart-download-btn {
+
+
+  opacity: 1;
+
+
+  transform: scale(1);
+
+
+}
+
+
+
+
+
+.chart-card.full { grid-column: 1 / -1; }
+
+
+
+
+
+.chart-card .chart-title {
+
+
+  font-size: 15px;
+
+
+  font-weight: 700;
+
+
+  color: var(--text-primary);
+
+
+  margin-bottom: var(--spacing-md);
+
+
+  padding-bottom: var(--spacing-sm);
+
+
+  border-bottom: 1px solid var(--border-light);
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-sm);
+
+
+}
+
+
+
+
+
+.chart-card .chart-wrap {
+
+
+  position: relative;
+
+
+  width: 100%;
+
+
+  min-height: 200px;
+
+
+}
+
+
+
+
+
+.chart-card .chart-caption {
+
+
+  font-size: 12px;
+
+
+  color: var(--text-tertiary);
+
+
+  text-align: center;
+
+
+  margin-top: var(--spacing-sm);
+
+
+}
+
+
+
+
+
+/* Chart download button */
+
+
+.chart-download-btn {
+
+
+  float: right;
+
+
+  padding: 4px 8px;
+
+
+  border: none;
+
+
+  background: none;
+
+
+  cursor: pointer;
+
+
+  font-size: 14px;
+
+
+  color: var(--text-tertiary);
+
+
+  border-radius: 6px;
+
+
+  opacity: 0;
+
+
+  transform: scale(0.92);
+
+
+  transition: all 0.25s var(--ease);
+
+
+}
+
+
+
+
+
+.chart-download-btn:hover {
+
+
+  background: var(--primary-l5);
+
+
+  color: var(--primary);
+
+
+}
+
+
+
+
+
+.chart-download-btn svg {
+
+
+  vertical-align: middle;
+
+
+  opacity: 0.5;
+
+
+  transition: opacity 0.2s var(--ease);
+
+
+}
+
+
+
+
+
+.chart-download-btn:hover svg { opacity: 1; }
+
+
+
+
+
+/* ===================================================================
+
+
+   SKELETON LOADER
+
+
+   =================================================================== */
+
+
+.chart-skeleton {
+
+
+  position: absolute;
+
+
+  top: 0; left: 0; right: 0; bottom: 0;
+
+
+  background: var(--bg-card);
+
+
+  background-size: 200% 100%;
+
+
+  animation: shimmer 2.5s infinite ease-in-out;
+
+
+  border-radius: var(--radius-sm);
+
+
+  z-index: 10;
+
+
+}
+
+
+
+
+
+@keyframes shimmer {
+
+
+  0% { background-position: 200% 0; }
+
+
+  100% { background-position: -200% 0; }
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   TABLE — macOS Finder 列表风格
+
+
+   =================================================================== */
+
+
+.table-container {
+
+
+  background: var(--bg-white);
+
+
+  border-radius: var(--radius);
+
+
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04);
+
+
+  border: none;
+
+
+  overflow-x: auto;
+
+
+  margin-bottom: var(--spacing-lg);
+
+
+}
+
+
+
+
+
+table {
+
+
+  width: 100%;
+
+
+  border-collapse: collapse;
+
+
+  font-size: 13px;
+
+
+}
+
+
+
+
+
+thead th {
+
+
+  background: transparent;
+
+
+  color: var(--text-tertiary);
+
+
+  padding: 8px 16px;
+
+
+  text-align: center;
+
+
+  font-weight: 500;
+
+
+  white-space: nowrap;
+
+
+  font-size: 12px;
+
+
+  border-bottom: 1px solid var(--border-light);
+
+
+}
+
+
+/* 功率/容量/有效性列 — 窄间距 */
+#tab-detail thead th:nth-child(5),
+#tab-detail thead th:nth-child(6),
+#tab-detail thead th:nth-child(7),
+#tab-detail thead th:nth-child(8) {
+  padding: 8px 12px;
+}
+
+
+
+
+
+
+
+
+tbody td {
+
+
+  padding: 10px 16px;
+
+
+  text-align: center;
+
+
+  border-bottom: 1px solid var(--border-light);
+
+
+  border-left: none;
+
+
+  border-right: none;
+
+
+  color: var(--text-primary);
+
+
+  font-size: 13px;
+
+
+  line-height: 1.6;
+
+
+  transition: background 0.15s var(--ease);
+
+
+}
+
+
+/* 功率/容量/有效性列 — 窄间距 */
+#tab-detail tbody td:nth-child(5),
+#tab-detail tbody td:nth-child(6),
+#tab-detail tbody td:nth-child(7),
+#tab-detail tbody td:nth-child(8) {
+  padding: 10px 12px;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+
+
+
+
+
+tbody tr:hover td {
+
+
+  background: var(--primary-l5);
+
+
+  border-radius: 0;
+
+
+}
+
+
+tbody tr:hover td:first-child {
+
+
+  border-radius: 6px 0 0 6px;
+
+
+}
+
+
+tbody tr:hover td:last-child {
+
+
+  border-radius: 0 6px 6px 0;
+
+
+}
+
+tbody tr {
+
+
+  cursor: pointer;
+
+
+}
+
+
+
+
+
+
+
+/* 斑马纹 */
+
+
+
+
+
+
+
+
+@media (prefers-color-scheme: dark) {
+
+
+  .kpi-card,
+
+
+  .chart-card,
+
+
+  .table-container {
+
+
+    box-shadow: none !important;
+
+
+    border: 1px solid rgba(255, 255, 255, 0.1);
+
+
+  }
+
+
+  thead th { color: var(--text-tertiary); }
+
+
+    tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.03); }
+
+
+  tbody tr:hover td { background: var(--primary-l5); }
+
+
+}
+
+
+
+
+
+/* 斑马纹 — macOS Finder 风格 */
+tbody tr:nth-child(even) td {
+
+
+  background: rgba(120, 120, 128, 0.04);
+
+
+}
+
+
+/* Sticky column */
+
+
+.table-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.table-scroll-wrap table { min-width: 800px; }
+
+
+
+
+
+
+
+
+.table-scroll-wrap th.sticky-col,
+
+
+.table-scroll-wrap td.sticky-col {
+
+
+  position: sticky;
+
+
+  left: 0;
+
+
+  z-index: 2;
+
+
+  background: inherit;
+
+
+}
+
+
+
+
+
+.table-scroll-wrap thead th.sticky-col {
+
+
+  z-index: 3;
+
+
+  background: var(--bg-white);
+
+
+}
+
+
+
+
+
+@media (prefers-color-scheme: dark) {
+
+
+  .table-scroll-wrap thead th.sticky-col { background: var(--bg-white); }
+
+
+}
+
+
+
+
+
+/* Number formatting */
+
+
+td.number-right, th.number-right {
+
+
+  text-align: right;
+
+
+  font-variant-numeric: tabular-nums;
+
+
+}
+
+
+
+
+
+.number-format { font-variant-numeric: tabular-nums; }
+
+
+
+
+
+/* ===================================================================
+
+
+   PAGINATION — Apple 风格分页
+
+
+   =================================================================== */
+
+
+.pagination-controls {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  justify-content: center;
+
+
+  padding: 14px 20px;
+
+
+  background: transparent;
+
+
+  border-top: 1px solid var(--border-light);
+
+
+  font-size: 13px;
+
+
+  flex-wrap: wrap;
+
+
+  gap: 12px;
+
+
+}
+
+
+
+
+
+.pagination-controls button {
+
+
+  padding: 6px 14px;
+
+
+  border: none;
+
+
+  border-radius: var(--radius-pill);
+
+
+  background: var(--bg-control);
+
+
+  cursor: pointer;
+
+
+  font-family: var(--font-family);
+
+
+  font-size: 13px;
+
+
+  font-weight: 500;
+
+
+  color: var(--text-primary);
+
+
+  transition: all 0.2s var(--ease);
+
+
+}
+
+
+
+
+
+.pagination-controls button:hover:not(:disabled) {
+
+
+  background: var(--primary);
+
+
+  color: white;
+
+
+  transform: none;
+
+
+}
+
+
+
+
+
+.pagination-controls button:disabled {
+
+
+  opacity: 0.4;
+
+
+  cursor: not-allowed;
+
+
+}
+
+
+
+
+
+.pagination-controls .page-size-selector {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: 6px;
+
+
+  font-size: 13px;
+
+
+  color: var(--text-secondary);
+
+
+}
+
+
+
+
+
+.pagination-controls .page-size-selector select {
+
+
+  padding: 5px 10px;
+
+
+  border: none;
+
+
+  border-radius: var(--radius-xs);
+
+
+  background: var(--bg-control);
+
+
+  color: var(--text-primary);
+
+
+  font-size: 13px;
+
+
+  cursor: pointer;
+
+
+  transition: all 0.2s var(--ease);
+
+
+}
+
+
+
+
+
+.pagination-controls .page-size-selector select:focus {
+
+
+  outline: none;
+
+
+  background: var(--bg-white);
+
+
+  box-shadow: 0 0 0 2px var(--primary);
+
+
+}
+
+
+
+
+
+.pagination-info {
+
+
+  font-variant-numeric: tabular-nums;
+
+
+
+
+
+  color: var(--text-secondary);
+
+
+  font-weight: 500;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   FORM CONTROLS — iOS 风格
+
+
+   =================================================================== */
+
+
+.form-control {
+
+
+  padding: 8px 14px;
+
+
+  border: none;
+
+
+  border-radius: var(--radius-xs);
+
+
+  font-size: 13px;
+
+
+  font-family: var(--font-family);
+
+
+  background: var(--bg-control);
+
+
+  color: var(--text-primary);
+
+
+  cursor: pointer;
+
+
+  min-width: 120px;
+
+
+  transition: all 0.2s var(--ease);
+
+
+}
+
+
+
+
+
+.form-control:focus {
+
+
+  outline: none;
+
+
+  background: var(--bg-white);
+
+
+  box-shadow: 0 0 0 2px var(--primary);
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   LOCAL FILTER CARD
+
+
+   =================================================================== */
+
+
+.local-filter-card {
+
+
+  background: var(--bg-white);
+
+
+  border: none;
+
+
+  border-radius: var(--radius);
+
+
+  margin-bottom: var(--spacing-lg);
+
+
+  overflow: hidden;
+
+
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.04);
+
+
+}
+
+
+
+
+
+.local-filter-header {
+
+
+  background: var(--primary-l5);
+
+
+  padding: 8px var(--spacing-md);
+
+
+  border-bottom: 1px solid var(--border-light);
+
+
+}
+
+
+
+
+
+.local-filter-label {
+
+
+  font-size: 12px;
+
+
+  font-weight: 700;
+
+
+  color: var(--primary);
+
+
+  letter-spacing: 0.2px;
+
+
+}
+
+
+
+
+
+.local-filter-body {
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-md);
+
+
+  padding: var(--spacing-md) var(--spacing-lg);
+
+
+  flex-wrap: wrap;
+
+
+}
+
+
+
+
+
+.local-filter-body label {
+
+
+  font-weight: 500;
+
+
+  font-size: 13px;
+
+
+  color: var(--text-secondary);
+
+
+  white-space: nowrap;
+
+
+}
+
+
+
+
+
+/* Cascade filter group */
+
+
+.filter-cascade-group {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  gap: 8px;
+
+
+  background: var(--bg-control);
+
+
+  border: none;
+
+
+  border-radius: var(--radius-xs);
+
+
+  padding: 6px 12px;
+
+
+  transition: all 0.2s var(--ease);
+
+
+}
+
+
+
+
+
+.filter-cascade-group:focus-within {
+
+
+  background: var(--bg-white);
+
+
+  box-shadow: 0 0 0 2px var(--primary);
+
+
+}
+
+
+
+
+
+.filter-cascade-group label {
+
+
+  font-size: 12px;
+
+
+  color: var(--text-tertiary);
+
+
+  font-weight: 400;
+
+
+}
+
+
+
+
+
+.filter-cascade-group select {
+
+
+  border: none;
+
+
+  background: transparent;
+
+
+  font-size: 13px;
+
+
+  font-family: var(--font-family);
+
+
+  color: var(--text-primary);
+
+
+  cursor: pointer;
+
+
+  cursor: pointer;
+
+
+  padding: 2px 4px;
+
+
+  min-width: 80px;
+
+
+  outline: none;
+
+
+}
+
+
+
+
+
+.filter-cascade-divider {
+
+
+  width: 1px;
+
+
+  height: 20px;
+
+
+  background: var(--border-light);
+
+
+  margin: 0 4px;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   DETAIL FILTER BADGE
+
+
+   =================================================================== */
+
+
+.detail-filter-badge {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-sm);
+
+
+  background: var(--primary-l5);
+
+
+  border: none;
+
+
+  border-radius: var(--radius-pill);
+
+
+  padding: 8px 16px;
+
+
+  margin-bottom: var(--spacing-lg);
+
+
+  font-size: 13px;
+
+
+  color: var(--text-secondary);
+
+
+  font-weight: 500;
+
+
+}
+
+
+
+
+
+.detail-filter-badge .badge-icon { font-size: 14px; }
+
+
+
+
+
+.detail-filter-badge .badge-hint {
+
+
+  font-size: 11px;
+
+
+  color: var(--text-tertiary);
+
+
+  margin-left: var(--spacing-xs);
+
+
+  font-weight: 400;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   ANOMALY BADGE
+
+
+   =================================================================== */
+
+
+.anomaly-badge {
+
+
+  display: inline-block;
+
+
+  background: var(--color-red);
+
+
+  color: white;
+
+
+  font-size: 11px;
+
+
+  font-weight: 700;
+
+
+  padding: 2px 8px;
+
+
+  border-radius: var(--radius-pill);
+
+
+  margin-top: 4px;
+
+
+  letter-spacing: 0.3px;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   MODULE EMPTY STATE
+
+
+   =================================================================== */
+
+
+.module-empty-state {
+
+
+  display: flex;
+
+
+  flex-direction: column;
+
+
+  align-items: center;
+
+
+  justify-content: center;
+
+
+  padding: 60px 20px;
+
+
+  background: var(--bg-card);
+
+
+  border: 1px dashed var(--border-color);
+
+
+  border-radius: var(--radius);
+
+
+  margin-bottom: var(--spacing-lg);
+
+
+}
+
+
+
+
+
+.module-empty-state-icon {
+
+
+  font-size: 36px;
+
+
+  margin-bottom: 16px;
+
+
+  opacity: 0.3;
+
+
+}
+
+
+
+
+
+.module-empty-state-text {
+
+
+  font-size: 14px;
+
+
+  color: var(--text-tertiary);
+
+
+  text-align: center;
+
+
+  line-height: 1.6;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   SUB-SECTION
+
+
+   =================================================================== */
+
+
+.sub-section { margin-bottom: var(--spacing-2xl); }
+
+
+
+
+
+.sub-section-title {
+
+
+  font-size: 18px;
+
+
+  font-weight: 700;
+
+
+  color: var(--text-primary);
+
+
+  margin-bottom: var(--spacing-md);
+
+
+  display: flex;
+
+
+  align-items: center;
+
+
+  gap: var(--spacing-sm);
+
+
+}
+
+
+
+
+
+.sub-title-bar {
+
+
+  display: inline-block;
+
+
+  width: 4px;
+
+
+  height: 18px;
+
+
+  background: var(--primary);
+
+
+  border-radius: 2px;
+
+
+  flex-shrink: 0;
+
+
+}
+
+
+
+
+
+.chart-card-subtitle {
+
+
+  font-size: 12px;
+
+
+  color: var(--text-tertiary);
+
+
+  margin-bottom: var(--spacing-sm);
+
+
+  padding: 0 0 var(--spacing-xs) 0;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   FOOTER
+
+
+   =================================================================== */
+
+
+.footer {
+
+
+  text-align: center;
+
+
+  padding: var(--spacing-xl) var(--spacing-lg);
+
+
+  color: var(--text-tertiary);
+
+
+  font-size: 12px;
+
+
+  border-top: 1px solid var(--border-light);
+
+
+  background: var(--bg-page);
+
+
+  margin-top: var(--spacing-xl);
+
+
+}
+
+
+
+
+
+.footer p { padding-top: var(--spacing-sm); }
+
+
+
+
+
+.footer-inner {
+
+
+  max-width: 1200px;
+
+
+  margin: 0 auto;
+
+
+  line-height: 1.8;
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   TOOLTIP ICON
+
+
+   =================================================================== */
+
+
+.has-tooltip {
+
+
+  position: relative;
+
+
+  border-bottom: 1px dashed var(--text-tertiary);
+
+
+  cursor: help;
+
+
+  transition: border-color 0.2s var(--ease);
+
+
+}
+
+.has-tooltip:hover {
+
+
+  border-bottom-color: var(--primary);
+
+
+}
+
+.has-tooltip::after {
+
+
+  content: attr(data-tip);
+
+
+  position: absolute;
+
+
+  bottom: calc(100% + 8px);
+
+
+  left: 50%;
+
+
+  transform: translateX(-50%);
+
+
+  background: var(--text-primary);
+
+
+  color: var(--bg-page);
+
+
+  font-size: 11px;
+
+
+  font-weight: 500;
+
+
+  padding: 6px 14px;
+
+
+  border-radius: 8px;
+
+
+  white-space: nowrap;
+
+
+  pointer-events: none;
+
+
+  opacity: 0;
+
+
+  transition: opacity 0.2s var(--ease);
+
+
+  z-index: 200;
+
+
+}
+
+.has-tooltip:hover::after {
+
+
+  opacity: 1;
+
+
+}
+
+
+.tooltip-icon {
+
+
+  display: inline-flex;
+
+
+  align-items: center;
+
+
+  justify-content: center;
+
+
+  width: 18px;
+
+
+  height: 18px;
+
+
+  border-radius: 50%;
+
+
+  background: var(--border-light);
+
+
+  color: var(--text-secondary);
+
+
+  font-size: 11px;
+
+
+  font-weight: 700;
+
+
+  cursor: help;
+
+
+  margin-left: 6px;
+
+
+  position: relative;
+
+
+  vertical-align: middle;
+
+
+  transition: all 0.2s var(--ease);
+
+
+}
+
+
+
+
+
+.tooltip-icon:hover {
+
+
+  background: var(--primary);
+
+
+  color: white;
+
+
+}
+
+
+
+
+
+.tooltip-icon::after {
+
+
+  content: attr(data-tip);
+
+
+  position: absolute;
+
+
+  bottom: calc(100% + 10px);
+
+
+  left: 50%;
+
+
+  transform: translateX(-50%);
+
+
+  background: var(--text-primary);
+
+
+  color: var(--bg-page);
+
+
+  font-size: 11px;
+
+
+  font-weight: 500;
+
+
+  padding: 6px 14px;
+
+
+  border-radius: 8px;
+
+
+  white-space: nowrap;
+
+
+  pointer-events: none;
+
+
+  opacity: 0;
+
+
+  transition: opacity 0.2s var(--ease);
+
+
+  z-index: 200;
+
+
+}
+
+
+
+
+
+.tooltip-icon:hover::after { opacity: 1; }
+
+
+
+
+
+/* ===================================================================
+
+
+   RANKING
+
+
+   =================================================================== */
+
+
+.rank-medal { display: inline-block; font-size: 16px; margin-right: 4px; }
+
+
+#province-table-body td:first-child { text-align: center; width: 60px; }
+
+
+
+
+
+/* ===================================================================
+
+
+   RESPONSIVE
+
+
+   =================================================================== */
+
+
+@media (max-width: 1024px) {
+
+
+  .chart-row { grid-template-columns: 1fr; }
+
+
+  .chart-row.split-50-50 { grid-template-columns: 1fr; }
+
+
+  .chart-row.split-60-40 { grid-template-columns: 1fr; }
+
+
+  .chart-row.split-40-60 { grid-template-columns: 1fr; }
+
+
+  .tab-body { padding: var(--spacing-xl) var(--spacing-md); }
+
+
+  .glass-nav-inner { flex-wrap: wrap; }
+
+
+  .glass-nav-controls { flex-wrap: wrap; }
+
+
+  .segmented-control { overflow-x: auto; }
+
+
+}
+
+
+
+
+
+@media (max-width: 768px) {
+
+
+  .glass-nav-inner { flex-direction: column; align-items: stretch; gap: 8px; }
+
+
+  .glass-nav-brand { justify-content: center; }
+
+
+  .glass-nav-meta { justify-content: center; }
+
+
+  .glass-nav-controls { flex-direction: column; align-items: stretch; }
+
+
+  .glass-nav h1 { font-size: 14px; }
+
+
+  .tab-body { padding: var(--spacing-lg) var(--spacing-sm); }
+
+
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
+
+
+  .kpi-card .value { font-size: 24px; }
+
+
+  .kpi-card { padding: var(--spacing-md) var(--spacing-sm); }
+
+
+  .section-title { font-size: 18px; }
+
+
+  .chart-card { padding: var(--spacing-md); }
+
+
+  .filter-bar { flex-direction: column; align-items: stretch; }
+
+
+  .filter-result { margin-left: 0; }
+
+
+  .global-filter { flex-wrap: wrap; }
+
+
+  .quick-btns { justify-content: center; }
+
+
+  .segmented-control { justify-content: center; }
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   PRINT OPTIMIZATION
+
+
+   =================================================================== */
+
+
+@media print {
+
+
+  body { background: white; font-size: 11px; padding-top: 0; }
+
+
+  .glass-nav { display: none !important; }
+
+
+  .tab-content { display: block !important; }
+
+
+  .tab-body { max-width: none; padding: 0; }
+
+
+  .kpi-card {
+
+
+    break-inside: avoid;
+
+
+    box-shadow: none;
+
+
+    border: 1px solid #ccc;
+
+
+  }
+
+
+  .kpi-card:hover { box-shadow: none; }
+
+
+  .chart-card {
+
+
+    break-inside: avoid;
+
+
+    box-shadow: none;
+
+
+    border: 1px solid #ccc;
+
+
+  }
+
+
+  .chart-card:hover { box-shadow: none; }
+
+
+  .table-container { box-shadow: none; border: 1px solid #ccc; }
+
+
+  thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+
+  tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+
+  .section-title { border-bottom-color: #ccc; }
+
+
+  .footer { margin-top: var(--spacing-lg); }
+
+
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   CHART.JS GLOBAL OVERRIDES
+
+
+   =================================================================== */
+
+
+.chart-wrap canvas {
+
+
+  width: 100% !important;
+
+
+}
+
+
+
+
+
+.chart-card .chart-title {
+
+
+  font-family: var(--font-family);
+
+
+}
+
+
+/* ===================================================================
+
+
+   TAB CONTENT LAYOUT
+
+
+   =================================================================== */
+/* ===================================================================
+   INLINE SVG ICONS — Apple SF Symbols 风格
+   =================================================================== */
+svg {
+  vertical-align: middle;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.glass-nav-brand-icon svg {
+  color: white;
+}
+.segmented-btn svg,
+.glass-nav-meta svg,
+.global-filter svg,
+.local-filter-label svg,
+.detail-filter-badge svg {
+  margin-right: 2px;
+}
+.chart-title svg {
+  margin-right: 4px;
+}
+
+
+/* ===================================================================
+
+
+   ACCESSIBILITY — Apple HIG 焦点指示器 + 减少动效
+
+
+   =================================================================== */
+
+
+/* 键盘导航焦点指示器 */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 分段控件、按钮、快速按钮焦点统一 */
+.segmented-btn:focus-visible,
+.quick-btn:focus-visible,
+.global-filter select:focus-visible,
+.global-filter input:focus-visible,
+.pagination-controls button:focus-visible,
+.chart-download-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* 减少动效 — 运动敏感用户 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .kpi-card:hover {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .chart-card:hover,
+  .segmented-btn:hover,
+  .quick-btn:hover {
+    transform: none !important;
+  }
+}
+
+
+
+
+
+/* ===================================================================
+
+
+   FILTER BAR — Apple 风格独立筛选器栏
+
+
+   =================================================================== */
+
+
+.filter-bar {
+  position: sticky;
+  top: 48px;
+  z-index: 100;
+  background: var(--bg-page);
+  padding: 0 0 var(--spacing-md) 0;
+}
+
+
+.filter-bar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-xl);
+}
+
+
+.filter-bar-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  background: var(--bg-white);
+  border-radius: var(--radius);
+  padding: var(--spacing-sm) var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+}
+
+
+.glass-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+
+.nav-action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease);
+}
+
+
+.nav-action-btn:hover {
+  background: var(--bg-control);
+  color: var(--text-primary);
+}
+
+
+.nav-action-btn:active {
+  transform: scale(0.92);
+}
+
+
+/* Adjust body padding to account for glass-nav (48px) + filter bar */
+body {
+  padding-top: 64px;
+}
+
+
+@media (max-width: 768px) {
+  .filter-bar {
+    top: 44px;
+  }
+  body {
+    padding-top: 60px;
+  }
+  .filter-bar-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-sm);
+  }
+  .glass-nav-actions {
+    margin-left: auto;
+  }
+}
+
+
+</style>
+</style>
+
+
+</head>
