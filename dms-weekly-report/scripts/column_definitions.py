@@ -25,6 +25,9 @@ HEADERS = [
     "是否有效",
     "省总审批人",
     "省总审批状态",
+    "区域技术审批人",
+    "区域技术审批状态",
+    "区域技术审批时间",
     "项目管理部核价审批人",
     "项目管理部核价审批状态",
     "项目管理部核价审批时间",
@@ -55,11 +58,14 @@ COL_PURCHASE_STATUS = -1     # 已废弃
 COL_IS_VALID = HEADERS.index("是否有效")  # 13
 COL_PROVINCE_PROCESSOR = HEADERS.index("省总审批人")  # 14
 COL_PROVINCE_STATUS = HEADERS.index("省总审批状态")  # 15
-COL_NEGOTIATION_PROCESSOR = HEADERS.index("项目管理部核价审批人")  # 16
-COL_NEGOTIATION_STATUS = HEADERS.index("项目管理部核价审批状态")  # 17
-COL_NEGOTIATION_TIME = HEADERS.index("项目管理部核价审批时间")  # 18
-COL_FINAL_APPROVAL_TIME = HEADERS.index("审批完成时间")  # 19
-COL_FLOW_STATUS = HEADERS.index("流程状态")  # 20
+COL_REGION_TECH_PROCESSOR = HEADERS.index("区域技术审批人")  # 16
+COL_REGION_TECH_STATUS = HEADERS.index("区域技术审批状态")  # 17
+COL_REGION_TECH_APPROVAL_TIME = HEADERS.index("区域技术审批时间")  # 18
+COL_NEGOTIATION_PROCESSOR = HEADERS.index("项目管理部核价审批人")  # 19
+COL_NEGOTIATION_STATUS = HEADERS.index("项目管理部核价审批状态")  # 20
+COL_NEGOTIATION_TIME = HEADERS.index("项目管理部核价审批时间")  # 21
+COL_FINAL_APPROVAL_TIME = HEADERS.index("审批完成时间")  # 22
+COL_FLOW_STATUS = HEADERS.index("流程状态")  # 23
 
 # ==================== Playwright 超时配置 ====================
 

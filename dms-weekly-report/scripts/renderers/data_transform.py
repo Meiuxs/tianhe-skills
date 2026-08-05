@@ -19,6 +19,7 @@ from column_definitions import (
     COL_MODULE_KW, COL_INVERTER_KW, COL_BATTERY_KWH,
     COL_SUBMIT_TIME, COL_IS_VALID, COL_FLOW_STATUS,
     COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS,
+    COL_REGION_TECH_PROCESSOR, COL_REGION_TECH_STATUS, COL_REGION_TECH_APPROVAL_TIME,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_FINAL_APPROVAL_TIME,
     FLOW_ID_PATTERN,
@@ -44,6 +45,9 @@ class RowDetail(TypedDict):
     finalDate: str
     negotiationApprover: str
     negotiationStatus: str
+    regionTechApprover: str
+    regionTechStatus: str
+    regionTechApprovalTime: str
     provinceApprover: str
     provinceStatus: str
     flowStatus: str
@@ -63,6 +67,19 @@ def _format_datetime(value: Any) -> str:
     if len(s) >= 19 and s[4] == "-" and s[7] == "-":
         return s[:19].replace("T", " ")
     return s
+
+
+def _clean(row: list[Any], col: int) -> str:
+    """安全地取单元格字符串值：越界保护 + 判空 + 去除 "--" 占位符。
+
+    返回空串表示无有效值（列缺失、空、或为占位符）。
+    """
+    if col < 0 or col >= len(row):
+        return ""
+    v = row[col]
+    if v is None or v == "--":
+        return ""
+    return str(v)
 
 
 def _safe_float(value: Any) -> float:
@@ -177,30 +194,13 @@ def compute_rows_detail(rows: list[list[Any]]) -> list[RowDetail]:
             "isInvalid": "作废" in flow_status,
             "submitDate": submit_time[:10] if len(submit_time) >= 10 else submit_time,
             "finalDate": final_raw[:10] if len(final_raw) >= 10 and final_raw not in ("--", "无", "") else "",
-            "negotiationApprover": (
-                str(row[COL_NEGOTIATION_PROCESSOR])
-                if row[COL_NEGOTIATION_PROCESSOR]
-                and row[COL_NEGOTIATION_PROCESSOR] != "--"
-                else ""
-            ),
-            "negotiationStatus": (
-                str(row[COL_NEGOTIATION_STATUS])
-                if row[COL_NEGOTIATION_STATUS]
-                and row[COL_NEGOTIATION_STATUS] != "--"
-                else ""
-            ),
-            "provinceApprover": (
-                str(row[COL_PROVINCE_PROCESSOR])
-                if row[COL_PROVINCE_PROCESSOR]
-                and row[COL_PROVINCE_PROCESSOR] != "--"
-                else ""
-            ),
-            "provinceStatus": (
-                str(row[COL_PROVINCE_STATUS])
-                if row[COL_PROVINCE_STATUS]
-                and row[COL_PROVINCE_STATUS] != "--"
-                else ""
-            ),
+            "negotiationApprover": _clean(row, COL_NEGOTIATION_PROCESSOR),
+            "negotiationStatus": _clean(row, COL_NEGOTIATION_STATUS),
+            "regionTechApprover": _clean(row, COL_REGION_TECH_PROCESSOR),
+            "regionTechStatus": _clean(row, COL_REGION_TECH_STATUS),
+            "regionTechApprovalTime": _clean(row, COL_REGION_TECH_APPROVAL_TIME),
+            "provinceApprover": _clean(row, COL_PROVINCE_PROCESSOR),
+            "provinceStatus": _clean(row, COL_PROVINCE_STATUS),
             "flowStatus": flow_status,
         })
     return detail

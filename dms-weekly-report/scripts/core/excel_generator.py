@@ -28,6 +28,7 @@ from column_definitions import (
     COL_IS_VALID,
     COL_PROVINCE_PROCESSOR, COL_PROVINCE_STATUS,
     COL_NEGOTIATION_PROCESSOR, COL_NEGOTIATION_STATUS, COL_NEGOTIATION_TIME,
+    COL_REGION_TECH_APPROVAL_TIME,
     COL_FINAL_APPROVAL_TIME,
     COL_FLOW_STATUS,
 )
@@ -148,7 +149,7 @@ def _init_worksheet(ws: Any) -> None:
 
 
 def _build_rows_data(records: list) -> list[list[Any]]:
-    """从 FlowRecord 列表构建 21 列行数据。"""
+    """从 FlowRecord 列表构建 24 列行数据。"""
     return [
         [
             r.flow_id, r.project_name,
@@ -159,6 +160,7 @@ def _build_rows_data(records: list) -> list[list[Any]]:
             r.submit_time, r.remark,
             r.is_valid,
             r.province_processor, r.province_status,
+            r.region_tech_processor, r.region_tech_status, r.region_tech_approval_time,
             r.negotiation_processor, r.negotiation_status, r.negotiation_time,
             r.final_approval_time,
             r.flow_status,
@@ -182,12 +184,12 @@ def _deduplicate_rows(wb: openpyxl.Workbook, rows_data: list[list[Any]]) -> list
     return new_rows
 
 
-def _read_data_rows(data_ws: Any, max_cols: int = 21) -> list[list[Any]]:
+def _read_data_rows(data_ws: Any, max_cols: int = 24) -> list[list[Any]]:
     """从询价汇总 Sheet 读取数据行（跳过表头），供多个 Sheet 生成函数复用。
 
     Args:
         data_ws: 询价汇总 worksheet。
-        max_cols: 读取的列数（默认 19 列，即 A-S）。
+        max_cols: 读取的列数（默认 24 列）。
 
     Returns:
         二维列表，每行为一条记录。
@@ -366,8 +368,8 @@ def _create_date_query_sheet_v2(wb: Any) -> None:
             fid = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
             if not re.match(FLOW_ID_PATTERN, fid):
                 continue
-            # 按提交日期过滤当前时间段
-            o = parse_date(row[COL_SUBMIT_TIME] if len(row) > COL_SUBMIT_TIME else None)
+            # 按"区域技术审批时间"过滤当前时间段（与周报主口径一致）
+            o = parse_date(row[COL_REGION_TECH_APPROVAL_TIME] if len(row) > COL_REGION_TECH_APPROVAL_TIME else None)
             if o is not None and (o < s or o > e):
                 continue  # 有日期但不在当前时间段内，跳过
             if o is None and name != "全部":

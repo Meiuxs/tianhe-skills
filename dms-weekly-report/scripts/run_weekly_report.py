@@ -31,7 +31,7 @@ import re
 import sys
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +54,11 @@ from core.dms_browser import (
     extract_all_parallel, get_week_range,
     is_on_login_page,
 )
+from column_definitions import COL_REGION_TECH_APPROVAL_TIME
+
+# 宽范围默认跨度（天）：区域技术审批时间在目标周内的流程，其提交/发起时间可能更早，
+# 列表接口按提交时间筛选，故需扩大范围再本地二次过滤
+DEFAULT_WIDE_DAYS = 180
 
 logger = logging.getLogger("dms_report")
 _handler = logging.StreamHandler(sys.stdout)
@@ -225,6 +230,45 @@ async def _extract_details(
     return all_details
 
 
+def _region_tech_time_in_range(region_time: str, start_date: str, end_date: str) -> bool:
+    """判断"区域技术审批时间"是否落在 [start_date, end_date] 内。
+
+    区域技术审批时间（含驳回）只要存在即在范围内；无该节点审批时间（未走到）
+    或无法解析为日期的返回 False。作为周报日期范围的统一口径，供
+    完整模式（FlowRecord）与仅统计模式（Excel 行）复用。
+    """
+    t = (region_time or "").strip()
+    if t in ("--", "无", ""):
+        return False
+    date_match = re.match(r"(\d{4}-\d{2}-\d{2})", t)
+    if not date_match:
+        return False
+    row_date = date_match.group(1)
+    return start_date <= row_date <= end_date
+
+
+def _filter_records_by_region_tech_time(
+    records: list[FlowRecord],
+    start_date: str, end_date: str,
+) -> list[FlowRecord]:
+    """按"区域技术审批时间"过滤记录，作为周报日期范围的最终口径。
+
+    仅保留区域技术审批时间落在 [start_date, end_date] 内的记录。
+    没有区域技术审批时间（未走到该节点）的记录不计入周报。
+    """
+    kept: list[FlowRecord] = []
+    dropped = 0
+    for r in records:
+        if not _region_tech_time_in_range(r.region_tech_approval_time, start_date, end_date):
+            dropped += 1
+            continue
+        kept.append(r)
+    if dropped:
+        logger.info("按区域技术审批时间过滤: 保留 %d 条，丢弃 %d 条（时间不在范围内或无该节点审批时间）",
+                    len(kept), dropped)
+    return kept
+
+
 def _generate_excel_report(
     records: list[FlowRecord],
     output_dir: str,
@@ -306,15 +350,21 @@ async def run(args: argparse.Namespace) -> None:
         # 启动浏览器
         p, context, page = await _launch_browser_context(args)
 
-        # 登录 + 筛选
+        # 宽范围起点：列表接口按提交时间筛选，需扩大范围后按区域技术审批时间本地二次过滤
+        wide_days = getattr(args, "wide_days", DEFAULT_WIDE_DAYS)
+        wide_start = (datetime.strptime(start_date, "%Y-%m-%d")
+                      - timedelta(days=wide_days)).strftime("%Y-%m-%d")
+        logger.info("列表筛选宽范围: %s ~ %s（宽跨度 %d 天）", wide_start, end_date, wide_days)
+
+        # 登录 + 筛选（用宽范围拉取，避免遗漏）
         filter_result = await _login_and_filter(
-            page, context, start_date, end_date,
+            page, context, wide_start, end_date,
             include_invalid=args.include_invalid,
         )
 
         flow_ids = filter_result.flow_ids
         if not flow_ids:
-            logger.info("本周无已办询价记录")
+            logger.info("宽范围内无已办询价记录")
         else:
             # 提取详情
             all_details = await _extract_details(
@@ -324,10 +374,13 @@ async def run(args: argparse.Namespace) -> None:
             if not all_details:
                 logger.info("未能提取到任何详情")
             else:
-                valid_count = sum(1 for r in all_details if r.is_valid == "是")
-                logger.info("提取完成：%d 条有效询价，%d 条无效询价",
-                            valid_count, len(all_details) - valid_count)
-                records = all_details
+                # 按区域技术审批时间过滤到目标周范围
+                records = _filter_records_by_region_tech_time(
+                    all_details, start_date, end_date,
+                )
+                valid_count = sum(1 for r in records if r.is_valid == "是")
+                logger.info("提取完成（过滤后）：%d 条有效询价，%d 条无效询价",
+                            valid_count, len(records) - valid_count)
 
                 # 生成 Excel 报表
                 excel_path, rows_data = _generate_excel_report(
@@ -429,19 +482,16 @@ def stats_from_excel(args: argparse.Namespace) -> None:
     # 清除旧数据并补充辅助列（1-based 列号：COL_PURCHASE_PROCESSOR+1 到 T 列）
     _fill_date_helper_column(data_ws)
 
-    # 按日期范围筛选
+    # 按"区域技术审批时间"日期范围筛选（周报口径，复用统一谓词）
     filtered_rows: list = []
     for row in data_ws.iter_rows(min_row=2, values_only=True):
         flow_id = str(row[COL_FLOW_ID]) if row[COL_FLOW_ID] else ""
         if not re.match(FLOW_ID_PATTERN, flow_id):
             continue
-        submit_time = str(row[COL_SUBMIT_TIME]) if row[COL_SUBMIT_TIME] else ""
-        if submit_time not in ("--", "无", ""):
-            date_match = re.match(r"(\d{4}-\d{2}-\d{2})", submit_time)
-            if date_match:
-                row_date = date_match.group(1)
-                if row_date < start_date or row_date > end_date:
-                    continue
+        region_time = str(row[COL_REGION_TECH_APPROVAL_TIME] if len(row) > COL_REGION_TECH_APPROVAL_TIME else "")
+        if not _region_tech_time_in_range(region_time, start_date, end_date):
+            # 无区域技术审批时间（未走到该节点）或时间不在范围内：不计入周报
+            continue
         filtered_rows.append(row)
 
     # 计算统计
@@ -521,6 +571,9 @@ def main() -> None:
     parser.add_argument("--end-date", type=str, default=None,
                         help="结束日期，格式 YYYY-MM-DD（例: 2026-06-07）。"
                              "不传则默认为今天")
+    parser.add_argument("--wide-days", type=int, default=DEFAULT_WIDE_DAYS,
+                        help="宽范围拉取跨度（天），默认 %d。"
+                             "列表接口按提交时间筛选，需扩大范围后按区域技术审批时间本地过滤。" % DEFAULT_WIDE_DAYS)
     parser.add_argument("--date-label", type=str, default=None,
                         help="中文日期标签，自动解析。"
                              "支持: 本周/上周/本月/上月/本季度/上季度/今年/去年/上个月X号到现在/X月X号到X月X号等。"
